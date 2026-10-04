@@ -522,3 +522,23 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - AgentLoop stops the task when x_reply targets the same post (by id: /i/status, twitter.com and the canonical URL count as one) more than twice since the user's last message.
   - The intent URL and the /i/status reload no longer wait 30 s for a history match that can't come, because they redirect.
   - The bubble is clicked only on the article identified by its own permalink. A focal-only match uses the inline box instead.
+
+## v1.0.7
+- **x_reply goes through the intent composer first.** Attempt 1 opens `x.com/intent/post?in_reply_to=<id>` (the `/compose/post` dialog). Before typing, `IntentComposer.check` requires X's "Replying to @author" line (several languages), so a lost `in_reply_to` can't turn into a standalone post. Attempt 2 is the bubble path on the canonical post URL. The intent path has no stray-dialog URL and confirms through the toast link.
+- **Grok shield (`GrokShield`).** On the v1.0.6 phone run, X's Grok drawer covered the post. `ReplyComposer.locate` took it for the top dialog ("a dialog without a reply box"), and x_reply spent its 60 s on it. While x_reply, x_post and the scrapes run, a page-scope MutationObserver marks Grok drawers, panels and buttons with `data-farrow-grok`, clicks their close button and hides them. It never touches a root that contains a composer, a post or the main column, and it lapses after 90 s. Snapshots (`StrayDialogs`, `ReplyComposer.locate`) ignore Grok overlays.
+- **Images and video blocked in the internal browser.**
+  - Bridge 1.11.0 adds `set_media {load_images}`. It writes `~/.farrow/load_images` and Firefox's `user.js` prefs. Images blocked: `permissions.default.image=2`, `media.autoplay.default=5`, `media.autoplay.blocking_policy=2`. Images on: 1/1/0.
+  - The prefs are written again before every daemon start. Firefox reads them only at startup, so they apply the next time the internal browser starts. **A restart is never forced.**
+  - Settings → Internal browser → "Load images" (default off).
+  - Until the pref is active, the page-level filter blocks media for 10 min on pages used by the X tools, the scrapes, web_scrape, web_click and web_type. Scrapes no longer restore images.
+  - `web_screenshot load_images=true` releases what the page filter held back.
+- **Browser setup actions are app-scoped (`BrowserOpsManager`).**
+  - The affected actions are Set up everything / Start browser, Start TBP daemon, Reset browser, Update bridge and single setup steps. They ran in the screen's `viewModelScope`, so leaving Settings stopped them midway. This was the same bug as the v1.0.1 cookie import.
+  - They now run in a SupervisorJob app scope, one at a time. `BrowserOpsService` shows a foreground notification with the current step and Cancel.
+  - State and the last result are persisted (shown as "Last browser action" on return and after an app restart). The screen only observes it.
+- **Atomic reset.** Bridge 1.11.0 runs `reset` (also `start`/`stop`) as a detached `job_start` job, like the cookie import. The app only waits for it, and the job id is persisted, so after an app restart the app waits for the same job again. Cancel only stops waiting. Older bridges fall back to `POST /daemon/reset`.
+- **Audit of other screen-scoped jobs:**
+  - The app update check and download moved from the Settings composable scope to `AppUpdater`'s app scope. The installer opens by itself only while the row is visible; otherwise tap Install.
+  - Termux `pkg install` (up to 15 min) moved from the Tools ViewModel to `TermuxPackageJobs`.
+  - MCP reconnect already runs in `McpManager`. Memory edits and key/model edits are short DB/DataStore writes and stay in the screen scope.
+- x.json v12.

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,6 +44,19 @@ class AppUpdater @Inject constructor(@ApplicationContext private val context: Co
         .followRedirects(true).followSslRedirects(true).build()
     private val prefs = context.getSharedPreferences("app_update", Context.MODE_PRIVATE)
     private val lock = Mutex()
+    /** v1.0.7: check/download run here, not in the Settings composable's scope, so leaving the screen doesn't stop them. */
+    private val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    @Volatile private var downloadJob: kotlinx.coroutines.Job? = null
+
+    /** Starts [check] in the app scope. */
+    fun startCheck() { appScope.launch { runCatching { check() } } }
+
+    /** Starts [download] in the app scope (single flight); the result lands in [state] (ReadyToInstall → Install button). */
+    fun startDownload(release: ReleaseInfo): Boolean {
+        if (downloadJob?.isActive == true) return false
+        downloadJob = appScope.launch { download(release) }
+        return true
+    }
 
     val currentVersion: String = BuildConfig.VERSION_NAME
 

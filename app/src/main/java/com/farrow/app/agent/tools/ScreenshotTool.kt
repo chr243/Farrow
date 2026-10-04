@@ -40,7 +40,9 @@ class WebScreenshotTool(
         "visible text and a list of clickable elements."
     override val parameters = schema(emptyList(),
         "full_page" to prop("boolean", "Capture the whole page, not just the viewport"),
-        "selector" to prop("string", "Optional CSS selector: capture only this element"))
+        "selector" to prop("string", "Optional CSS selector: capture only this element"),
+        "load_images" to prop("boolean", "Load the images held back by Farrow's page filter before capturing (default false). " +
+            "Images blocked by the browser's own setting (Settings → Internal browser → Load images off) stay blank."))
 
     override suspend fun execute(args: JsonObject) = execute(args, ToolContext(0))
 
@@ -48,6 +50,10 @@ class WebScreenshotTool(
         if (!bridge.isAvailable()) return errorJson("Browser bridge is not running. Open Settings > Internal browser setup.")
         val full = args.bool("full_page") == true
         val selector = args.str("selector")?.takeIf { it.isNotBlank() }
+        if (args.bool("load_images") == true) {
+            runCatching { bridge.eval(com.farrow.app.data.social.FastScrape.MEDIA_OFF, 10) }
+            kotlinx.coroutines.delay(LOAD_IMAGES_WAIT_MS)
+        }
         val shot = try { bridge.screenshotShot(full, selector) } catch (e: IOException) { Result.failure(e) }
         val s = shot.getOrElse { return errorJson("screenshot failed: ${it.message}") }
         val info = pageInfo()
@@ -84,6 +90,7 @@ class WebScreenshotTool(
     companion object {
         const val NAME = "web_screenshot"
         const val MAX_SIDE = 1024
+        const val LOAD_IMAGES_WAIT_MS = 1_500L
         const val IMAGE_PATH = "image_path"
         const val MODEL_IMAGE_PATH = "model_image_path"
         const val ATTACHED = "image_attached"

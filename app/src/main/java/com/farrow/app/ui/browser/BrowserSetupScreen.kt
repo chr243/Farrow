@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.farrow.app.data.browser.SetupStep
 import com.farrow.app.data.browser.StepScripts
+import com.farrow.app.data.browser.StepState
 import com.farrow.app.data.browser.TermuxManager
 import com.farrow.app.ui.components.BackScaffold
 
@@ -52,6 +53,7 @@ fun BrowserSetupScreen(onBack: () -> Unit, vm: BrowserSetupViewModel = hiltViewM
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 item { BridgeUpdateBanner(bridgeUpdate, onUpdate = vm::updateBridge) }
+                item { OpsCard(state.ops, onCancel = vm::cancelOp, onDismiss = vm::dismissLastResult) }
                 item { StatusCard(state, vm, onOpenTermux = {
                     context.packageManager.getLaunchIntentForPackage(TermuxManager.TERMUX_PACKAGE)?.let { context.startActivity(it) }
                 }, onInstallTermux = {
@@ -81,7 +83,7 @@ fun BrowserSetupScreen(onBack: () -> Unit, vm: BrowserSetupViewModel = hiltViewM
                         step = step,
                         ui = state.steps[step.number] ?: StepUi(),
                         canRun = step.runnable && state.termuxInstalled && state.runCommandGranted &&
-                            (state.runningStep == null),
+                            !state.ops.busy,
                         onRun = { vm.run(step) },
                         onCopy = { clipboard.setText(AnnotatedString(step.command)) },
                         onCheck = { vm.checkStep(step.number) },
@@ -121,10 +123,10 @@ private fun StatusCard(state: BrowserSetupState, vm: BrowserSetupViewModel, onOp
             StatusRow("TBP daemon running", h?.daemonRunning == true)
             if (!state.checking && h?.bridgeOk == true && !h.daemonRunning) {
                 state.daemonLog?.let { LogBox(it) }
-                OutlinedButton(onClick = vm::startDaemon, enabled = state.setupAll?.running != true) { Text("Start TBP daemon") }
+                OutlinedButton(onClick = vm::startDaemon, enabled = !state.ops.busy) { Text("Start TBP daemon") }
             }
             if (h?.bridgeOk == true || state.resetMessage != null) {
-                OutlinedButton(onClick = vm::resetBrowser, enabled = !state.resetting && state.setupAll?.running != true) { Text("Reset browser") }
+                OutlinedButton(onClick = vm::resetBrowser, enabled = !state.ops.busy) { Text("Reset browser") }
                 Text("Stops TBP, Firefox and Xvfb, clears stale locks (daemon.pid, .tbp_browser.lock, X99) and starts fresh.",
                     style = MaterialTheme.typography.bodySmall)
                 if (state.resetting) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -161,6 +163,30 @@ private fun StatusCard(state: BrowserSetupState, vm: BrowserSetupViewModel, onOp
     }
 }
 
+/** v1.0.7: the app-scoped browser action — running (step + Cancel) or its last result, also after leaving the screen. */
+@Composable
+private fun OpsCard(ops: com.farrow.app.data.browser.BrowserOpsState, onCancel: () -> Unit, onDismiss: () -> Unit) {
+    if (!ops.busy && ops.lastResult == null) return
+    ElevatedCard {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (ops.busy) {
+                Text(com.farrow.app.data.browser.BrowserOpsNotifText.title(ops), style = MaterialTheme.typography.titleSmall)
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(com.farrow.app.data.browser.BrowserOpsNotifText.text(ops), style = MaterialTheme.typography.bodySmall)
+                Text("Keeps running if you leave this screen (see the notification).", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onCancel) { Text("Cancel") }
+            } else {
+                val at = ops.finishedAt?.let { java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it)) }
+                Text("Last browser action" + (at?.let { " · $it" } ?: ""), style = MaterialTheme.typography.titleSmall)
+                Text(ops.lastResult.orEmpty(), style = MaterialTheme.typography.bodySmall,
+                    color = if (ops.lastOk == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                TextButton(onClick = onDismiss) { Text("Dismiss") }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SetupAllCard(state: BrowserSetupState, vm: BrowserSetupViewModel, onGrant: () -> Unit, onInstallTermux: () -> Unit) {
     val all = state.setupAll
@@ -179,7 +205,7 @@ private fun SetupAllCard(state: BrowserSetupState, vm: BrowserSetupViewModel, on
             }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val running = all?.running == true
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { if (!vm.setupEverything()) onGrant() }, enabled = !running) {
+                Button(onClick = { if (!vm.setupEverything()) onGrant() }, enabled = !state.ops.busy) {
                     Text(if (installed) "Start browser" else "Set up everything")
                 }
                 if (running) TextButton(onClick = vm::cancelSetupAll) { Text("Stop waiting") }
@@ -205,6 +231,13 @@ private fun SetupAllCard(state: BrowserSetupState, vm: BrowserSetupViewModel, on
             Text("${com.farrow.app.data.browser.BrowserLanguage.of(state.browserLanguage).label}: pages, Google (hl/gl, google.com) and " +
                 "DuckDuckGo results in this language. Default English.", style = MaterialTheme.typography.bodySmall)
             state.languageNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = state.loadImages, onCheckedChange = vm::setLoadImages)
+                Spacer(Modifier.width(8.dp))
+                Text("Load images and video in the internal browser (off: blocked — faster pages, the agent reads text). " +
+                    "Applies the next time the internal browser starts (no restart is forced).", style = MaterialTheme.typography.bodySmall)
+            }
+            state.mediaNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             if (all != null) {
                 if (all.phase.isNotBlank()) Text(all.phase, style = MaterialTheme.typography.bodyMedium)
                 if (running || all.statuses.isNotEmpty()) {

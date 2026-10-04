@@ -9,9 +9,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
@@ -22,21 +23,14 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
 import javax.inject.Inject
 
-enum class StepState { NOT_RUN, RUNNING, SUCCEEDED, SKIPPED, FAILED, UNKNOWN }
-
-/** Live state of the one-button "Set up everything" / "Start browser" run. */
-data class SetupAllUi(
-    val running: Boolean = false,
-    val phase: String = "",
-    val currentStep: Int? = null,
-    val statuses: Map<Int, StepState> = emptyMap(),
-    val logTail: String = "",
-    val failedStep: Int? = null,
-    val error: String? = null,
-    /** Manual command to show (step 1 / allow-external-apps) when Termux doesn't answer. */
-    val manualCommand: String? = null,
-    val done: Boolean = false,
-)
+/** Note under the "Load images" switch (pure, unit-tested). */
+object MediaPrefNote {
+    fun of(ok: Boolean?, stderr: String?): String = when {
+        ok == true -> "Saved. Applies the next time the internal browser starts (no restart is forced)."
+        ok == false && stderr.orEmpty().contains("unknown cmd") -> "Saved. Update the bridge (banner above) so the internal browser can apply it."
+        else -> "Saved. Applied when the bridge is reachable, at the next browser start."
+    }
+}
 
 data class StepUi(val state: StepState = StepState.NOT_RUN, val exitCode: Int? = null, val logTail: String = "")
 
@@ -67,6 +61,11 @@ data class BrowserSetupState(
     val resetting: Boolean = false,
     val resetMessage: String? = null,
     val resetLog: String? = null,
+    /** v1.0.7: the app-scoped action ([BrowserOpsManager]): running one + last result (persisted). */
+    val ops: BrowserOpsState = BrowserOpsState(),
+    /** "Load images" (default off): Firefox image/autoplay prefs, applied at the next browser start. */
+    val loadImages: Boolean = false,
+    val mediaNote: String? = null,
 )
 
 @HiltViewModel
@@ -78,23 +77,29 @@ class BrowserSetupViewModel @Inject constructor(
     private val fingerprint: DeviceFingerprint,
     private val autoStarter: BridgeAutoStarter,
     private val prefs: com.farrow.app.data.prefs.AppPrefs,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val ops: BrowserOpsManager,
 ) : ViewModel() {
     /** Running vs. bundled bridge version → "Bridge outdated, tap to update" banner. */
     val bridgeUpdate = autoStarter.updateState
     fun checkBridgeVersion() { viewModelScope.launch { runCatching { autoStarter.checkVersion() } } }
-    fun updateBridge() { viewModelScope.launch { runCatching { autoStarter.updateIfOutdated(force = true) } } }
+    /** App-scoped (v1.0.7): keeps running when the screen is left. */
+    fun updateBridge() { if (!ops.updateBridge()) busyNote() }
+
+    private fun busyNote() = _state.update { it.copy(message = "${ops.state.value.label ?: "Another browser action"} is still running — wait for it or tap Cancel.") }
 
 
     private val _state = MutableStateFlow(BrowserSetupState())
-    val state: StateFlow<BrowserSetupState> = _state.asStateFlow()
+    /** Screen state = local checks + the app-scoped action state ([BrowserOpsManager]). */
+    val state: StateFlow<BrowserSetupState> = combine(_state, ops.state) { s, o ->
+        s.copy(setupAll = o.setupAll, runningStep = o.runningStep, resetting = o.resetting, resetMessage = o.resetMessage,
+            resetLog = o.resetLog, ops = o)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, _state.value.copy(ops = ops.state.value, setupAll = ops.state.value.setupAll,
+        resetMessage = ops.state.value.resetMessage, resetLog = ops.state.value.resetLog))
 
     val steps: List<SetupStep> get() = installer.steps()
     val bridgePort: Int get() = config.port
 
-    private var pollJob: Job? = null
     private var connectJob: Job? = null
-    private var allJob: Job? = null
     private var pendingAllFrom: Int? = null
 
     init {
@@ -102,6 +107,17 @@ class BrowserSetupViewModel @Inject constructor(
         viewModelScope.launch {
             val fp = withContext(Dispatchers.Default) { runCatching { fingerprint.get() }.getOrNull() }
             _state.update { it.copy(fingerprint = fp) }
+        }
+        // An action finished (maybe while the screen was closed): refresh the bridge status; step results → snackbar.
+        viewModelScope.launch {
+            var wasBusy = ops.state.value.busy
+            ops.state.collect { o ->
+                if (wasBusy && !o.busy) {
+                    if (o.lastKind == BrowserOpKind.STEP) _state.update { it.copy(message = o.lastResult) }
+                    refreshInstallCheck(); connect()
+                }
+                wasBusy = o.busy
+            }
         }
     }
 
@@ -136,22 +152,22 @@ class BrowserSetupViewModel @Inject constructor(
         }
     }
 
+    /**
+     * "Load images" switch: the bridge (≥ 1.11.0) writes Firefox's image/autoplay prefs to user.js; they apply the next
+     * time the internal browser starts — no restart is forced. Until then the page-level filter keeps blocking.
+     */
+    fun setLoadImages(on: Boolean) {
+        prefs.setLoadImages(on)
+        _state.update { it.copy(loadImages = on, mediaNote = "Saving…") }
+        viewModelScope.launch {
+            val r = runCatching { bridge.command("set_media", kotlinx.serialization.json.buildJsonObject { put("load_images", kotlinx.serialization.json.JsonPrimitive(on)) }) }.getOrNull()
+            _state.update { it.copy(mediaNote = MediaPrefNote.of(r?.ok, r?.stderr)) }
+        }
+    }
+
     fun setShowTermux(on: Boolean) {
         prefs.setShowTermuxDuringSetup(on)
         _state.update { it.copy(showTermux = on) }
-    }
-
-    /** True when the last setup command opened the Termux UI (so we bring Farrow back when it finishes). */
-    @Volatile private var openedTermuxUi = false
-
-    /** After a foreground Termux run: Farrow back on top (the script's `am start` does it too; this is the fallback). */
-    private fun bringAppToFront() {
-        if (!openedTermuxUi) return
-        openedTermuxUi = false
-        runCatching {
-            appContext.startActivity(android.content.Intent(appContext, com.farrow.app.MainActivity::class.java)
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-        }
     }
 
     fun setAutoStart(on: Boolean) {
@@ -166,152 +182,36 @@ class BrowserSetupViewModel @Inject constructor(
      * [onPermissionResult] resumes the run).
      */
     fun setupEverything(from: Int = 2): Boolean {
-        if (_state.value.setupAll?.running == true) return true
+        if (ops.state.value.setupAll?.running == true) return true
         refreshChecks()
         if (!termux.isInstalled()) {
-            _state.update { it.copy(setupAll = SetupAllUi(error = "Termux is not installed. Install it from F-Droid (not Google Play), open it once, then tap again.")) }
+            ops.showSetupNote(SetupAllUi(error = "Termux is not installed. Install it from F-Droid (not Google Play), open it once, then tap again."))
             return true
         }
         if (!termux.hasRunCommandPermission()) {
             pendingAllFrom = from
-            _state.update { it.copy(setupAll = SetupAllUi(phase = "Requesting the Termux RUN_COMMAND permission…")) }
+            ops.showSetupNote(SetupAllUi(phase = "Requesting the Termux RUN_COMMAND permission…"))
             return false
         }
-        allJob?.cancel()
-        allJob = viewModelScope.launch { orchestrate(from) }
+        if (!ops.setupEverything(from)) busyNote()
         return true
     }
 
-    private fun updAll(f: (SetupAllUi) -> SetupAllUi) = _state.update { it.copy(setupAll = f(it.setupAll ?: SetupAllUi())) }
+    /** Status card: start only the TBP daemon (app-scoped). */
+    fun startDaemon() { if (!ops.startDaemon()) busyNote() }
 
-    private suspend fun orchestrate(from: Int) {
-        _state.update { it.copy(setupAll = SetupAllUi(running = true, phase = "Checking what is already installed…")) }
-        val check = autoStarter.checkInstalled()
-        _state.update { it.copy(install = check) }
-        if (!check.termuxAnswered) {
-            updAll {
-                it.copy(running = false, failedStep = 1, error = check.error + ".\nOpen Termux, paste this command once, press Enter, then tap Retry.",
-                    manualCommand = steps.first { s -> s.number == 1 }.command)
-            }
-            return
-        }
-        val statuses = check.installed.mapValues { (_, ok) -> if (ok) StepState.SKIPPED else StepState.NOT_RUN } + (5 to StepState.NOT_RUN)
-        if (check.allInstalled) {
-            // Everything installed (e.g. after a reboot): only start the bridge + daemon, in the background.
-            updAll { it.copy(phase = "Everything is installed — starting the bridge and daemon…", currentStep = 5, statuses = statuses + (5 to StepState.RUNNING)) }
-            val ok = autoStarter.ensureRunning(timeoutMs = 20_000, force = true)
-            if (ok || bridge.health().bridgeOk) {
-                finishWithDaemon(statuses)
-            } else {
-                termux.query(StepScripts.statusQuery(5), "status-5")
-                updAll { it.copy(running = false, failedStep = 5, statuses = statuses + (5 to StepState.FAILED), error = "The bridge did not come up within 20 s. Check the step 5 log below, then Retry.") }
-                termux.query(StepScripts.bridgeLogQuery(config.port), TAG_BRIDGE_LOG)
-                connect()
-            }
-            return
-        }
-        val start = maxOf(from, check.missing.firstOrNull() ?: 5)
-        updAll { it.copy(phase = "Installing the missing parts (${check.missing.joinToString { "step $it" }}) in Termux…", statuses = statuses) }
-        // Background RUN_COMMAND (no Termux window) unless the user wants to watch; progress comes from the log files.
-        val fg = prefs.showTermuxDuringSetup.value
-        openedTermuxUi = fg
-        val r = termux.runCommand(installer.setupAllScript(start), background = !fg, label = "Farrow: set up everything", resultTag = TAG_ALL)
-        if (r.isFailure) {
-            updAll { it.copy(running = false, failedStep = start, error = "Could not run in Termux: ${r.exceptionOrNull()?.message}") }
-            return
-        }
-        val begin = System.currentTimeMillis()
-        sawRunning = false
-        delay(2_000)
-        while (_state.value.setupAll?.running == true && System.currentTimeMillis() - begin < 45 * 60_000L) {
-            termux.query(StepScripts.setupAllQuery((2..5).toList()), TAG_ALL_STATUS)
-            delay(ALL_POLL_MS)
-        }
-        if (_state.value.setupAll?.running == true) updAll { it.copy(running = false, error = "Timed out waiting for the setup (45 min).", failedStep = it.currentStep) }
-    }
+    /** Status card "Reset browser": a bridge-side job, waited for in the app scope; shows the log with Copy. */
+    fun resetBrowser() { if (!ops.resetBrowser()) busyNote() }
 
-    private var sawRunning = false
-
-    private fun onAllStatus(r: TermuxResult) {
-        val cur = _state.value.setupAll ?: return
-        if (!cur.running) return
-        val keys = StepScripts.parseKeys(r.stdout)
-        val all = keys["ALL"] ?: return
-        val tail = r.stdout.substringAfter("\n---", "").trim()
-        val st = (2..5).associateWith { n -> stateOf(keys["S$n"]) }
-        val step = keys["CUR"]?.toIntOrNull()
-        if (all == "running") sawRunning = true
-        if (!sawRunning) return // stale result of a previous run
-        updAll { it.copy(statuses = it.statuses + st, currentStep = step ?: it.currentStep, logTail = tail,
-            phase = if (step != null) "Step $step of 5: ${steps.firstOrNull { s -> s.number == step }?.title?.substringAfter(". ") ?: ""}" else it.phase) }
-        when {
-            all == "0" -> {
-                bringAppToFront()
-                updAll { it.copy(phase = "Installed — checking the bridge and the TBP daemon…") }
-                refreshInstallCheck()
-                viewModelScope.launch {
-                    // Step 5 started the bridge; wait for it, then require the daemon too.
-                    for (i in 0 until 10) { if (bridge.health().bridgeOk) break; delay(1_000) }
-                    finishWithDaemon(_state.value.setupAll?.statuses.orEmpty())
-                }
-            }
-            all.contains(':') -> {
-                val n = all.substringBefore(':').toIntOrNull()
-                updAll { it.copy(running = false, failedStep = n, error = "Step $n failed (exit ${all.substringAfter(':')}).") }
-            }
-        }
-    }
-
-    /** Success only when the TBP daemon runs too: start it if needed (≤ 30 s), else ❌ with tbp.log / daemon.log. */
-    private suspend fun finishWithDaemon(statuses: Map<Int, StepState>) {
-        updAll { it.copy(running = true, currentStep = 5, phase = "Checking the TBP daemon…") }
-        val r = autoStarter.ensureDaemon(30_000, force = true) { p -> updAll { it.copy(phase = p) } }
-        if (r.running) {
-            updAll { it.copy(running = false, done = true, error = null, phase = "✅ Browser started (bridge + TBP daemon running)", statuses = statuses + (5 to StepState.SUCCEEDED)) }
-        } else {
-            updAll { it.copy(running = false, done = false, failedStep = 5, statuses = statuses + (5 to StepState.FAILED),
-                error = "❌ ${r.message}. The bridge is up, but Firefox/Xvfb didn't start — see the log below.", logTail = r.log) }
-        }
-        connect()
-    }
-
-    private fun stateOf(v: String?): StepState = when {
-        v == null || v == "none" -> StepState.NOT_RUN
-        v == "running" -> StepState.RUNNING
-        v == "skipped" -> StepState.SKIPPED
-        v == "0" -> StepState.SUCCEEDED
-        v.toIntOrNull() != null -> StepState.FAILED
-        else -> StepState.UNKNOWN
-    }
-
-    /** Status card: start only the TBP daemon. */
-    fun startDaemon() {
-        if (_state.value.setupAll?.running == true) return
-        allJob?.cancel()
-        allJob = viewModelScope.launch { finishWithDaemon(_state.value.setupAll?.statuses.orEmpty()) }
-    }
-
-    /** Status card "Reset browser": stop everything, clear the locks, start fresh; shows the log with Copy. */
-    fun resetBrowser() {
-        if (_state.value.resetting || _state.value.setupAll?.running == true) return
-        viewModelScope.launch {
-            _state.update { it.copy(resetting = true, resetMessage = "Resetting…", resetLog = null) }
-            val r = autoStarter.resetDaemon { p -> _state.update { it.copy(resetMessage = p) } }
-            _state.update { it.copy(resetting = false, resetMessage = r.message, resetLog = r.log.ifBlank { null }) }
-            connect()
-        }
-    }
-
-    fun cancelSetupAll() {
-        allJob?.cancel()
-        updAll { it.copy(running = false, phase = "Stopped waiting (the Termux session may still be running).") }
-    }
-
-    fun dismissSetupAll() = _state.update { it.copy(setupAll = null) }
+    /** Cancel (screen): stops waiting for the running action; bridge/Termux-side work still completes. */
+    fun cancelOp() = ops.cancel()
+    fun cancelSetupAll() = ops.cancel()
+    fun dismissSetupAll() = ops.dismissSetupAll()
+    fun dismissLastResult() = ops.dismissLast()
 
     private fun refreshChecks() {
         _state.update { it.copy(termuxInstalled = termux.isInstalled(), runCommandGranted = termux.hasRunCommandPermission(), autoStart = autoStarter.enabled,
-            showTermux = prefs.showTermuxDuringSetup.value, browserLanguage = prefs.browserLanguage.value) }
+            showTermux = prefs.showTermuxDuringSetup.value, browserLanguage = prefs.browserLanguage.value, loadImages = prefs.loadImages.value) }
     }
 
     fun refreshStepStatuses() {
@@ -341,6 +241,10 @@ class BrowserSetupViewModel @Inject constructor(
                 val st = runCatching { bridge.daemonStatus() }.getOrNull()
                 _state.update { it.copy(daemonLog = st?.logText()?.ifBlank { null } ?: final.daemonError ?: "TBP daemon not running") }
             }
+            // Keep the bridge's "Load images" state in sync (user.js only; Firefox reads it at its next start).
+            if (ok && !BridgeVersions.isOutdated(final!!.version, "1.11.0")) runCatching {
+                bridge.command("set_media", kotlinx.serialization.json.buildJsonObject { put("load_images", kotlinx.serialization.json.JsonPrimitive(prefs.loadImages.value)) })
+            }
             if (!ok && termux.hasRunCommandPermission()) {
                 termux.query(StepScripts.bridgeLogQuery(config.port), TAG_BRIDGE_LOG)
             }
@@ -348,43 +252,17 @@ class BrowserSetupViewModel @Inject constructor(
     }
 
     fun run(step: SetupStep) {
-        val busy = _state.value.runningStep
-        if (busy != null && busy != step.number) {
-            _state.update { it.copy(message = "Step $busy is still running — wait for it to finish.") }
-            return
-        }
-        val fg = prefs.showTermuxDuringSetup.value
-        openedTermuxUi = fg
-        val r = termux.runCommand(step.command, background = !fg, label = step.title, resultTag = "step-${step.number}")
-        r.onSuccess {
-            setStep(step.number) { it.copy(state = StepState.RUNNING, exitCode = null) }
-            _state.update { it.copy(runningStep = step.number,
-                message = if (fg) "Started \"${step.title}\" in a Termux session." else "Running \"${step.title}\" in the background (log below).") }
-            startPolling(step.number)
-        }.onFailure { e ->
-            _state.update { it.copy(message = "Could not run in Termux: ${e.message}. Copy the command and paste it into Termux instead.") }
-        }
-    }
-
-    private fun startPolling(n: Int) {
-        pollJob?.cancel()
-        pollJob = viewModelScope.launch {
-            val deadline = System.currentTimeMillis() + 30 * 60_000L
-            delay(2_000)
-            while (isActive && _state.value.runningStep == n && System.currentTimeMillis() < deadline) {
-                termux.query(StepScripts.statusQuery(n), "status-$n")
-                delay(POLL_MS)
-            }
-            if (_state.value.runningStep == n) _state.update { it.copy(runningStep = null) }
-        }
+        val err = ops.runStep(step)
+        if (err != null) { _state.update { it.copy(message = err) }; return }
+        setStep(step.number) { it.copy(state = StepState.RUNNING, exitCode = null) }
+        _state.update { it.copy(message = if (prefs.showTermuxDuringSetup.value) "Started \"${step.title}\" in a Termux session." else "Running \"${step.title}\" in the background (log below).") }
     }
 
     /** Clears the "running" lock without waiting (e.g. the user closed Termux mid-step). */
     fun stopWaiting() {
-        pollJob?.cancel()
-        val n = _state.value.runningStep ?: return
+        val n = ops.state.value.runningStep ?: return
+        ops.cancel()
         setStep(n) { it.copy(state = StepState.UNKNOWN) }
-        _state.update { it.copy(runningStep = null) }
     }
 
     fun checkStep(n: Int) {
@@ -400,13 +278,9 @@ class BrowserSetupViewModel @Inject constructor(
 
     fun dismissLog() = _state.update { it.copy(logDialogStep = null) }
 
+    /** Display only; the actions themselves are driven by [BrowserOpsManager]. */
     private fun onTermuxResult(r: TermuxResult) {
         when {
-            r.tag == TAG_ALL_STATUS -> onAllStatus(r)
-            r.tag == TAG_ALL -> {
-                if (r.err != null && r.err != -1 && !r.errmsg.isNullOrBlank()) updAll { it.copy(running = false, error = "Termux: ${r.errmsg}") }
-            }
-            r.tag.startsWith("probe-") || r.tag == "autostart" -> Unit
             r.tag == TAG_BRIDGE_LOG -> {
                 val p = StepScripts.parseStatus(r.stdout, key = "LISTENING")
                 _state.update {
@@ -414,6 +288,7 @@ class BrowserSetupViewModel @Inject constructor(
                         bridgeLogTail = p.tail.ifBlank { r.errmsg ?: r.stderr.ifBlank { "(empty)" } })
                 }
             }
+            r.tag == BrowserOpsManager.TAG_ALL_STATUS -> Unit
             r.tag.startsWith("status-") -> {
                 val n = r.tag.removePrefix("status-").toIntOrNull() ?: return
                 val p = StepScripts.parseStatus(r.stdout)
@@ -426,19 +301,9 @@ class BrowserSetupViewModel @Inject constructor(
                     else -> StepState.NOT_RUN
                 }
                 setStep(n) { it.copy(state = newState, exitCode = code, logTail = p.tail) }
-                if (newState != StepState.RUNNING && _state.value.runningStep == n && code == 0) bringAppToFront()
-                if (newState != StepState.RUNNING && _state.value.runningStep == n) {
-                    _state.update { it.copy(runningStep = null, message = if (code == 0) "✅ Step $n succeeded" else if (code != null) "❌ Step $n failed (exit $code)" else null) }
-                    if (n == 5 && code == 0) connect()
-                }
             }
-            r.tag.startsWith("step-") -> {
-                // The foreground session ended (user pressed Enter); read the real status from the files.
-                val n = r.tag.removePrefix("step-").toIntOrNull() ?: return
-                if (r.err != null && r.err != -1 && r.errmsg != null) {
-                    _state.update { it.copy(message = "Termux: ${r.errmsg}") }
-                }
-                checkStep(n)
+            r.tag.startsWith("step-") && r.tag != BrowserOpsManager.TAG_ALL -> {
+                if (r.err != null && r.err != -1 && r.errmsg != null) _state.update { it.copy(message = "Termux: ${r.errmsg}") }
             }
         }
     }
@@ -467,17 +332,13 @@ class BrowserSetupViewModel @Inject constructor(
         pendingAllFrom = null
         if (from != null) {
             if (granted) setupEverything(from)
-            else _state.update { it.copy(setupAll = SetupAllUi(error = "Farrow needs the Termux \"Run commands in Termux environment\" permission. Open App info → Permissions → Additional permissions, allow it, then tap again.")) }
+            else ops.showSetupNote(SetupAllUi(error = "Farrow needs the Termux \"Run commands in Termux environment\" permission. Open App info → Permissions → Additional permissions, allow it, then tap again."))
         }
     }
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
 
     private companion object {
-        const val TAG_BRIDGE_LOG = "bridge-log"
-        const val POLL_MS = 4_000L
-        const val ALL_POLL_MS = 3_000L
-        const val TAG_ALL = "step-all"
-        const val TAG_ALL_STATUS = "status-all"
+        const val TAG_BRIDGE_LOG = BrowserOpsManager.TAG_BRIDGE_LOG
     }
 }

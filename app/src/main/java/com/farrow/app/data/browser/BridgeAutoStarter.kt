@@ -196,23 +196,31 @@ class BridgeAutoStarter @Inject constructor(
             "TBP daemon did not start within ${timeoutMs / 1000} s")
     }
 
-    /** "Reset browser": stop the daemon, Firefox and Xvfb, clear the locks, start fresh. [DaemonResult.log] is always set. */
-    suspend fun resetDaemon(onProgress: (String) -> Unit = {}): DaemonResult = daemonMutex.withLock {
+    /**
+     * "Reset browser": stop the daemon, Firefox and Xvfb, clear the locks, start fresh — as a bridge-side job (bridge
+     * ≥ 1.11.0) whose id goes to [onJob]. [DaemonResult.log] is always set.
+     */
+    suspend fun resetDaemon(onProgress: (String) -> Unit = {}, onJob: (String) -> Unit = {}): DaemonResult = daemonMutex.withLock {
         val h = bridge.health()
         if (!h.bridgeOk) return@withLock DaemonResult(false, h.error.orEmpty(), "Bridge not reachable — start it first (Start browser)")
         onProgress("Stopping TBP, Firefox and Xvfb, clearing locks, starting fresh…")
-        val r = runCatching { bridge.resetDaemon() }
+        val r = runCatching { bridge.resetDaemonAtomic { id -> onJob(id); onProgress("Resetting in the bridge (finishes even if you leave)…") } }
+        resetResult(r).also { lastDaemonResult = System.currentTimeMillis() to it }
+    }
+
+    /** After an app restart: wait again for a reset job started earlier. */
+    suspend fun awaitReset(jobId: String): DaemonResult = resetResult(runCatching { bridge.awaitJob(jobId).raw })
+
+    private fun resetResult(r: Result<JsonObject?>): DaemonResult {
         val o = r.getOrNull()
-        val res = when {
-            r.isFailure -> DaemonResult(false, r.exceptionOrNull()?.message.orEmpty(), "Reset failed")
+        return when {
+            r.isFailure -> DaemonResult(false, r.exceptionOrNull()?.message.orEmpty(), "Reset failed: ${r.exceptionOrNull()?.message ?: "?"}")
             o == null -> DaemonResult(false, "", "This bridge is too old for Reset — tap Set up everything to update it (bridge 1.3.0)")
             else -> {
                 val ok = o["running"]?.jsonPrimitive?.booleanOrNull == true
                 DaemonResult(ok, resultText(o), if (ok) "✅ Browser reset — TBP daemon running" else "❌ Reset done, but the TBP daemon didn't start")
             }
         }
-        lastDaemonResult = System.currentTimeMillis() to res
-        res
     }
 
     /** Readable log for a /daemon/start|reset reply: notes, error, tbp.log / daemon.log tails. */

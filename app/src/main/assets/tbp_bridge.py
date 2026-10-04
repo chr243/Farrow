@@ -42,7 +42,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "1.10.0"
+VERSION = "1.11.0"
 HOME = os.path.expanduser("~")
 STATE_DIR = os.path.join(HOME, ".farrow")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
@@ -467,6 +467,7 @@ def start_daemon(reset=False, wait_s=30):
             clear_if_absent(notes)
         if not browser_alive():   # profile files may only be written while Firefox is stopped
             write_locale_prefs(notes)
+            write_media_prefs(notes)
             seed_google_consent(notes)
         os.makedirs(STATE_DIR, exist_ok=True)
         js_state["synced"] = False
@@ -997,6 +998,61 @@ def cmd_set_language(a):
             "restart_needed": running, "notes": notes}}
 
 
+# ---------------- images / video (v1.11.0) ----------------
+# Images and video are blocked in the internal browser by default (the agent reads text; fewer bytes, faster pages).
+# Setting "Load images" in the app → set_media → ~/.farrow/load_images ("1" = load). Written to user.js now and before
+# every daemon start; Firefox reads user.js only at startup, so a running browser is never restarted for it.
+MEDIA_FILE = os.path.join(STATE_DIR, "load_images")
+MEDIA_KEYS = ("permissions.default.image", "media.autoplay.default", "media.autoplay.blocking_policy")
+
+
+def load_images():
+    try:
+        with open(MEDIA_FILE) as f:
+            return f.read().strip() == "1"
+    except OSError:
+        return False
+
+
+def media_pref_lines(load):
+    vals = (1, 1, 0) if load else (2, 5, 2)   # image 2 = block all; autoplay 5 = block audio+video; policy 2 = user gesture
+    return ['user_pref("%s", %d);' % (k, v) for k, v in zip(MEDIA_KEYS, vals)]
+
+
+def write_media_prefs(notes, load=None, profile=TBP_PROFILE):
+    """user.js: our media prefs replace earlier values. Safe while Firefox runs (it only reads user.js at startup)."""
+    load = load_images() if load is None else load
+    os.makedirs(profile, exist_ok=True)
+    path = os.path.join(profile, "user.js")
+    try:
+        lines = []
+        if os.path.exists(path):
+            with open(path) as f:
+                lines = [l for l in f.read().splitlines() if not any('"%s"' % k in l for k in MEDIA_KEYS)]
+        lines += media_pref_lines(load)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp, path)
+        notes.append("images/video %s (user.js)" % ("loaded" if load else "blocked"))
+        return True
+    except OSError as e:
+        notes.append("could not write user.js: %s" % e)
+        return False
+
+
+def cmd_set_media(a):
+    load = bool(a.get("load_images"))
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(MEDIA_FILE, "w") as f:
+        f.write("1" if load else "0")
+    notes = []
+    written = write_media_prefs(notes, load)
+    running = browser_alive()
+    return {"ok": written, "code": 0 if written else 1, "stdout": "", "stderr": "" if written else "; ".join(notes),
+            "data": {"load_images": load, "applied": written and not running, "restart_needed": running, "notes": notes}}
+
+
 # ---------------- Google consent ----------------
 # Pre-answered consent wall: SOCS on google.* / youtube.com ("CAE…" = choices made / reject all; yt-dlp uses "CAI" =
 # accept all). Override with FARROW_GOOGLE_SOCS.
@@ -1066,7 +1122,7 @@ def cmd_goto(a):
 # waits for in-flight commands and probes the console, and a cookie-store + URL `site_status` (no JS).
 inflight = {"n": 0, "cmds": []}
 inflight_cv = threading.Condition()
-NO_DAEMON_CMDS = {"job_start", "job_status", "ready", "site_status", "status", "cookies_check", "cookies_list", "exec", "fingerprint", "set_language", "start", "stop"}
+NO_DAEMON_CMDS = {"job_start", "job_status", "ready", "site_status", "status", "cookies_check", "cookies_list", "exec", "fingerprint", "set_language", "set_media", "start", "stop", "reset"}
 
 
 def url_matches(url, target):
@@ -1415,7 +1471,7 @@ def cmd_cookies_import(a):
 # connection or the user cancelling (the app just stops waiting) can never leave the browser stopped — the write and
 # the restart always finish here. Results are kept in memory and in ~/.farrow/jobs/<id>.json.
 JOBS_DIR = os.path.join(STATE_DIR, "jobs")
-JOB_CMDS = {"cookies_import"}
+JOB_CMDS = {"cookies_import", "reset", "start", "stop"}   # v1.11.0: reset/start/stop too (Settings → Browser)
 jobs = {}
 jobs_lock = threading.Lock()
 
@@ -1638,6 +1694,8 @@ COMMANDS = {
     "cookies_check": cmd_cookies_check,
     "exec": cmd_exec,
     "set_language": cmd_set_language,
+    "set_media": cmd_set_media,
+    "reset": lambda a: start_daemon(reset=True),
     "screenshot": cmd_screenshot,
     "status": lambda a: tbp("status", timeout=20),
     "start": lambda a: start_daemon(),

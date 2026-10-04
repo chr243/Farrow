@@ -34,8 +34,11 @@ object FastScrape {
      * loading, CSS background images are suppressed and `play()` is refused like an autoplay block. `__fwMBoff()` puts
      * every held value back (the images then load normally), so web_screenshot / x_post media work afterwards.
      */
-    val MEDIA_ON = """var w=window;if(w.__fwMB){w.__fwMB.until=Date.now()+$MEDIA_TTL_MS;}else{(function(){
-      var st={until:Date.now()+$MEDIA_TTL_MS,saved:[],held:[]};var on=function(){return Date.now()<st.until};
+    val MEDIA_ON: String get() = mediaOnJs(MEDIA_TTL_MS)
+
+    /** [MEDIA_ON] with a custom lifetime (web tools / x_reply pages keep it longer; never shortens a longer one). */
+    fun mediaOnJs(ttlMs: Long): String = """var w=window;if(w.__fwMB){w.__fwMB.until=Math.max(w.__fwMB.until,Date.now()+$ttlMs);}else{(function(){
+      var st={until:Date.now()+$ttlMs,saved:[],held:[]};var on=function(){return Date.now()<st.until};
       var E=Element.prototype,M=HTMLMediaElement.prototype;
       var media=function(el,k){k=String(k).toLowerCase();
         if(el instanceof HTMLImageElement||el instanceof HTMLSourceElement)return k==='src'||k==='srcset'?k:null;
@@ -61,7 +64,10 @@ object FastScrape {
       st.t=setInterval(function(){if(!on())w.__fwMBoff()},2000);w.__fwMB=st;})();}""".trimIndent()
 
     /** Restore eval (only needed when the last poll didn't already release the filter). */
-    const val MEDIA_OFF = "(()=>String(window.__fwMBoff?window.__fwMBoff():0))()"
+    /** Releases held media (web_screenshot load_images=true) and the Grok shield. */
+    const val MEDIA_OFF = "(()=>{if(window.__fwGrokOff)window.__fwGrokOff();return String(window.__fwMBoff?window.__fwMBoff():0)})()"
+    /** Page filter lifetime for scrapes, x_reply/x_post and web tools. */
+    const val PAGE_MEDIA_TTL_MS = 10 * 60_000L
 
     /** JS regex source matching the target page's path (+ the search query, if any). */
     data class Target(val pathRx: String, val q: String?)
@@ -90,7 +96,8 @@ object FastScrape {
     }
 
     private fun prelude(block: Boolean, t: Target?, scroll: Boolean): String = buildString {
-        if (block) append(MEDIA_ON).append('\n')
+        // v1.0.7: images stay blocked after the scrape too (until Firefox's own image pref applies); the Grok shield is released.
+        if (block) append(mediaOnJs(PAGE_MEDIA_TTL_MS)).append('\n').append(GrokShield.ON_STMT).append('\n')
         append("const onT=").append(
             if (t == null) "false"
             else "new RegExp(${js(t.pathRx)},'i').test(decodeURIComponent(location.pathname))" +
@@ -101,7 +108,7 @@ object FastScrape {
 
     private fun epilogue(block: Boolean, releaseExpr: String): String =
         "if(SCROLL&&!top)window.scrollBy(0,Math.round(innerHeight*0.9));\n" +
-            "let mb=${if (block) "'on'" else "'off'"};if(${if (block) "true" else "false"}&&($releaseExpr)&&window.__fwMBoff){window.__fwMBoff();mb='off'}\n"
+            "let mb=${if (block) "'on'" else "'off'"};if(${if (block) "true" else "false"}&&($releaseExpr)){if(window.__fwGrokOff)window.__fwGrokOff();mb='off'}\n"
 
     /**
      * One poll for timeline / profile / search: the v1.0.4 field extraction, unchanged (same fields, same order), plus

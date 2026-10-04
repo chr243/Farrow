@@ -15,6 +15,20 @@ internal fun BridgeResult.toToolJson(extra: JsonObjectBuilder.() -> Unit = {}): 
         extra()
     }.toString()
 
+/**
+ * v1.0.7: page-level image/video filter (same as the X tools) on pages the web tools touch, until Firefox's own
+ * "block images" pref (Settings → Internal browser → Load images off, applied at the next browser start) is active.
+ * Idempotent, refreshes its 10 min lifetime; failures are ignored. Off when the user turned "Load images" on.
+ */
+internal suspend fun BridgeClient.pageMediaFilter(enabled: Boolean) {
+    if (!enabled) return
+    runCatching { eval(PAGE_MEDIA_JS, 10) }
+}
+
+internal val PAGE_MEDIA_JS: String by lazy {
+    "(()=>{" + com.farrow.app.data.social.FastScrape.mediaOnJs(com.farrow.app.data.social.FastScrape.PAGE_MEDIA_TTL_MS) + "\nreturn 'on'})()"
+}
+
 private const val BRIDGE_DOWN =
     "Browser bridge is not running. Open Settings > Internal browser setup to install/start Termux Browser Pilot."
 
@@ -24,6 +38,7 @@ class WebScrapeTool(
     private val fallback: FallbackBrowser,
     /** Site-specific readable part of a page (X: main column only, no nav/sidebar/account banner); null = whole page. */
     private val textScope: (String) -> com.farrow.app.data.social.TextScope? = { null },
+    private val blockMedia: () -> Boolean = { true },
 ) : AgentTool {
     override val name = "web_scrape"
     override val description = "Internal browser (no accessibility permission needed): load a web page and return its readable text (real Firefox via Termux bridge; falls back to a plain HTTP fetch without JavaScript). " +
@@ -42,6 +57,7 @@ class WebScrapeTool(
             return try {
                 val nav = bridge.goto(url, args.bool("cloudflare") == true)
                 if (!nav.ok) return errorJson("navigation failed: ${nav.errorMessage}")
+                bridge.pageMediaFilter(blockMedia())
                 val scope = if (selector == null && args.bool("html") != true) textScope(url) else null
                 if (scope != null) {
                     // e.g. X: without this the side nav's account switcher (your own name/@handle) reads like content.
@@ -69,7 +85,7 @@ class WebScrapeTool(
     }
 }
 
-class WebClickTool(private val bridge: BridgeClient) : AgentTool {
+class WebClickTool(private val bridge: BridgeClient, private val blockMedia: () -> Boolean = { true }) : AgentTool {
     override val name = "web_click"
     override val description = "Click an element on the current web page (human-like Bézier mouse movement). Internal browser (Firefox in Termux) — no accessibility permission needed. " +
         "NOT for X composers: replying/commenting on X = x_reply, posting = x_post (clicks on X reply/post boxes and buttons are refused)."
@@ -81,12 +97,13 @@ class WebClickTool(private val bridge: BridgeClient) : AgentTool {
         val sel = args.str("selector")?.takeIf { it.isNotBlank() } ?: return errorJson("selector is required")
         if (!bridge.isAvailable()) return errorJson(BRIDGE_DOWN)
         ComposerGuard.check(bridge, sel)?.let { return it }
+        bridge.pageMediaFilter(blockMedia())
         return try { bridge.click(sel, args.bool("human") ?: true).toToolJson { put("selector", sel) } }
         catch (e: IOException) { errorJson("bridge error: ${e.message}") }
     }
 }
 
-class WebTypeTool(private val bridge: BridgeClient) : AgentTool {
+class WebTypeTool(private val bridge: BridgeClient, private val blockMedia: () -> Boolean = { true }) : AgentTool {
     override val name = "web_type"
     override val description = "Type text into an element on the current web page with human typing delays. Internal browser (Firefox in Termux) — no accessibility permission needed. " +
         "NOT for X: replies/comments = x_reply, posts = x_post (typing into X composers is refused)."
@@ -100,6 +117,7 @@ class WebTypeTool(private val bridge: BridgeClient) : AgentTool {
         val text = args.str("text") ?: return errorJson("text is required")
         if (!bridge.isAvailable()) return errorJson(BRIDGE_DOWN)
         ComposerGuard.check(bridge, sel)?.let { return it }
+        bridge.pageMediaFilter(blockMedia())
         return try { bridge.type(sel, text, args.bool("submit") == true).toToolJson { put("selector", sel) } }
         catch (e: IOException) { errorJson("bridge error: ${e.message}") }
     }

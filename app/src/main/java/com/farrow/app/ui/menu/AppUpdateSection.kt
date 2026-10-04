@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.farrow.app.data.update.AppUpdater
 import com.farrow.app.data.update.UpdateState
-import kotlinx.coroutines.launch
 
 /** Small "update available" dot (gear on the chat list, the App update row). */
 @Composable
@@ -26,7 +25,8 @@ fun UpdateDot(modifier: Modifier = Modifier) {
 fun AppUpdateRow(updater: AppUpdater, index: Int) {
     val state by updater.state.collectAsStateWithLifecycle()
     val available by updater.updateAvailable.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
+    // Download runs in the updater's app scope; the installer opens by itself only while this row is visible.
+    var autoInstall by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var needsPermission by remember { mutableStateOf(false) }
     fun install(st: UpdateState.ReadyToInstall) {
@@ -37,6 +37,10 @@ fun AppUpdateRow(updater: AppUpdater, index: Int) {
             needsPermission = false
             runCatching { context.startActivity(updater.installIntent(st.file)) }
         }
+    }
+    LaunchedEffect(state, autoInstall) {
+        val st = state
+        if (autoInstall && st is UpdateState.ReadyToInstall) { autoInstall = false; install(st) }
     }
     Surface(color = com.farrow.app.ui.components.Zebra.color(index), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -50,7 +54,7 @@ fun AppUpdateRow(updater: AppUpdater, index: Int) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(enabled = state !is UpdateState.Checking && state !is UpdateState.Downloading,
-                    onClick = { scope.launch { updater.check() } }) { Text("Check for updates") }
+                    onClick = { updater.startCheck() }) { Text("Check for updates") }
             }
             when (val st = state) {
                 UpdateState.Idle -> {}
@@ -60,7 +64,7 @@ fun AppUpdateRow(updater: AppUpdater, index: Int) {
                     Status("v${st.release.version} available")
                     Notes(st.release.notes)
                     if (st.release.asset == null) Status("This release has no Farrow APK to download.")
-                    else Button(onClick = { scope.launch { (updater.download(st.release) as? UpdateState.ReadyToInstall)?.let(::install) } },
+                    else Button(onClick = { autoInstall = true; updater.startDownload(st.release) },
                         modifier = Modifier.padding(top = 8.dp)) { Text("Update") }
                 }
                 is UpdateState.Downloading -> {
@@ -75,7 +79,7 @@ fun AppUpdateRow(updater: AppUpdater, index: Int) {
                 }
                 is UpdateState.Error -> {
                     Status(st.message, error = true)
-                    st.release?.let { r -> if (r.asset != null) TextButton(onClick = { scope.launch { (updater.download(r) as? UpdateState.ReadyToInstall)?.let(::install) } }) { Text("Retry download") } }
+                    st.release?.let { r -> if (r.asset != null) TextButton(onClick = { autoInstall = true; updater.startDownload(r) }) { Text("Retry download") } }
                 }
             }
         }

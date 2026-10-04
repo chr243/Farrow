@@ -182,6 +182,20 @@ class BridgeClient(private val config: BridgeEndpoint) {
         return if (code == 404) null else o
     }
 
+    /**
+     * v1.0.7 / bridge 1.11.0: "Reset browser" as an atomic bridge-side job (like the cookie import): the bridge stops
+     * TBP/Firefox/Xvfb and starts fresh in its own thread, so the app leaving, being killed or cancelling can't leave the
+     * browser half-reset. [onJob] receives the job id (persisted to resume waiting). Older bridges: the blocking
+     * POST /daemon/reset (null on a bridge < 1.3.0).
+     */
+    suspend fun resetDaemonAtomic(onJob: (String) -> Unit = {}): JsonObject? {
+        val start = try { command("job_start", buildJsonObject { put("cmd", "reset") }) } catch (e: kotlinx.serialization.SerializationException) { null }
+        val id = (start?.data as? JsonObject)?.get("job")?.jsonPrimitive?.contentOrNull
+        if (start == null || !start.ok || id == null) return resetDaemon()
+        onJob(id)
+        return awaitJob(id).raw
+    }
+
     /** Set by [BridgeAutoStarter]: starts the bridge (step 5) and the TBP daemon when needed. */
     @Volatile var autoStart: (suspend () -> Boolean)? = null
 
@@ -252,7 +266,7 @@ class BridgeClient(private val config: BridgeEndpoint) {
             val d = st?.data as? JsonObject
             if (d == null) {
                 if (++failures >= maxFailures) throw IOException("Lost contact with the bridge while it finishes job $id (${lastError ?: "no answer"}). " +
-                    "The bridge still completes the import and restarts the browser.")
+                    "The bridge still finishes the job (import / reset) on its own.")
                 continue
             }
             failures = 0

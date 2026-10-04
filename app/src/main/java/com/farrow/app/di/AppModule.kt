@@ -116,11 +116,13 @@ object AppModule {
         client: com.farrow.app.data.network.OpenRouterClient,
         settings: com.farrow.app.domain.repository.SettingsRepository,
         vision: com.farrow.app.data.network.ModelCapabilities,
+        appPrefs: com.farrow.app.data.prefs.AppPrefs,
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
             // Phase 4: internal browser (Termux Browser Pilot bridge, HTTP+Jsoup fallback)
-            WebScrapeTool(bridge, fallbackBrowser) { url -> com.farrow.app.agent.tools.SiteScopes.textScopeFor(url, selectors) }, WebClickTool(bridge), WebTypeTool(bridge), WebSessionTool(bridge),
+            WebScrapeTool(bridge, fallbackBrowser, { url -> com.farrow.app.agent.tools.SiteScopes.textScopeFor(url, selectors) }) { !appPrefs.loadImages.value },
+            WebClickTool(bridge) { !appPrefs.loadImages.value }, WebTypeTool(bridge) { !appPrefs.loadImages.value }, WebSessionTool(bridge),
             WebScreenshotTool(bridge, File(context.filesDir, "screenshots"), com.farrow.app.data.browser.AndroidImageEncoder(),
                 activeModelSeesImages = {
                     val m = client.lastModel.value ?: settings.currentModels().firstOrNull()

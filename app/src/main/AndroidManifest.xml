@@ -121,6 +121,16 @@
                 android:value="Finishes a login the user just started (importing their X or Facebook login into the on-device browser) after they leave the screen. Runs only for the duration of that job." />
         </service>
 
+        <!-- v1.0.7: keeps Settings > Internal browser actions (setup, start, reset, bridge update) alive off-screen. -->
+        <service
+            android:name=".data.browser.BrowserOpsService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Finishes an on-device browser setup, start or reset the user just started in Settings after they leave the screen. Runs only for the duration of that action." />
+        </service>
+
         <!-- Termux RUN_COMMAND result callback (delivered via our own mutable PendingIntent). -->
         <receiver
             android:name=".data.browser.TermuxResultReceiver"

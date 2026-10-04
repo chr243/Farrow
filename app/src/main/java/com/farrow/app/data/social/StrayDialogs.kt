@@ -49,6 +49,7 @@ object StrayDialogs {
         for (o in doc.select("[$ROOT]")) {
             val inner = o.children().firstOrNull() ?: continue
             if (ours != null && o.selectFirst(css(ours)) != null) continue
+            if (GrokShield.isGrokOverlay(inner)) continue // the shield hides it; never "clean" it with Escape loops
             val interactive = inner.select("button, [role=button], a, input, textarea, select, [contenteditable]").filter { e -> ignore.none { e.closest(it) != null } }
             if (interactive.isEmpty()) continue // empty layer, toast, hover card
             val buttons = inner.select("button, [role=button]")
@@ -82,6 +83,7 @@ object StrayDialogs {
             const set=new Set();document.querySelectorAll($overlays).forEach(e=>set.add(e));
             const L=document.querySelector($layers);if(L)[...L.children].forEach(e=>set.add(e));
             document.querySelectorAll($markers).forEach(m=>{const d=m.closest($overlays)||(L&&[...L.children].find(c=>c.contains(m)));if(d)set.add(d)});
+            [...set].forEach(e=>{if(e.closest('[${GrokShield.ATTR}]'))set.delete(e)}); // hidden by the Grok shield
             const roots=[...set].filter(e=>![...set].some(o=>o!==e&&o.contains(e)));
             let h='';roots.forEach(r=>{r.querySelectorAll('*').forEach(e=>e.setAttribute('$MARK',String(n++)));
               const k=r.cloneNode(true);k.querySelectorAll('svg,img,video,picture,style,script,noscript').forEach(e=>e.remove());

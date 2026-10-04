@@ -108,4 +108,49 @@ class ReplyComposerTest {
         assertTrue(g.contains("ALWAYS call x_reply"))
         assertTrue(g.contains("NEVER"))
     }
+
+    // ---- v1.0.7: intent composer first + Grok shield ----
+
+    @Test fun `intent composer under a Grok drawer - the composer is found, the drawer is never the top dialog`() {
+        val (h, doc) = marked(fixture("x_intent_reply_grok.html"))
+        val p = ReplyComposer.locate(h, spec, "https://x.com/compose/post") as ComposerPick.Found
+        assertEquals(ComposerKind.MODAL, p.kind)
+        assertEquals("tweetTextarea_0", doc.selectFirst(p.box)!!.attr("data-testid"))
+        assertEquals("tweetButton", doc.selectFirst(p.send)!!.attr("data-testid"))
+        // Without the Grok filter this was v1.0.6's "a dialog without a reply box is open (Grok …)".
+        val dialogs = Jsoup.parse(h).select("[${ReplyComposer.ROOT}=dialog]").map { it.children().first()!! }
+        assertEquals(listOf(false, true), dialogs.map(GrokShield::isGrokOverlay))
+    }
+
+    @Test fun `isGrokOverlay - Grok header or testid yes, composer with the Grok image button no`() {
+        val doc = Jsoup.parse(fixture("x_intent_reply_grok.html"))
+        assertTrue(GrokShield.isGrokOverlay(doc.selectFirst("[data-testid=GrokDrawer]")!!))
+        assertFalse(GrokShield.isGrokOverlay(doc.selectFirst("[aria-modal=true]")!!))
+        assertTrue(GrokShield.isGrokOverlay(Jsoup.parse("<div role=dialog><h2>Grok</h2><p>hi</p></div>").selectFirst("div")!!))
+        assertTrue(GrokShield.isGrokOverlay(Jsoup.parse("<div ${GrokShield.ATTR}=x><p>hi</p></div>").selectFirst("div")!!))
+        assertFalse(GrokShield.isGrokOverlay(Jsoup.parse("<div role=dialog><h2>Unsent posts</h2></div>").selectFirst("div")!!))
+    }
+
+    @Test fun `IntentComposer check - Replying to the right author passes, standalone or flow or wrong author fail`() {
+        val re = spec.replyingTo
+        fun raw(u: String, ctx: String) = kotlinx.serialization.json.buildJsonObject {
+            put("u", kotlinx.serialization.json.JsonPrimitive(u)); put("ctx", kotlinx.serialization.json.JsonPrimitive(ctx)) }.toString()
+        assertNull(IntentComposer.check(raw("https://x.com/compose/post", "Replying to\n@alice\nPost your reply"), re, "alice"))
+        assertNull(IntentComposer.check(raw("https://x.com/compose/post", "En réponse à @Alice"), re, "alice"))
+        assertNull(IntentComposer.check(raw("https://x.com/compose/post", "Replying to @bob"), re, "i"))
+        assertTrue(IntentComposer.check(raw("https://x.com/compose/post", "What is happening?!"), re, "alice")!!.contains("standalone"))
+        assertTrue(IntentComposer.check(raw("https://x.com/i/flow/login", "Sign in"), re, "alice")!!.contains("/i/flow/"))
+        assertTrue(IntentComposer.check(raw("https://x.com/compose/post", "Replying to @alicex"), re, "alice")!!.contains("someone else"))
+        assertNotNull(IntentComposer.check(null, re, "alice"))
+        assertEquals("Replying to @alice on https://x.com/compose/post",
+            IntentComposer.summary(raw("https://x.com/compose/post", "Replying to\n@alice"), re))
+    }
+
+    @Test fun `GrokShield JS is host-guarded, idempotent and never hides composers`() {
+        assertTrue(GrokShield.ON.contains("(x|twitter)\\.com"))
+        assertTrue(GrokShield.ON.contains("if(w.__fwGrok){"))
+        assertTrue(GrokShield.ON.contains("tweetTextarea_") && GrokShield.ON.contains("r.querySelector(P)"))
+        assertTrue(GrokShield.OFF.contains("__fwGrokOff"))
+        java.io.File("build/tmp/grokshield").apply { mkdirs() }.resolve("on.js").writeText(GrokShield.ON)
+    }
 }

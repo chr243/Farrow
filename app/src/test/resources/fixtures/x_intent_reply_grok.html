@@ -1,0 +1,23 @@
+<html><body>
+<div id="react-root"><main role="main"><div data-testid="primaryColumn"><h2>Home</h2></div></main></div>
+<div id="layers">
+  <div class="css-layer">
+    <div role="dialog" aria-modal="true" aria-labelledby="modal-header">
+      <div><button data-testid="app-bar-close" aria-label="Close">x</button></div>
+      <div>Replying to</div>
+      <div><a href="/alice">@alice</a></div>
+      <div data-testid="tweetTextarea_0" role="textbox" contenteditable="true" aria-label="Post text"></div>
+      <div data-testid="toolBar"><button data-testid="grokImgGen" aria-label="Create image with Grok">G</button>
+        <button data-testid="tweetButton" disabled aria-disabled="true">Reply</button></div>
+    </div>
+  </div>
+  <div class="css-layer">
+    <div role="dialog" data-testid="GrokDrawer">
+      <h2>Grok</h2>
+      <div>Ask Grok anything about this post</div>
+      <button aria-label="Close">x</button>
+      <textarea placeholder="Ask anything"></textarea>
+    </div>
+  </div>
+</div>
+</body></html>

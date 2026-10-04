@@ -102,4 +102,11 @@ class StrayDialogsTest {
         val js = StrayDialogs.snapshotJs(spec)
         listOf("sheetDialog", "aria-modal", "#layers", "unsentButton", "scheduledConfirmationPrimaryAction", "app-bar-close").forEach { assertTrue(it, js.contains(it)) }
     }
+
+    @Test fun `v1_0_7 - a Grok drawer over the intent composer is not a stray dialog`() {
+        val (h, _) = snapshot(fixture("x_intent_reply_grok.html"))
+        val s = StrayDialogs.analyze(h, spec, ours = x.reply!!.textarea)
+        assertTrue(s.toString(), s.none { it.summary.contains("Grok", ignoreCase = true) })
+        assertTrue(s.toString(), s.isEmpty())
+    }
 }

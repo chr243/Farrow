@@ -33,6 +33,8 @@ data class ReplyComposerSpec(
     /** Regex (case-insensitive) of toast texts that mean the reply was NOT posted. */
     val errorToast: String? = null,
     val maxAttempts: Int = 2,
+    /** Regex of X's reply context line in a composer ("Replying to @user"); the intent path requires it. */
+    val replyingTo: String = "(Replying to|En réponse à|Réponse à|Antwort an|Respondiendo a|In risposta a|Em resposta a)",
     /** Leftover dialogs to close before replying/posting. */
     val stray: StraySpec = StraySpec(),
 )
@@ -71,7 +73,8 @@ object ReplyComposer {
         val doc = Jsoup.parse(html)
         val roots = doc.select("[$ROOT]")
         val conversation = roots.firstOrNull { it.attr(ROOT) == "conversation" }
-        val dialogs = roots.filter { it.attr(ROOT) == "dialog" }
+        // A Grok drawer/panel is never "the top dialog" (v1.0.6 read it as "a dialog without a reply box").
+        val dialogs = roots.filter { it.attr(ROOT) == "dialog" && !(it.children().firstOrNull()?.let(GrokShield::isGrokOverlay) ?: false) }
         val top = dialogs.lastOrNull()
         val textarea = jsoupCss(spec.textarea)
         if (top != null && !preferInline) {
@@ -137,7 +140,7 @@ object ReplyComposer {
         val conv = kotlinx.serialization.json.JsonPrimitive(spec.conversation).toString()
         val dlg = kotlinx.serialization.json.JsonPrimitive(spec.dialog).toString()
         return """(()=>{document.querySelectorAll('[$MARK]').forEach(e=>e.removeAttribute('$MARK'));let n=0;
-            const c=document.querySelector($conv);const ds=[...document.querySelectorAll($dlg)];
+            const c=document.querySelector($conv);const ds=[...document.querySelectorAll($dlg)].filter(d=>!d.closest('[${GrokShield.ATTR}]'));
             const strip=r=>{const k=r.cloneNode(true);k.querySelectorAll('svg,img,video,picture,style,script,noscript').forEach(e=>e.remove());
               k.querySelectorAll('*').forEach(e=>{e.removeAttribute('class');e.removeAttribute('style')});return k.outerHTML};
             const mark=r=>r.querySelectorAll('[data-testid],[role],[contenteditable],button,a,select,input,textarea').forEach(e=>e.setAttribute('$MARK',String(n++)));

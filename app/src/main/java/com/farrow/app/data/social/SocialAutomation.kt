@@ -3,6 +3,7 @@ package com.farrow.app.data.social
 import com.farrow.app.data.browser.BridgeClient
 import com.farrow.app.data.browser.BridgeResult
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 
@@ -155,7 +156,10 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * Not confirmed but already on the target (or on it after all) → fine. A login URL → [SessionExpiredException].
      * Returns a short log line.
      */
-    suspend fun navigateTo(url: String, timeoutMs: Long = 30_000): String {
+    suspend fun navigateTo(url: String, timeoutMs: Long = 30_000): String =
+        try { navigateRaw(url, timeoutMs) } finally { if (pageShield) withContext(kotlinx.coroutines.NonCancellable) { shield() } }
+
+    private suspend fun navigateRaw(url: String, timeoutMs: Long): String {
         val t0 = System.currentTimeMillis()
         val r = withTimeoutOrNull(timeoutMs + 10_000) { bridge.nav(url, (timeoutMs / 1000).toInt()) }
             ?: throw AutomationException("Opening $url timed out after ${(timeoutMs + 10_000) / 1000} s")
@@ -639,6 +643,26 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         )
     }
 
+    /**
+     * While an X tool runs: Grok drawer shield + media filter in the page (re-installed after each navigation, since a
+     * page load drops them). [pageShield] is set by reply/post; scrapes install it in their own poll eval.
+     */
+    @Volatile private var pageShield = false
+
+    private suspend fun shield() {
+        if (!pageShield) return
+        runCatching { evalString("(()=>{" + FastScrape.mediaOnJs(FastScrape.PAGE_MEDIA_TTL_MS) + "\n" + GrokShield.ON_STMT + "return 'on'})()") }
+    }
+
+    private suspend fun <T> shielded(block: suspend () -> T): T {
+        pageShield = true
+        return try { shield(); block() } finally {
+            pageShield = false
+            // Grok shield off; the media filter is left to lapse (images stay blocked while the page is on screen).
+            withContext(kotlinx.coroutines.NonCancellable) { runCatching { evalString(GrokShield.OFF) } }
+        }
+    }
+
     /** Timings of the last scrape / scrapeReplies (tool result `timings_ms` + `steps`). */
     @Volatile var lastScrapeTimings: ScrapeTimings? = null
         private set
@@ -695,8 +719,9 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         } finally {
             tm.ms["polls"] = pollMs
             tm.steps += "polls $polls in $pollMs ms (one eval each), scrolls $scrolls"
-            if (mediaOn) runCatching { tm.time("restore_media", { n: String? -> "released ${n ?: "?"} held media" }) { evalString(FastScrape.MEDIA_OFF) } }
-            else if (everOn) tm.steps += "media filter released in the last poll"
+            if (mediaOn) runCatching { tm.time("release_shield", { n: String? -> "Grok shield off (${n ?: "?"} overlays unhidden)" }) { evalString(GrokShield.OFF) } }
+            else if (everOn) tm.steps += "Grok shield released in the last poll"
+            if (everOn) tm.steps += "images/video stay blocked on this page (page filter, ${FastScrape.PAGE_MEDIA_TTL_MS / 60_000} min)"
         }
     }
 
@@ -780,7 +805,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         val run = ReplyRun()
         val t0 = System.currentTimeMillis()
         // Loop protection: the whole x_reply is bounded (~60 s); after the submit click only the confirmation runs.
-        val r = withTimeoutOrNull(REPLY_BUDGET_MS) { replyAttempts(spec, canon, text, steps, ::log, run) }
+        val r = withTimeoutOrNull(REPLY_BUDGET_MS) { shielded { replyAttempts(spec, canon, text, steps, ::log, run) } }
         if (r != null) return r
         log("x_reply budget of ${REPLY_BUDGET_MS / 1000} s used up after ${(System.currentTimeMillis() - t0) / 1000} s")
         if (run.submitted) return ReplyResult(null, run.confirmed ?: "submitted (not confirmed in time)", run.kind ?: ComposerKind.MODAL, run.attempt, steps)
@@ -791,30 +816,33 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     @Volatile var lastReplySteps: List<String> = emptyList()
         private set
 
-    private class ReplyRun { var submitted = false; var confirmed: String? = null; var kind: ComposerKind? = null; var attempt = 0; var saveSheetRetry = false }
+    private class ReplyRun { var viaIntent = true; var submitted = false; var confirmed: String? = null; var kind: ComposerKind? = null; var attempt = 0; var saveSheetRetry = false }
 
     private suspend fun replyAttempts(spec: ReplyComposerSpec, canon: StatusUrl.Canon, text: String, steps: MutableList<String>,
                                       log: (String) -> Unit, run: ReplyRun): ReplyResult {
         val postUrl = canon.url
         val id = canon.id
         var lastWhy = ""
-        // Leftovers from earlier runs (unsent posts view, schedule picker, old composer) block the composer.
-        // Always on the post itself (never the feed / a profile / search): hard navigation unless already exactly there.
-        if (!ensureCleanPost(spec, postUrl, log)) log("could not get a clean post page; trying anyway")
+        // v1.0.7: PRIMARY = the reply intent composer (x.com/intent/post?in_reply_to=<id> → /compose/post, a bare
+        // composer "Replying to @user"): the post page (Grok drawer, media, recommendations) is skipped entirely.
+        // Fallback = the post's own reply bubble on the post page. A "Save post?" retry keeps the same path.
         val maxAttempts = spec.maxAttempts.coerceIn(1, 2)
         var attempt = 0
+        var viaIntent = true
         while (attempt < maxAttempts) {
             attempt++
             run.attempt = attempt
-            val viaIntent = attempt > 1 && !run.saveSheetRetry
+            if (attempt > 1 && !run.saveSheetRetry) viaIntent = !viaIntent
+            run.viaIntent = viaIntent
+            val strayUrl = if (viaIntent) null else postUrl
             val pick = try {
-                openComposer(spec, postUrl, id, viaIntent, log)
+                openComposer(spec, postUrl, id, viaIntent, log, canon)
             } catch (e: SessionExpiredException) { throw e } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) { ComposerPick.Missing(e.message ?: e.javaClass.simpleName) }
             if (pick !is ComposerPick.Found) {
                 lastWhy = (pick as? ComposerPick.Wrong)?.why ?: (pick as ComposerPick.Missing).why
                 log("attempt $attempt: $lastWhy")
-                closeStrayDialogs(spec, log, postUrl)
+                closeStrayDialogs(spec, log, strayUrl)
                 continue
             }
             run.kind = pick.kind
@@ -827,13 +855,13 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             val after = locateComposer(spec, preferInline = pick.kind == ComposerKind.INLINE)
             if (after !is ComposerPick.Found || after.box != pick.box) {
                 lastWhy = "the composer changed while typing (${(after as? ComposerPick.Wrong)?.why ?: (after as? ComposerPick.Missing)?.why ?: "different box"})"
-                log(lastWhy); closeStrayDialogs(spec, log, postUrl); continue
+                log(lastWhy); closeStrayDialogs(spec, log, strayUrl); continue
             }
             // Settle: text EQUALS the intended text, unchanged for 500 ms, and the Reply button enabled.
             val settled = settleBeforeSubmit(after.box, after.send, text, spec.stray, log)
             if (settled != null) {
                 lastWhy = settled
-                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, log, postUrl); continue
+                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, log, strayUrl); continue
             }
             // Submit ONCE with the composer's own button. Nothing touches the page in between (no blur).
             run.submitted = submitOnce(after, spec, log)
@@ -841,7 +869,8 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             when (val c = confirmReply(spec, pick, text, log)) {
                 is Confirm.Ok -> {
                     run.confirmed = c.how
-                    val url = c.link ?: findOwnReply(postUrl, text)
+                    // Cheap only: the toast's View link; the post page is searched only on the bubble path (already there).
+                    val url = c.link ?: if (!viaIntent) findOwnReply(postUrl, text) else null
                     log(if (url != null) "reply found: $url" else "reply URL not found in the conversation")
                     return ReplyResult(url, c.how, pick.kind, attempt, steps)
                 }
@@ -852,7 +881,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                     if (run.saveSheetRetry) throw replyFailure("X showed 'Save post?' after the submit click twice; the reply was not sent (discarded)", steps)
                     run.saveSheetRetry = true; run.submitted = false
                     if (attempt >= maxAttempts) attempt = maxAttempts - 1 // exactly one more try
-                    closeStrayDialogs(spec, log, postUrl)
+                    closeStrayDialogs(spec, log, strayUrl)
                     continue
                 }
                 Confirm.Timeout -> throw replyFailure("the reply was submitted but neither a toast nor the emptied/closed composer confirmed it " +
@@ -898,15 +927,24 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         return true
     }
 
-    private suspend fun openComposer(spec: ReplyComposerSpec, postUrl: String, id: String, viaIntent: Boolean, log: (String) -> Unit): ComposerPick {
+    private suspend fun openComposer(spec: ReplyComposerSpec, postUrl: String, id: String, viaIntent: Boolean, log: (String) -> Unit,
+                                     canon: StatusUrl.Canon? = null): ComposerPick {
         if (viaIntent) {
             val u = config.url("replyIntent", mapOf("id" to id))
-            cleanStray(spec, log)
             // The intent URL redirects (compose), so history never shows it: short confirmation, then wait for the box.
             val n = runCatching { navigateTo(u, 10_000) }.onFailure { if (it is SessionExpiredException) throw it }
-            log("path: intent URL; open " + (n.getOrNull() ?: "unconfirmed (${n.exceptionOrNull()?.message?.take(80)})"))
+            log("path: intent composer; open " + (n.getOrNull() ?: "unconfirmed (${n.exceptionOrNull()?.message?.take(80)})"))
+            shield()
             if (!waitFor(spec.textarea, 15_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
-            return locateComposer(spec)
+            cleanStray(spec, log, ours = spec.textarea)
+            val pick = locateComposer(spec)
+            if (pick !is ComposerPick.Found) return pick
+            // Never post a standalone post: the composer must say "Replying to @<author>".
+            val ctx = runCatching { evalString(IntentComposer.contextJs(pick.box, spec.dialog)) }.getOrNull()
+            val why = IntentComposer.check(ctx, spec.replyingTo, canon?.user)
+            if (why != null) { log("intent composer rejected: $why"); return ComposerPick.Wrong(why) }
+            log("intent composer: ${IntentComposer.summary(ctx, spec.replyingTo)}")
+            return pick
         }
         if (!ensureCleanPost(spec, postUrl, log)) {
             ensureLoggedIn(navigate = false)
@@ -1135,7 +1173,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             }
         }
         submitClicked = false
-        val done = withTimeoutOrNull(POST_BUDGET_MS) { runSteps(config.postSteps, mapOf("text" to text)); true }
+        val done = withTimeoutOrNull(POST_BUDGET_MS) { shielded { runSteps(config.postSteps, mapOf("text" to text)); true } }
         if (done == null) throw AutomationException("x_post timed out after ${POST_BUDGET_MS / 1000} s" +
             if (submitClicked) " after the Post click: check the profile before posting again (no blind retry)" else "; nothing was posted")
     }

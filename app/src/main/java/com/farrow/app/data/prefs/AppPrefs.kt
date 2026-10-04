@@ -38,6 +38,11 @@ class AppPrefs @Inject constructor(@ApplicationContext context: Context) {
     val browserLanguage: StateFlow<String> = _browserLang.asStateFlow()
     fun setBrowserLanguage(v: String) { prefs.edit().putString(KEY_BROWSER_LANG, v).apply(); _browserLang.value = v }
 
+    /** v1.0.7 "Load images" in the internal browser (default off = images/video blocked). */
+    private val _loadImages = MutableStateFlow(prefs.getBoolean(KEY_LOAD_IMAGES, false))
+    val loadImages: StateFlow<Boolean> = _loadImages.asStateFlow()
+    fun setLoadImages(v: Boolean) { prefs.edit().putBoolean(KEY_LOAD_IMAGES, v).apply(); _loadImages.value = v }
+
     private val _memKilo = MutableStateFlow(prefs.getBoolean(KEY_MEM_KILO, true))
     /** "Send memories to Kilo models" — default ON (Kilo Auto Free may log prompts; the user is informed once). */
     val sendMemoriesToKilo: StateFlow<Boolean> = _memKilo.asStateFlow()
@@ -52,6 +57,7 @@ class AppPrefs @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_MEM_KILO = "send_memories_to_kilo"
         const val KEY_KILO_NOTICE = "kilo_notice_seen"
         const val KEY_BROWSER_LANG = "browser_language"
+        const val KEY_LOAD_IMAGES = "load_images"
         const val KEY_SHOW_TERMUX = "show_termux_during_setup"
         const val KEY_CLEAR_WEBVIEW = "clear_webview_cookies"
         const val KEY_NOTIFY_FINISH = "notify_on_finish"

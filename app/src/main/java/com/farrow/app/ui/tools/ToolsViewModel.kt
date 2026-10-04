@@ -8,6 +8,7 @@ import com.farrow.app.data.browser.BridgeClient
 import com.farrow.app.data.browser.TermuxManager
 import com.farrow.app.data.git.GitCredentialStore
 import com.farrow.app.data.tools.TermuxPackage
+import com.farrow.app.data.tools.TermuxPackageJobs
 import com.farrow.app.data.tools.TermuxPackages
 import com.farrow.app.data.tools.ToolEnv
 import com.farrow.app.data.tools.ToolPrefs
@@ -44,11 +45,15 @@ class ToolsViewModel @Inject constructor(
     private val termux: TermuxManager,
     private val gitCreds: GitCredentialStore,
     val mcp: com.farrow.app.data.mcp.McpManager,
+    private val pkgJobs: TermuxPackageJobs,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ToolsState(tools = rows(ToolEnv())))
     val state: StateFlow<ToolsState> = _state.asStateFlow()
 
-    init { refresh() }
+    init {
+        refresh()
+        viewModelScope.launch { pkgJobs.jobs.collect(::applyJobs) }
+    }
 
     private fun rows(env: ToolEnv) = registry.tools.map { ToolRow(it.name, ToolStatus.short(it.description), ToolStatus.of(it.name, env)) }
 
@@ -88,19 +93,19 @@ class ToolsViewModel @Inject constructor(
 
     private fun setNote(text: String) = _state.update { it.copy(packagesNote = text) }
 
-    /** pkg install in the background (no Termux window); detected again afterwards. */
-    fun install(p: TermuxPackage) {
-        if (_state.value.packages.any { it.pkg == p && it.state == PkgState.INSTALLING }) return
-        updatePkg(p) { it.copy(state = PkgState.INSTALLING, detail = "Installing in Termux (background)…") }
-        viewModelScope.launch {
-            val r = termux.runAndWait(TermuxPackages.installScript(p), "install-${p.pkg}-${System.nanoTime()}", 15 * 60_000L, label = "Farrow: pkg install ${p.pkg}")
-            val ok = r?.stdout?.contains("INSTALLED=1") == true
-            updatePkg(p) {
-                it.copy(state = if (ok) PkgState.INSTALLED else PkgState.FAILED,
-                    detail = if (ok) null else (r?.stdout?.lines()?.filter { l -> l.isNotBlank() && !l.startsWith("RESULT=") && !l.startsWith("INSTALLED=") }
-                        ?.takeLast(6)?.joinToString("\n")?.ifBlank { null } ?: r?.errmsg ?: "No answer from Termux within 15 min"))
+    /** pkg install in the background (no Termux window), app-scoped ([TermuxPackageJobs]); detected again afterwards. */
+    fun install(p: TermuxPackage) { pkgJobs.install(p) }
+
+    private fun applyJobs(jobs: Map<String, TermuxPackageJobs.Job>) = _state.update { s ->
+        s.copy(packages = s.packages.map { row ->
+            val j = jobs[row.pkg.pkg] ?: return@map row
+            when {
+                j.running -> row.copy(state = PkgState.INSTALLING, detail = j.detail)
+                j.ok -> row.copy(state = PkgState.INSTALLED, detail = null)
+                row.state == PkgState.INSTALLING -> row.copy(state = PkgState.FAILED, detail = j.detail)
+                else -> row
             }
-        }
+        })
     }
 
     private fun updatePkg(p: TermuxPackage, f: (PkgRow) -> PkgRow) =
