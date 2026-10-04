@@ -615,7 +615,7 @@ The beta does one eval per phase. TBP is only a fallback, used when the JS actio
 If the post fails before any text was inserted, the browser is restarted once and the post retried. There is never a
 retry after the insert.
 
-### x_post_beta fixes after the first phone run (unreleased, after v1.0.15)
+### v1.0.16: x_post_beta fixes after the first phone run (released)
 
 What happened. The beta's first attempt hung in stray_check: the first probe eval after a browser start, on about:blank,
 didn't answer within 25 s. That failure was before typing, so the tool restarted the browser (36 s) and retried. The
