@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -55,7 +55,8 @@
       "reposts": "[data-testid=\"retweet\"]@aria-label",
       "likes": "[data-testid=\"like\"]@aria-label"
     },
-    "dedupeField": "url"
+    "dedupeField": "url",
+    "blockMedia": true
   },
   "replies": {
     "scope": "[data-testid=\"primaryColumn\"]",
@@ -85,7 +86,8 @@
       "likes": "[data-testid=\"like\"]@aria-label"
     },
     "selfLink": "a[data-testid=\"AppTabBar_Profile_Link\"]",
-    "statusIdPattern": "/status/(\\d+)"
+    "statusIdPattern": "/status/(\\d+)",
+    "blockMedia": true
   },
   "textScope": {
     "scope": "[data-testid=\"primaryColumn\"]",

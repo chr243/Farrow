@@ -25,6 +25,7 @@ class SettingsViewModel @Inject constructor(
     val chatHeads: ChatHeadController,
     val appPrefs: com.farrow.app.data.prefs.AppPrefs,
     private val kiloUsage: com.farrow.app.data.network.KiloUsage,
+    val updater: com.farrow.app.data.update.AppUpdater,
 ) : ViewModel() {
     /** Kilo requests in the last hour (in-app counter, refreshed every 5 s while visible). */
     val kiloUsedThisHour: StateFlow<Int> = kotlinx.coroutines.flow.flow {

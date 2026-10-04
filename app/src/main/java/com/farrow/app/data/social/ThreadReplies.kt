@@ -30,6 +30,8 @@ data class RepliesSpec(
     val selfLink: String? = null,
     /** Regex with one group: the status id in a post URL. */
     val statusIdPattern: String = "/status/(\\d+)",
+    /** Hold back images / video / background images while scraping (page-scope filter, restored afterwards). */
+    val blockMedia: Boolean = false,
 )
 
 /** Generic page-text scoping for a site (selectors/x.json "textScope"): keep [scope], drop [exclude] subtrees. */

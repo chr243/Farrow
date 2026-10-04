@@ -43,6 +43,13 @@ class SocialToolFactory(
         }
     }
 
+    /** Scrape timings: `timings_ms` per step (ready, locate, nav, polls, restore_media, parse, total) + the step log. */
+    private fun kotlinx.serialization.json.JsonObjectBuilder.putTimings(t: ScrapeTimings?) {
+        t ?: return
+        put("timings_ms", buildJsonObject { t.ms.forEach { (k, v) -> put(k, v) } })
+        put("steps", JsonArray(t.steps.map { JsonPrimitive(it) }))
+    }
+
     fun tools(postMaxChars: Int): List<AgentTool> =
         listOf(status(), post(postMaxChars), scrape()) + if (store.get(site).reply != null) listOf(reply(postMaxChars)) else emptyList()
 
@@ -69,14 +76,16 @@ class SocialToolFactory(
             "opens the post, uses ITS reply composer, types the text, verifies it and submits with the composer's own Reply button " +
             "(never schedule/GIF/poll/emoji/media). Returns reply_url when found. mode=quote instead publishes a new post quoting it."
         override val parameters = schema(listOf("url", "text"),
-            "url" to prop("string", "URL of the post to reply to (https://x.com/<user>/status/<id>)"),
+            "url" to prop("string", "url = the post's status URL from ${prefix}_scrape (https://x.com/<user>/status/<id>; a bare id also works). x_reply always opens that post itself, never replies from the feed"),
             "text" to prop("string", "Reply text (max $maxChars characters)"),
             "mode" to prop("string", "reply (default) | quote"))
         override suspend fun execute(args: JsonObject) = execute(args, ToolContext(0))
         override suspend fun execute(args: JsonObject, ctx: ToolContext): String {
             val cfg = store.get(site)
-            val url = args.str("url")?.trim()?.takeIf { u -> SiteScopes.matches(u, cfg) && Regex("/status/\\d+").containsMatchIn(u) }
-                ?: return errorJson("url of a $displayName post (…/status/<id>) is required")
+            val raw = args.str("url")?.trim()?.takeIf { it.isNotEmpty() } ?: return errorJson("url is required: the post's status URL from ${prefix}_scrape")
+            val url = (if (site == SelectorStore.X) StatusUrl.canonical(raw)?.url
+                else raw.takeIf { u -> SiteScopes.matches(u, cfg) && Regex("/status/\\d+").containsMatchIn(u) })
+                ?: return errorJson("url must be a $displayName post's status URL (https://x.com/<user>/status/<id>) or a bare post id; got: ${raw.take(200)}")
             val text = args.str("text")?.trim().orEmpty()
             if (text.isEmpty()) return errorJson("text is required")
             val mode = args.str("mode")?.lowercase() ?: "reply"
@@ -147,6 +156,7 @@ class SocialToolFactory(
     private fun scrape() = object : AgentTool {
         override val name = "${prefix}_scrape"
         override val description = "Scrape posts from $displayName: kind=timeline (home feed), profile (needs handle), search (needs query)" +
+            (if (site == SelectorStore.X) ". Each post has status_url (https://x.com/<user>/status/<id>): pass it as url to ${prefix}_reply" else "") +
             (if (store.get(site).replies != null) " or replies (needs url of the post: only real reply posts below it, never the logged-in account's sidebar banner or the post itself; is_self marks your own replies)." else ".")
         override val parameters = schema(listOf("kind"),
             "kind" to prop("string", "timeline | profile | search" + if (store.get(site).replies != null) " | replies" else ""),
@@ -177,6 +187,7 @@ class SocialToolFactory(
                             r.focal?.let { put("post", it) }
                             put("count", r.replies.size); put("items", JsonArray(r.replies))
                             if (r.dropped.isNotEmpty()) put("ignored", JsonArray(r.dropped.map { JsonPrimitive(it) }))
+                            putTimings(a.lastScrapeTimings)
                         }.toString()
                     }
                 }
@@ -185,7 +196,8 @@ class SocialToolFactory(
             val limit = (args.int("limit") ?: 20).coerceIn(1, 100)
             return guarded(ctx) { a ->
                 val items = a.scrape(kind, params, limit)
-                buildJsonObject { put("site", site); put("kind", kind); put("count", items.size); put("items", items) }.toString()
+                buildJsonObject { put("site", site); put("kind", kind); put("count", items.size); put("items", items)
+                    putTimings(a.lastScrapeTimings) }.toString()
             }
         }
     }

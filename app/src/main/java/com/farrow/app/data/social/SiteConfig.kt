@@ -16,6 +16,8 @@ data class ScrapeSpec(
     /** field name -> "css selector[@attribute]" ("" selector = the item itself; attribute defaults to innerText). */
     val fields: Map<String, String>,
     val dedupeField: String? = null,
+    /** Hold back images / video / background images while scraping (page-scope filter, restored afterwards). */
+    val blockMedia: Boolean = false,
 )
 
 @Serializable

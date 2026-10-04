@@ -462,3 +462,33 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   6. Fallbacks: the inline box, then the intent URL on the retry.
   The step log and the tool result (`path`) say which path was used.
 - **Why v1.0.2/1.0.3 could skip or miss the bubble:** the bubble was only looked for under `article[tabindex="-1"]`, so a missing tabindex or a URL pointing at a reply silently fell through to the inline box. A failed TBP click fell back to a synthetic JS click, which X can ignore. The bubble wasn't scrolled into view before the mouse path was replayed. The page-loaded check (`ensureCleanPost`) also depended on the focal selector. All four are fixed; selectors are in `x.json` v9.
+
+## v1.0.5
+- **Fast x_scrape (timeline / profile / search / replies), `FastScrape.kt`.** The v1.0.4 path was slow for these reasons:
+  - It used TBP `goto` even when the page was already open. That is `location.assign` through the console, a fixed 3 s pause, then `readyState` polls (each poll is another console paste), and X rarely settles.
+  - `waitFor` polled at 600 ms intervals with a separate eval per check.
+  - Each scroll was a TBP `scroll` command followed by a fixed 1.2 s sleep.
+  - Images and video downloaded during the scrape.
+
+  Now:
+  - The first eval reads `location.href`. If the page already is the target (the path regex, plus `q` for search), navigation is skipped. If it's scrolled down, it is scrolled to the top first.
+  - Otherwise it uses keyboard `nav`, which doesn't wait for `load`.
+  - Then it polls every 150 ms with ONE eval per poll. That eval extracts every post, using the unchanged v1.0.4 field JS and the same dedupe. It returns as soon as `limit` unique posts are there.
+  - It scrolls (`scrollBy` inside the same eval) only when the count has stopped growing for 0.7 s. The stop rules are the same as v1.0.4.
+  - No screenshots or diagnostics on success.
+  - Results gain `timings_ms` (ready, locate, nav, wait_first_posts, polls, parse, restore_media, total) and `steps`.
+- **Media blocked during X scrapes (`blockMedia` in x.json v10).** TBP drives Firefox without Marionette or WebDriver. There is no runtime privileged context, and prefs would need a restart. So a page-scope request filter does the job, in the same eval:
+  - `src`/`srcset`/`poster` on img/source/video (property and `setAttribute`) are held back.
+  - CSS background images are suppressed.
+  - `play()` is refused like an autoplay block (NotAllowedError).
+  - The last poll releases it once the page holds `limit` posts, otherwise one restore eval does. Held media then loads normally, so web_screenshot and x_post media are unaffected. It also lapses by itself after 45 s.
+  - Images that started before the first poll after a fresh navigation still load.
+- **x_reply always on the post itself (`StatusUrl.kt`).**
+  - The URL is normalized to `https://x.com/<user>/status/<id>`: twitter.com and mobile.x.com are accepted, query and fragment stripped, /photo/, /video/ and /analytics suffixes dropped, and a bare id becomes /i/status/<id>. Anything else is an error.
+  - x_reply hard-navigates unless `location` is exactly that status path. It then waits until the location is the post AND the article whose own permalink is the id is present. v1.0.4 accepted any `primaryColumn article`, so on /home the feed counted as "the post" and it never navigated.
+  - x_scrape items carry `status_url`. The x_reply url description says: url = the post's status URL from x_scrape.
+- **In-app updater (`data/update/`).** Settings > App > App update shows the installed version and a "Check for updates" button.
+  - It reads the public GitHub API `releases/latest` (no token) and compares versions numerically (`UpdateLogic.compare`, pre-releases rank below their release). It then shows "Up to date" or "vX.Y.Z available" with the release notes and an Update button.
+  - Update downloads `Farrow-*-<buildType>.apk` (`pickAsset`) with OkHttp into `cacheDir/updates`, with a progress bar, and checks that the size matches the asset.
+  - It then opens the system installer through FileProvider (`${applicationId}.updates`) + ACTION_VIEW (`REQUEST_INSTALL_PACKAGES`). Without the "Install unknown apps" permission it opens `ACTION_MANAGE_UNKNOWN_APP_SOURCES` for Farrow first.
+  - The same debug key means it installs over the app. A silent check runs on app start at most every 6 h, and a dot on the gear and the row marks an available update.

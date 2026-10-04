@@ -44,6 +44,7 @@ fun ChatsScreen(
     val stories by vm.stories.collectAsStateWithLifecycle()
     val quotaDot by vm.quotaDot.collectAsStateWithLifecycle()
     val hasKeys by vm.hasKeys.collectAsStateWithLifecycle()
+    val updateAvailable by vm.updateAvailable.collectAsStateWithLifecycle()
     val now = rememberNow()
 
     Scaffold(
@@ -52,7 +53,12 @@ fun ChatsScreen(
                 title = { Text("Farrow", fontWeight = FontWeight.Bold, fontSize = 26.sp) },
                 actions = {
                     quotaDot?.let { QuotaDotButton(it, onDetails = onOpenModels) }
-                    IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                    IconButton(onClick = onOpenSettings) {
+                        Box {
+                            Icon(Icons.Filled.Settings, contentDescription = if (updateAvailable) "Settings (update available)" else "Settings")
+                            if (updateAvailable) com.farrow.app.ui.menu.UpdateDot(Modifier.align(Alignment.TopEnd))
+                        }
+                    }
                 },
             )
         },

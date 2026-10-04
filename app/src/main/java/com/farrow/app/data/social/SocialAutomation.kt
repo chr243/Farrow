@@ -129,6 +129,10 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
 
     @Volatile private var lastPollError: String? = null
 
+    /** Duration of the last [ensureBrowserReady] (TBP `ready`: in-flight wait + console probe eval). */
+    @Volatile var lastReadyMs: Long? = null
+        private set
+
     /** Unknown command on an old bridge (< 1.7.0) → fall back to the old path. */
     private fun BridgeResult.unknownCmd() = !ok && stderr.contains("unknown cmd")
 
@@ -137,8 +141,10 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * so a timed-out goto made the next eval wait 90 s) and the console answers. Waits up to 30 s.
      */
     suspend fun ensureBrowserReady(timeoutS: Int = 30) {
+        val t0 = System.currentTimeMillis()
         val r = withTimeoutOrNull((timeoutS + 15) * 1000L) { bridge.ready(timeoutS) }
             ?: throw AutomationException("The internal browser did not become ready within ${timeoutS + 15} s")
+        lastReadyMs = System.currentTimeMillis() - t0
         if (r.ok || r.unknownCmd()) return
         val steps = (r.data as? JsonObject)?.get("steps")?.let { runCatching { it.jsonArray.joinToString("; ") { s -> s.jsonPrimitive.content } }.getOrNull() }
         throw AutomationException("The internal browser is not ready: ${r.errorMessage.take(300)}" + (steps?.let { " ($it)" } ?: ""))
@@ -623,42 +629,86 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         )
     }
 
-    /** Navigates to a URL key and extracts up to [limit] items with the config's scrape spec (scrolling as needed). */
+    /** Timings of the last scrape / scrapeReplies (tool result `timings_ms` + `steps`). */
+    @Volatile var lastScrapeTimings: ScrapeTimings? = null
+        private set
+
+    /**
+     * The v1.0.5 poll loop shared by all scrapes. One eval per poll ([js]: scrollTop, scroll) that also reports the
+     * location; navigation is skipped when the page already is [targetUrl]; polls every [FastScrape.POLL_MS] and
+     * returns as soon as [have] reaches [limit]; scrolls only when the count stops growing. The media filter (if the
+     * spec asks for it) is released in the last poll or, failing that, by one restore eval. False = no posts in 20 s.
+     */
+    private suspend fun pollScrape(targetUrl: String, target: FastScrape.Target, navigate: Boolean, limit: Int, maxScrolls: Int,
+                                   tm: ScrapeTimings, js: (Boolean, Boolean) -> String, absorb: (FastScrape.Batch) -> Int,
+                                   have: () -> Int): Boolean {
+        var mediaOn = false
+        var loaded = false
+        var everOn = false
+        var polls = 0; var pollMs = 0L; var scrolls = 0
+        try {
+            val first = tm.time("locate", { b: FastScrape.Batch? -> "page ${b?.url ?: "?"}" }) { FastScrape.parseBatch(evalString(js(true, false))) }
+            mediaOn = first?.mediaOn == true; everOn = mediaOn
+            val here = first != null && FastScrape.onTarget(first.url, targetUrl, target)
+            if (navigate && !here) {
+                tm.time("nav", { n: String -> n }) { navigateTo(targetUrl, 30_000) }
+            } else {
+                tm.steps += if (navigate) "nav skipped (already on ${first?.url})" else "nav not requested"
+                if (first != null && !first.scrolledTop && first.count > 0) { absorb(first); loaded = true }
+            }
+            var lastGrowth = System.currentTimeMillis()
+            var lastScroll: Long? = null
+            val firstDeadline = System.currentTimeMillis() + 20_000
+            var pendingScroll = false
+            var waitedForFirst = 0L
+            val loopStart = System.currentTimeMillis()
+            while (true) {
+                val now = System.currentTimeMillis()
+                when (FastScrape.decide(have(), loaded, limit, now - lastGrowth, lastScroll?.let { now - it }, scrolls, maxScrolls, firstDeadline - now)) {
+                    FastScrape.Next.DONE -> break
+                    FastScrape.Next.GIVE_UP -> { tm.add("wait_posts", now - loopStart, "no posts after $polls polls"); return false }
+                    FastScrape.Next.SCROLL -> { pendingScroll = true; scrolls++ }
+                    FastScrape.Next.POLL -> if (polls > 0 || loaded) delay(FastScrape.POLL_MS)
+                }
+                val s0 = System.currentTimeMillis()
+                val b = try { FastScrape.parseBatch(evalString(js(false, pendingScroll))) } catch (e: AutomationException) { lastPollError = e.message; null }
+                polls++; pollMs += System.currentTimeMillis() - s0
+                if (pendingScroll) { lastScroll = System.currentTimeMillis(); pendingScroll = false }
+                if (b == null) continue
+                mediaOn = b.mediaOn; everOn = everOn || mediaOn
+                if (b.scrolledTop || b.count == 0) continue
+                if (!loaded) { loaded = true; lastGrowth = System.currentTimeMillis(); waitedForFirst = lastGrowth - loopStart }
+                if (absorb(b) > 0) lastGrowth = System.currentTimeMillis()
+            }
+            if (waitedForFirst > 0) tm.ms["wait_first_posts"] = waitedForFirst
+            return true
+        } finally {
+            tm.ms["polls"] = pollMs
+            tm.steps += "polls $polls in $pollMs ms (one eval each), scrolls $scrolls"
+            if (mediaOn) runCatching { tm.time("restore_media", { n: String? -> "released ${n ?: "?"} held media" }) { evalString(FastScrape.MEDIA_OFF) } }
+            else if (everOn) tm.steps += "media filter released in the last poll"
+        }
+    }
+
+    /** Extracts up to [limit] items with the config's scrape spec (fast poll loop, see [pollScrape]). */
     suspend fun scrape(urlKey: String, params: Map<String, String>, limit: Int, maxScrolls: Int = 8): JsonArray {
         val spec = config.scrape ?: throw AutomationException("no scrape spec for ${config.site}")
-        val nav = bridge.goto(config.url(urlKey, params))
-        if (!nav.ok) throw AutomationException("navigation failed: ${nav.errorMessage}")
-        if (!waitFor(spec.item, 20_000)) {
-            ensureLoggedIn(navigate = false)
-            return JsonArray(emptyList())
-        }
-        val fields = JsonObject(spec.fields.mapValues { JsonPrimitive(it.value) }).toString()
-        val extract = """(()=>{const F=$fields;const out=[];
-            document.querySelectorAll(${js(spec.item)}).forEach(it=>{const o={};
-              for(const k in F){const spec=F[k];const at=spec.lastIndexOf('@');
-                const sel=at>=0?spec.slice(0,at):spec;const attr=at>=0?spec.slice(at+1):'text';
-                let el=null;try{el=sel?it.querySelector(sel):it}catch(e){}
-                if(!el){o[k]=null;continue}
-                o[k]=attr==='text'?(el.innerText||'').trim():(attr==='href'?el.href:el.getAttribute(attr));}
-              out.push(o)});return JSON.stringify(out)})()""".trimIndent()
+        val tm = ScrapeTimings().also { lastScrapeTimings = it }
+        lastReadyMs?.let { tm.add("ready", it) }
+        val url = config.url(urlKey, params)
+        val t = FastScrape.target(url)
         val seen = LinkedHashMap<String, JsonObject>()
-        var scrolls = 0
-        while (seen.size < limit) {
-            val raw = evalString(extract) ?: break
-            val arr = runCatching { Json.parseToJsonElement(raw).jsonArray }.getOrNull() ?: break
-            val before = seen.size
-            arr.forEach { el ->
-                val o = el as? JsonObject ?: return@forEach
-                val key = spec.dedupeField?.let { o[it]?.jsonPrimitive?.contentOrNull } ?: o.toString()
-                if (key !in seen) seen[key] = o
-            }
-            if (seen.size >= limit || scrolls >= maxScrolls) break
-            if (seen.size == before && scrolls > 1) break
-            bridge.command("scroll")
-            scrolls++
-            delay(1_200)
+        val ok = pollScrape(url, t, navigate = true, limit, maxScrolls, tm,
+            js = { top, scroll -> FastScrape.extractJs(spec, limit, t, top, scroll, statusUrl = config.site == SelectorStore.X) },
+            absorb = { b -> FastScrape.merge(seen, FastScrape.items(b), spec.dedupeField) },
+            have = { seen.size })
+        if (!ok) {
+            ensureLoggedIn(navigate = false)
+            tm.total(); return JsonArray(emptyList())
         }
-        return JsonArray(seen.values.take(limit))
+        tm.total()
+        val out = seen.values.take(limit)
+        return JsonArray(if (config.site == SelectorStore.X) out.map(FastScrape::withStatusUrl) else out)
     }
 
     /**
@@ -668,41 +718,36 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      */
     suspend fun scrapeReplies(statusUrl: String, limit: Int, maxScrolls: Int = 8, navigate: Boolean = true): RepliesResult {
         val spec = config.replies ?: throw AutomationException("no replies spec for ${config.site}")
-        if (navigate) {
-            val nav = bridge.goto(statusUrl)
-            if (!nav.ok) throw AutomationException("navigation failed: ${nav.errorMessage}")
-        }
-        if (!waitFor(spec.item, 20_000)) {
-            ensureLoggedIn(navigate = false)
-            throw AutomationException("the post did not load (no ${spec.item} on the page)")
-        }
-        // Strip heavy/irrelevant markup in the page so the HTML we ship back stays small.
-        val grab = """(()=>{const r=document.querySelector(${js(spec.scope)})||document.body;const c=r.cloneNode(true);
-            c.querySelectorAll('svg,img,video,picture,style,script,noscript').forEach(e=>e.remove());
-            c.querySelectorAll('*').forEach(e=>{e.removeAttribute('class');e.removeAttribute('style')});
-            const p=${spec.selfLink?.let { "document.querySelector(${js(it)})" } ?: "null"};
-            return JSON.stringify({h:c.outerHTML,self:p?p.getAttribute('href'):null,u:location.href})})()""".trimIndent()
+        val tm = ScrapeTimings().also { lastScrapeTimings = it }
+        if (navigate) lastReadyMs?.let { tm.add("ready", it) }
+        val t = FastScrape.target(statusUrl, ThreadReplies.statusId(statusUrl, spec))
         val replies = LinkedHashMap<String, JsonObject>()
         var focal: JsonObject? = null
         var self: String? = null
         val dropped = mutableListOf<String>()
-        var scrolls = 0
-        while (replies.size < limit) {
-            val raw = evalString(grab) ?: break
-            val o = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: break
-            val page = ThreadReplies.parse(o["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), statusUrl, spec,
-                selfHref = o["self"]?.jsonPrimitive?.contentOrNull)
-            focal = focal ?: page.focal
-            self = self ?: page.selfHandle
-            dropped += page.dropped
-            val before = replies.size
-            page.replies.forEach { r -> r["url"]?.jsonPrimitive?.contentOrNull?.let { replies.putIfAbsent(it, r) } }
-            if (replies.size >= limit || scrolls >= maxScrolls) break
-            if (replies.size == before && scrolls > 1) break
-            bridge.command("scroll")
-            scrolls++
-            delay(1_200)
+        var parseMs = 0L
+        val ok = pollScrape(statusUrl, t, navigate, limit, maxScrolls, tm,
+            js = { top, scroll -> FastScrape.grabJs(spec, limit, t, top, scroll) },
+            absorb = { b ->
+                val p0 = System.currentTimeMillis()
+                val page = ThreadReplies.parse(b.obj["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), statusUrl, spec,
+                    selfHref = b.obj["self"]?.jsonPrimitive?.contentOrNull)
+                parseMs += System.currentTimeMillis() - p0
+                focal = focal ?: page.focal
+                self = self ?: page.selfHandle
+                dropped += page.dropped
+                val before = replies.size
+                page.replies.forEach { r -> r["url"]?.jsonPrimitive?.contentOrNull?.let { replies.putIfAbsent(it, r) } }
+                replies.size - before
+            },
+            have = { replies.size })
+        tm.ms["parse"] = parseMs
+        if (!ok) {
+            ensureLoggedIn(navigate = false)
+            tm.total()
+            throw AutomationException("the post did not load (no ${spec.item} on the page)")
         }
+        tm.total()
         return RepliesResult(focal, replies.values.take(limit), dropped.distinct(), self)
     }
 
@@ -718,13 +763,14 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      */
     suspend fun reply(postUrl: String, text: String, onStep: (String) -> Unit = {}): ReplyResult {
         val spec = config.reply ?: throw AutomationException("${config.displayName} has no reply spec")
-        val id = config.replies?.let { ThreadReplies.statusId(postUrl, it) } ?: Regex("/status/(\\d+)").find(postUrl)?.groupValues?.get(1)
-            ?: throw AutomationException("not a post URL: $postUrl")
+        val canon = StatusUrl.canonical(postUrl) ?: throw AutomationException("not a post URL: $postUrl")
+        val id = canon.id
         val steps = mutableListOf<String>()
         fun log(m: String) { steps += m; onStep(m) }
         var lastWhy = ""
         // Leftovers from earlier runs (unsent posts view, schedule picker, old composer) block the composer.
-        if (!ensureCleanPost(spec, postUrl, ::log)) log("could not get a clean post page; trying anyway")
+        // Always on the post itself (never the feed / a profile / search): hard navigation unless already exactly there.
+        if (!ensureCleanPost(spec, canon.url, ::log)) log("could not get a clean post page; trying anyway")
         for (attempt in 1..spec.maxAttempts.coerceIn(1, 3)) {
             val viaIntent = attempt > 1
             val pick = try {
@@ -780,10 +826,9 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             if (!waitFor(spec.textarea, 20_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
             return locateComposer(spec)
         }
-        if (!ensureCleanPost(spec, postUrl, log)) return ComposerPick.Wrong("a stray dialog stays open or the post does not load")
-        if (!waitFor(postArticle(spec), 25_000)) {
+        if (!ensureCleanPost(spec, postUrl, log)) {
             ensureLoggedIn(navigate = false)
-            return ComposerPick.Missing("the post did not load (no post in the conversation)")
+            return ComposerPick.Wrong("not on the post page (${StatusUrl.canonical(postUrl)?.url ?: postUrl}) or a stray dialog stays open")
         }
         locateComposer(spec).let { if (it is ComposerPick.Wrong) return it }
         // Primary path: the target post's own speech-bubble reply button → composer dialog with the box focused.
@@ -879,21 +924,51 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * /drafts…), hard-navigate with location.replace and wait for the focal post; if that fails, go home and back.
      */
     suspend fun ensureCleanPost(spec: ReplyComposerSpec, postUrl: String, log: (String) -> Unit): Boolean {
-        val clean = postUrl.substringBefore('?').substringBefore('#')
+        val canon = StatusUrl.canonical(postUrl) ?: throw AutomationException("not a post URL: $postUrl")
         val left = cleanStray(spec, log)
-        val url = runCatching { evalString("location.href") }.getOrNull()?.trim('"')
-        val wrong = StrayDialogs.notOnPost(url, spec.stray)
-        val onPost = url != null && url.substringBefore('?').trimEnd('/') == clean.trimEnd('/')
-        if (left.isEmpty() && onPost && wrong == null && exists(postArticle(spec))) return true
-        log("hard navigation to the post (" + (if (left.isNotEmpty()) "stray dialog open" else wrong?.let { "on $url" } ?: "not on the post") + ")")
-        runCatching { bridge.eval("location.replace(${js(clean)})") }
-        delay(1_500)
-        if (waitFor(postArticle(spec), 25_000) && cleanStray(spec, log).isEmpty()) return true
-        log("still not clean → x.com home, then back to the post")
-        runCatching { navigateTo(config.url("home"), 30_000) }
+        val here = probePost(spec, canon)
+        val wrong = StrayDialogs.notOnPost(here?.first, spec.stray)
+        if (left.isEmpty() && wrong == null && here != null && !StatusUrl.needsNavigation(here.first, canon) && here.second) {
+            log("already on the post (${here.first})"); return true
+        }
+        log("navigate to ${canon.url} (" + (if (left.isNotEmpty()) "stray dialog open" else wrong?.let { "on ${here?.first}" }
+            ?: if (here != null && !StatusUrl.needsNavigation(here.first, canon)) "post not loaded" else "on ${here?.first ?: "?"}") + ")")
+        hardNav(canon, log)
+        if (waitOnPost(spec, canon, 25_000) && cleanStray(spec, log).isEmpty()) return true
+        log("still not on the post → x.com home, then the post again")
+        runCatching { navigateTo(config.url("home"), 30_000) }.onFailure { if (it is SessionExpiredException) throw it }
         cleanStray(spec, log)
-        runCatching { navigateTo(clean, 30_000) }
-        return waitFor(postArticle(spec), 25_000) && cleanStray(spec, log).isEmpty()
+        hardNav(canon, log)
+        return waitOnPost(spec, canon, 25_000) && cleanStray(spec, log).isEmpty()
+    }
+
+    /** location.href + "the target article (own permalink = the status id) is on the page"; null = eval failed. */
+    private suspend fun probePost(spec: ReplyComposerSpec, c: StatusUrl.Canon): Pair<String?, Boolean>? {
+        val raw = try { evalString(StatusUrl.probeJs(postArticle(spec), c.id)) } catch (e: AutomationException) { lastPollError = e.message; null } ?: return null
+        val o = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return null
+        return o["u"]?.jsonPrimitive?.contentOrNull to (o["a"]?.jsonPrimitive?.booleanOrNull == true)
+    }
+
+    /** Full page load of the post (keyboard navigation, confirmed by history; /i/status redirects, so not awaited long). */
+    private suspend fun hardNav(c: StatusUrl.Canon, log: (String) -> Unit) {
+        val r = runCatching { navigateTo(c.url, if (c.user == "i") 8_000 else 30_000) }
+        r.exceptionOrNull()?.let { if (it is SessionExpiredException) throw it }
+        log("open ${c.url}: " + (r.getOrNull() ?: "unconfirmed (${r.exceptionOrNull()?.message?.take(120)})"))
+    }
+
+    /** Polls until the browser is exactly on the post AND its article is there (feed articles never count). */
+    private suspend fun waitOnPost(spec: ReplyComposerSpec, c: StatusUrl.Canon, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (true) {
+            val p = probePost(spec, c)
+            if (p != null && !StatusUrl.needsNavigation(p.first, c) && p.second) return true
+            if (System.currentTimeMillis() >= deadline) {
+                if (p?.first != null && config.sessionExpiredUrlPatterns.any { p.first!!.contains(it) })
+                    throw SessionExpiredException(config.site, "${config.displayName} redirected to the login page (${p.first})")
+                return false
+            }
+            delay(FastScrape.POLL_MS * 2)
+        }
     }
 
     /** Before a retry: strays closed, else back to a clean post page. */

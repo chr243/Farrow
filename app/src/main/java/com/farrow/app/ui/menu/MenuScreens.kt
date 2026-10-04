@@ -91,6 +91,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
                 item("Shizuku, accessibility & Git", "run_shell via Shizuku, screen control, Git token", Routes.SHIZUKU),
             ))
             SettingsGroup("Appearance", listOf(item("Theme", "Light / dark mode and color palette", Routes.THEME)))
+            SettingsGroup("App", listOf({ i -> AppUpdateRow(vm.updater, i) }))
             Text("Farrow v${com.farrow.app.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 28.dp, top = 16.dp))
         }

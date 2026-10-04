@@ -379,7 +379,8 @@ class AgentLoop internal constructor(
               web_scrape, web_click, web_type, web_session, web_screenshot, and the site tools x_status / x_post / x_reply /
               x_scrape, fb_*. They need NO accessibility permission and no screen access. Use them for every web task
               (searching, reading pages, clicking/typing on websites, posting on X).
-              X rules: to reply to or comment on an X post ALWAYS call x_reply(url, text) (mode=quote to quote it); NEVER
+              X rules: to reply to or comment on an X post ALWAYS call x_reply(url, text) with url = the post's status_url
+              from x_scrape (mode=quote to quote it); NEVER
               reply with web_click / web_type or by clicking around the composer. New posts: x_post. Reading replies:
               x_scrape kind=replies. If x_reply fails, report its error instead of improvising clicks.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for

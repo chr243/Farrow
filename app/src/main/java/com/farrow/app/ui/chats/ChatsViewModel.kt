@@ -26,7 +26,10 @@ class ChatsViewModel @Inject constructor(
     private val kilo: com.farrow.app.data.network.KiloProvider,
     private val kiloUsage: com.farrow.app.data.network.KiloUsage,
     private val client: com.farrow.app.data.network.OpenRouterClient,
+    updater: com.farrow.app.data.update.AppUpdater,
 ) : ViewModel() {
+    /** Dot on the gear: a newer Farrow release exists. */
+    val updateAvailable = updater.updateAvailable
     val query = MutableStateFlow("")
 
     val conversations: StateFlow<List<Conversation>> = observeConversations(query)
