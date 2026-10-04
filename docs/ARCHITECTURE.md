@@ -542,3 +542,18 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - Termux `pkg install` (up to 15 min) moved from the Tools ViewModel to `TermuxPackageJobs`.
   - MCP reconnect already runs in `McpManager`. Memory edits and key/model edits are short DB/DataStore writes and stay in the screen scope.
 - x.json v12.
+
+## v1.0.8
+- **Root cause of the v1.0.7 phone failure (intent composer opened, text never typed, 60 s timeout):**
+  - The intent composer opens as a modal over /home. The home timeline's own composer (also `tweetTextarea_0`) stays behind it and comes first in the document.
+  - The intent wait (`waitFor(tweetTextarea_0)`) was satisfied at once by that hidden composer, so the composer was read before the modal's editor had settled.
+  - Typing then went to `[data-farrow-i=N]`, a transient snapshot mark that X's re-render can drop. It used only a programmatic focus, without x_post's trusted click.
+  - Its 30 s + 400 ms/char budget, plus the settle wait and the second attempt, used up the 60 s budget without a clear error.
+- **Fix: x_reply types with x_post's exact routine, scoped to the dialog.**
+  1. `ReplyComposer.editorTargetJs` finds the contenteditable inside the top non-Grok dialog that holds a reply box. The snapshot mark is used only if it is inside that dialog. It marks the editor `data-farrow-editor="1"` and scrolls it to the centre.
+  2. x_post's trusted click (`sturdyClick`) on that editor.
+  3. A check that `document.activeElement` is inside it (else a JS focus).
+  4. x_post's `typeIntoEditor`: bridge `editor_type` (focus → xdotool → verify → insertText).
+  5. The editor's `textContent` is verified for up to 2 s. If the text is still missing: one retry with refocus + `execCommand('insertText')`, then a synthetic paste (`ClipboardEvent` + `DataTransfer`). After that x_reply fails fast ("typing failed in the modal reply composer: …; nothing was posted") instead of running into the budget.
+- The intent path now waits for `[role=dialog] [data-testid=tweetTextarea_0]` and rejects a non-modal pick (a page box behind the modal).
+- The step log names the target: testid, class, bounding rect, inDialog, focused, number of reply boxes, chars. It also has stage timings (open composer / focus / type / verify / retry / settle / submit, plus a summary on failure or budget timeout).

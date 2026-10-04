@@ -628,6 +628,58 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         return StepOutcome.Failed("the text did not appear in the editor (${notes.joinToString("; ")}; editor has ${got?.length ?: 0} chars)")
     }
 
+    /**
+     * v1.0.8 x_reply typing = x_post's routine on the right element: resolve + mark the contenteditable INSIDE the open
+     * dialog ([ReplyComposer.editorTargetJs]; inline: the conversation box), the same trusted click as x_post's
+     * `click composeText` ([sturdyClick]), a check that document.activeElement is in it, the same [typeIntoEditor]
+     * (bridge editor_type: focus → xdotool → verify → insertText), then the editor's textContent is verified for ≤ 2 s.
+     * Still missing → ONE retry: refocus + execCommand insertText, then a synthetic paste. Fails fast with the target.
+     */
+    private suspend fun focusAndType(spec: ReplyComposerSpec, pick: ComposerPick.Found, text: String, log: (String) -> Unit, stages: Stages): StepOutcome {
+        val css = ReplyComposer.EDITOR_CSS
+        val target = ReplyComposer.parseEditorTarget(runCatching { evalString(ReplyComposer.editorTargetJs(pick.box, spec, pick.kind == ComposerKind.MODAL)) }.getOrNull())
+        log("editor target: ${target.describe()}")
+        if (!target.ok) return StepOutcome.Failed("no editor to type into (${target.why})")
+        if (pick.kind == ComposerKind.MODAL && !target.inDialog) return StepOutcome.Failed("the editor found is not inside the dialog (${target.describe()})")
+        stepNote = null
+        val click = sturdyClick(AutomationStep("click", timeoutMs = 10_000), css)
+        log("focus: trusted click ${if (click == StepOutcome.Ok) "ok" else (click as StepOutcome.Failed).why}${stepNote?.let { " ($it)" } ?: ""}")
+        var active = runCatching { evalString(ReplyComposer.ACTIVE_JS) }.getOrNull()
+        if (active != "yes") { val f = jsFocusOrClick(css); active = runCatching { evalString(ReplyComposer.ACTIVE_JS) }.getOrNull(); log("focus: activeElement not in the editor → JS focus ${f ?: "failed"} → ${if (active == "yes") "in the editor" else "still outside"}") }
+        else log("focus: activeElement is in the editor")
+        log("timing: " + stages.mark("focus"))
+        stepNote = null
+        val typeBudget = (12_000L + text.length * 150L).coerceAtMost(maxOf(8_000L, REPLY_BUDGET_MS - 15_000L - stages.elapsedMs()))
+        val typed = typeIntoEditor(css, text, typeBudget)
+        log("typing: ${if (typed == StepOutcome.Ok) "ok" else (typed as StepOutcome.Failed).why}${stepNote?.let { " — $it" } ?: ""}")
+        log("timing: " + stages.mark("type"))
+        if (awaitEditorText(text, 2_000)) { log("verify: the dialog's editor holds the text"); log("timing: " + stages.mark("verify")); return StepOutcome.Ok }
+        // One retry with an alternative input method.
+        val got0 = editorTextContent()
+        log("verify: editor has ${got0?.length ?: 0} chars after typing → retry: refocus + insertText")
+        jsFocusOrClick(css)
+        val ins = runCatching { withTimeoutOrNull(10_000) { evalString(DomFinder.insertText(css, text)) } }.getOrNull()
+        if (awaitEditorText(text, 2_000)) { log("retry: insertText ${ins ?: "?"} → text present"); log("timing: " + stages.mark("retry")); return StepOutcome.Ok }
+        val paste = runCatching { withTimeoutOrNull(10_000) { evalString(ReplyComposer.pasteJs(text)) } }.getOrNull()
+        if (awaitEditorText(text, 1_500)) { log("retry: paste ${paste ?: "?"} → text present"); log("timing: " + stages.mark("retry")); return StepOutcome.Ok }
+        val got = editorTextContent()
+        log("timing: " + stages.mark("retry"))
+        return StepOutcome.Failed("the text never reached the editor (typed, insertText: ${ins ?: "failed"}, paste: ${paste ?: "failed"}; " +
+            "editor has ${got?.length ?: 0} chars; target ${target.describe()})")
+    }
+
+    private suspend fun editorTextContent(): String? =
+        runCatching { withTimeoutOrNull(10_000) { evalString(ReplyComposer.EDITOR_TEXT_JS) } }.getOrNull()?.takeIf { it != "__missing__" }
+
+    private suspend fun awaitEditorText(text: String, ms: Long): Boolean {
+        val deadline = System.currentTimeMillis() + ms
+        while (true) {
+            if (DomFinder.containsText(editorTextContent(), text)) return true
+            if (System.currentTimeMillis() >= deadline) return false
+            delay(FastScrape.POLL_MS)
+        }
+    }
+
     /** URL, a page-text snippet and (if the bridge supports it) a screenshot — collected after a failure. */
     suspend fun diagnostics(): LoginDiagnostics {
         val probe = withTimeoutOrNull(8_000) {
@@ -807,7 +859,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         // Loop protection: the whole x_reply is bounded (~60 s); after the submit click only the confirmation runs.
         val r = withTimeoutOrNull(REPLY_BUDGET_MS) { shielded { replyAttempts(spec, canon, text, steps, ::log, run) } }
         if (r != null) return r
-        log("x_reply budget of ${REPLY_BUDGET_MS / 1000} s used up after ${(System.currentTimeMillis() - t0) / 1000} s")
+        log("x_reply budget of ${REPLY_BUDGET_MS / 1000} s used up after ${(System.currentTimeMillis() - t0) / 1000} s; stage timings: ${run.stages.summary()}")
         if (run.submitted) return ReplyResult(null, run.confirmed ?: "submitted (not confirmed in time)", run.kind ?: ComposerKind.MODAL, run.attempt, steps)
         throw replyFailure("x_reply timed out after ${REPLY_BUDGET_MS / 1000} s before submitting; nothing was posted", steps)
     }
@@ -816,7 +868,24 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     @Volatile var lastReplySteps: List<String> = emptyList()
         private set
 
-    private class ReplyRun { var viaIntent = true; var submitted = false; var confirmed: String? = null; var kind: ComposerKind? = null; var attempt = 0; var saveSheetRetry = false }
+    /** v1.0.8: per-stage durations of one x_reply ("open 3.1 s · wait box 0.8 s · …"), logged so the 60 s budget is traceable. */
+    internal class Stages(private val clock: () -> Long = System::currentTimeMillis) {
+        private val t0 = clock()
+        private var last = t0
+        private val parts = mutableListOf<String>()
+        /** Records the time since the previous mark under [name]; returns e.g. "type 4.2 s (t=12.5 s)". */
+        fun mark(name: String): String {
+            val now = clock()
+            val part = "$name ${secs(now - last)}"
+            parts += part; last = now
+            return "$part (t=${secs(now - t0)})"
+        }
+        fun elapsedMs() = clock() - t0
+        fun summary() = parts.joinToString(" · ").ifBlank { "none" } + " · total ${secs(clock() - t0)}"
+        private fun secs(ms: Long) = "%.1f s".format(java.util.Locale.ROOT, ms / 1000.0)
+    }
+
+    private class ReplyRun { val stages = Stages(); var viaIntent = true; var submitted = false; var confirmed: String? = null; var kind: ComposerKind? = null; var attempt = 0; var saveSheetRetry = false }
 
     private suspend fun replyAttempts(spec: ReplyComposerSpec, canon: StatusUrl.Canon, text: String, steps: MutableList<String>,
                                       log: (String) -> Unit, run: ReplyRun): ReplyResult {
@@ -847,10 +916,15 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             }
             run.kind = pick.kind
             log("attempt $attempt: ${pick.kind.name.lowercase()} composer")
-            // Type exactly like x_post (focus by eval → xdotool → verify → insertText), into OUR box only.
-            if (pick.kind == ComposerKind.INLINE) jsFocusOrClick(pick.box)
-            val typed = typeIntoEditor(pick.box, text, 30_000)
-            log("typing: ${if (typed == StepOutcome.Ok) "ok" else (typed as? StepOutcome.Failed)?.why} ${stepNote.orEmpty()}".trim())
+            log("timing: " + run.stages.mark("open composer"))
+            // v1.0.8: x_post's exact focus+type routine (trusted click → editor_type), on the editor INSIDE the dialog.
+            val typed = focusAndType(spec, pick, text, log, run.stages)
+            if (typed is StepOutcome.Failed) {
+                // Fail fast (nothing was posted) instead of spending the rest of the 60 s budget.
+                clearBox(ReplyComposer.EDITOR_CSS)
+                log("stage timings: ${run.stages.summary()}")
+                throw replyFailure("typing failed in the ${pick.kind.name.lowercase()} reply composer: ${typed.why}; nothing was posted", steps)
+            }
             // Re-locate: the page must still be the reply composer (same box).
             val after = locateComposer(spec, preferInline = pick.kind == ComposerKind.INLINE)
             if (after !is ComposerPick.Found || after.box != pick.box) {
@@ -863,8 +937,10 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 lastWhy = settled
                 log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, log, strayUrl); continue
             }
+            log("timing: " + run.stages.mark("settle"))
             // Submit ONCE with the composer's own button. Nothing touches the page in between (no blur).
             run.submitted = submitOnce(after, spec, log)
+            log("timing: " + run.stages.mark("submit"))
             if (!run.submitted) throw replyFailure("could not click the composer's Reply button", steps)
             when (val c = confirmReply(spec, pick, text, log)) {
                 is Confirm.Ok -> {
@@ -935,10 +1011,15 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             val n = runCatching { navigateTo(u, 10_000) }.onFailure { if (it is SessionExpiredException) throw it }
             log("path: intent composer; open " + (n.getOrNull() ?: "unconfirmed (${n.exceptionOrNull()?.message?.take(80)})"))
             shield()
-            if (!waitFor(spec.textarea, 15_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
+            // v1.0.8: wait for the box INSIDE the composer dialog. The intent opens as a modal over /home, whose own
+            // timeline composer (also tweetTextarea_0, first in the document) satisfied the old wait at once.
+            val tw = System.currentTimeMillis()
+            if (!waitFor("${spec.dialog} ${spec.textarea}", 15_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent opened no composer dialog") }
+            log("intent: composer dialog after ${System.currentTimeMillis() - tw} ms")
             cleanStray(spec, log, ours = spec.textarea)
             val pick = locateComposer(spec)
             if (pick !is ComposerPick.Found) return pick
+            if (pick.kind != ComposerKind.MODAL) return ComposerPick.Wrong("the intent composer dialog is not open (only the page's own box behind it)")
             // Never post a standalone post: the composer must say "Replying to @<author>".
             val ctx = runCatching { evalString(IntentComposer.contextJs(pick.box, spec.dialog)) }.getOrNull()
             val why = IntentComposer.check(ctx, spec.replyingTo, canon?.user)
@@ -965,9 +1046,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             if (clickBubble(target.replyButton, log) && waitFor("${spec.dialog} ${spec.textarea}", spec.bubbleWaitMs)) {
                 val pick = locateComposer(spec)
                 if (pick is ComposerPick.Found && pick.kind == ComposerKind.MODAL) {
-                    val focused = runCatching { evalString("(()=>{const b=document.querySelector(${js(pick.box)});return b&&b.contains(document.activeElement)?'yes':'no'})()") }.getOrNull()
-                    if (focused != "yes") { jsFocusOrClick(pick.box); log("path: reply bubble → dialog (box focused by the app)") }
-                    else log("path: reply bubble → dialog (box already focused)")
+                    log("path: reply bubble → dialog")
                     return pick
                 }
                 log("bubble opened something else: ${(pick as? ComposerPick.Wrong)?.why ?: (pick as? ComposerPick.Missing)?.why ?: "inline"}")
