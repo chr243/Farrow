@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Farrow mark: the green S-curve (cubic Bézier fitted to the original artwork). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2.20" android:strokeLineCap="butt"
+        android:fillColor="#00000000" android:pathData="M2,18.95 C14.6,18.95 8.37,5.05 22,5.05"/>
+</vector>

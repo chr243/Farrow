@@ -1,0 +1,396 @@
+package com.farrow.app.ui.chat
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.farrow.app.chathead.ChatHeadResult
+import com.farrow.app.domain.model.*
+import com.farrow.app.ui.chathead.OverlayPermissionDialog
+import com.farrow.app.ui.components.*
+import com.farrow.app.ui.theme.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatDetailScreen(onBack: () -> Unit, onRelogin: (String) -> Unit = {}, onChatMemory: (Long) -> Unit = {}, vm: ChatViewModel = hiltViewModel()) {
+    val task by vm.task.collectAsStateWithLifecycle()
+    val messages by vm.messages.collectAsStateWithLifecycle()
+    val toolCalls by vm.toolCalls.collectAsStateWithLifecycle()
+    val expiredSite by vm.expiredSite.collectAsStateWithLifecycle()
+    val generating by vm.isGenerating.collectAsStateWithLifecycle()
+    var input by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val callsByMessage = remember(toolCalls) { toolCalls.groupBy { it.messageId } }
+    val visible = remember(messages) {
+        messages.filter { it.role != MessageRole.TOOL && !(it.role == MessageRole.SYSTEM && it.kind == MessageKind.NORMAL) }
+    }
+
+    // ---- chat head / bubble launch flow (POST_NOTIFICATIONS on 13+, overlay permission dialog)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showOverlayDialog by remember { mutableStateOf(false) }
+    var awaitingOverlayPermission by remember { mutableStateOf(false) }
+    val launchChatHead: () -> Unit = {
+        scope.launch {
+            when (vm.openChatHead()) {
+                ChatHeadResult.NEEDS_OVERLAY_PERMISSION -> showOverlayDialog = true
+                ChatHeadResult.BUBBLES_BLOCKED -> {
+                    Toast.makeText(context, "Bubbles are off for Farrow. Enable them, or pick Overlay in Settings → Chat heads.", Toast.LENGTH_LONG).show()
+                    context.startActivity(vm.chatHeads.bubbleSettingsIntent())
+                }
+                ChatHeadResult.NOTIFICATIONS_BLOCKED ->
+                    Toast.makeText(context, "Notifications are blocked, and bubbles need them. Allow notifications or pick Overlay in Settings → Chat heads.", Toast.LENGTH_LONG).show()
+                ChatHeadResult.OVERLAY_STARTED ->
+                    Toast.makeText(context, "Chat head is floating. Switch apps to keep chatting.", Toast.LENGTH_SHORT).show()
+                ChatHeadResult.BUBBLE_SHOWN, null -> Unit
+            }
+            Unit
+        }
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+        launchChatHead()
+    }
+    val onChatHeadClick: () -> Unit = {
+        val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (needsNotificationPermission) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else launchChatHead()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (awaitingOverlayPermission && vm.chatHeads.canDrawOverlays()) {
+            awaitingOverlayPermission = false
+            launchChatHead()
+        }
+    }
+    if (showOverlayDialog) {
+        OverlayPermissionDialog(
+            onOpenSettings = {
+                showOverlayDialog = false
+                awaitingOverlayPermission = true
+                context.startActivity(vm.chatHeads.overlayPermissionIntent())
+            },
+            onDismiss = { showOverlayDialog = false },
+        )
+    }
+
+    LaunchedEffect(messages.size) {
+        vm.markOpened()
+        if (visible.isNotEmpty()) listState.animateScrollToItem(visible.size)
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val t = task
+                        TaskAvatar(t?.type ?: TaskType.CHAT, t?.status, size = 36.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(t?.title ?: "New conversation", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                            if (t != null) Text(t.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                },
+                actions = {
+                    if (task != null) {
+                        // No chat-head button (v0.9.18): the chat head starts automatically; settings in Settings > Chat heads.
+                        var overflow by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { overflow = true }) {
+                                Text("⋮", fontSize = 22.sp, modifier = Modifier.semantics { contentDescription = "More options" })
+                            }
+                            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+                                DropdownMenuItem(text = { Text("Chat memory (short-term)") }, onClick = {
+                                    overflow = false; task?.id?.let(onChatMemory)
+                                })
+                            }
+                        }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (visible.isEmpty()) {
+                    item {
+                        Text("Describe a task or ask anything.\nFarrow can read, write and list files in its sandboxed workspace.",
+                            textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(top = 48.dp))
+                    }
+                }
+                items(visible, key = { it.id }) { m ->
+                    when {
+                        m.kind == MessageKind.STATUS -> StatusLine(m)
+                        m.kind == MessageKind.SUMMARY -> SummaryCard(m)
+                        m.role == MessageRole.USER -> UserBubble(m.content.orEmpty())
+                        m.role == MessageRole.ASSISTANT -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (!m.content.isNullOrBlank()) AgentBubble(m.content, m.model)
+                            callsByMessage[m.id].orEmpty().forEach { ToolCallCard(it) }
+                        }
+                    }
+                }
+                if (generating) item("typing") {
+                    Text("● ${task?.subtitle ?: "Thinking..."}", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, top = 4.dp))
+                }
+            }
+            val status = task?.status
+            if (generating) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    OutlinedButton(onClick = vm::stop, modifier = Modifier.padding(4.dp)) {
+                        Box(Modifier.size(12.dp).background(MaterialTheme.colorScheme.error, RoundedCornerShape(2.dp)))
+                        Spacer(Modifier.width(8.dp)); Text("Stop Generation")
+                    }
+                }
+            } else if (status in setOf(TaskStatus.PAUSED, TaskStatus.RATE_LIMITED, TaskStatus.QUEUED, TaskStatus.FAILED, TaskStatus.CANCELLED)) {
+                val now = rememberNow()
+                val resumeAt = task?.resumeAt
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (resumeAt != null && resumeAt > now && status != TaskStatus.CANCELLED && status != TaskStatus.FAILED) {
+                        Text("Auto-resume in ${formatDuration(resumeAt - now)}", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(4.dp)) {
+                        expiredSite?.let { site ->
+                            Button(onClick = { onRelogin(site) }) { Text("Re-login") }
+                        }
+                        FilledTonalButton(onClick = vm::forceRetry) {
+                            Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp))
+                            Text(if (resumeAt != null && resumeAt > now && status != TaskStatus.FAILED && status != TaskStatus.CANCELLED) "Force retry now" else "Continue")
+                        }
+                        if (status == TaskStatus.PAUSED || status == TaskStatus.RATE_LIMITED || status == TaskStatus.QUEUED) {
+                            OutlinedButton(onClick = vm::cancelTask) { Text("Cancel") }
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
+                    placeholder = { Text(if (task == null) "Describe a new task…" else "Message Farrow…") },
+                    shape = RoundedCornerShape(24.dp), maxLines = 5,
+                )
+                Spacer(Modifier.width(6.dp))
+                FilledIconButton(
+                    onClick = { vm.send(input); input = "" },
+                    enabled = input.isNotBlank() && !generating,
+                    modifier = Modifier.size(48.dp),
+                ) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun UserBubble(text: String) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+        val b = com.farrow.app.ui.theme.LocalBubbleColors.current
+        Surface(color = b.user, shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp), modifier = Modifier.widthIn(max = 300.dp)) {
+            SelectionContainer { Text(text, color = b.onUser, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+        }
+    }
+}
+
+@Composable
+internal fun AgentBubble(text: String, model: String?) {
+    val b = com.farrow.app.ui.theme.LocalBubbleColors.current
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+        Surface(color = b.agent, shape = RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp),
+            modifier = Modifier.widthIn(max = 320.dp)) {
+            SelectionContainer {
+                MarkdownText(text, color = b.onAgent, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp))
+            }
+        }
+        if (model != null) Text(model, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp, top = 2.dp))
+    }
+}
+
+@Composable
+internal fun StatusLine(m: ChatMessage) {
+    val now = rememberNow()
+    val text = buildString {
+        append(m.content.orEmpty())
+        m.resumeAt?.let { at ->
+            if (at > now) append(" Resuming in ${formatDuration(at - now)}.") else append(" Reset time reached.")
+        }
+    }
+    Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 24.dp))
+}
+
+@Composable
+internal fun SummaryCard(m: ChatMessage) {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).clickable { expanded = !expanded }) {
+        Column(Modifier.padding(10.dp)) {
+            Text("📝 Earlier conversation summarized ${if (expanded) "▲" else "▼"}", style = MaterialTheme.typography.labelMedium)
+            AnimatedVisibility(expanded) { Text(m.content.orEmpty(), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
+        }
+    }
+}
+
+private val prettyJson = Json { prettyPrint = true; isLenient = true }
+
+private fun pretty(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    return runCatching { prettyJson.encodeToString(JsonElement.serializer(), prettyJson.parseToJsonElement(raw)) }.getOrDefault(raw)
+}
+
+@Composable
+internal fun ToolCallCard(call: ToolCallRecord) {
+    var expanded by remember { mutableStateOf(false) }
+    val sc = com.farrow.app.ui.theme.LocalStatusColors.current
+    val (icon, color) = when (call.status) {
+        ToolCallStatus.PENDING -> "⏳" to sc.warn
+        ToolCallStatus.SUCCESS -> "✅" to sc.ok
+        ToolCallStatus.ERROR -> "⚠️" to sc.error
+    }
+    // Tool cards: surfaceContainer (errors: errorContainer) so they sit between the bubbles and the background.
+    Surface(shape = RoundedCornerShape(12.dp),
+        color = if (call.status == ToolCallStatus.ERROR) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = if (call.status == ToolCallStatus.ERROR) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth().padding(end = 32.dp)) {
+        Column(Modifier.clickable { expanded = !expanded }.padding(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔧", fontSize = 14.sp); Spacer(Modifier.width(6.dp))
+                Text(call.name, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (call.source == "fenced") { SmallBadge("json-fallback", MaterialTheme.colorScheme.outline, MaterialTheme.colorScheme.surface); Spacer(Modifier.width(6.dp)) }
+                Text(icon); Spacer(Modifier.width(4.dp))
+                Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+                Spacer(Modifier.width(6.dp))
+                Text(if (expanded) "▲" else "▼", fontSize = 12.sp)
+            }
+            screenshotPath(call)?.let { ScreenshotThumb(it) }
+            AnimatedVisibility(expanded) {
+                Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CodeBlock("arguments", pretty(call.argumentsJson), if (call.name == "run_shell") "json" else null)
+                    CodeBlock("result", pretty(call.resultJson).ifEmpty { "…running" }, null)
+                }
+            }
+        }
+    }
+}
+
+/** web_screenshot result → saved image path (if the file still exists). */
+internal fun screenshotPath(call: ToolCallRecord): String? {
+    if (call.name != com.farrow.app.agent.tools.WebScreenshotTool.NAME) return null
+    val o = call.resultJson?.let { runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
+    val p = (o?.get(com.farrow.app.agent.tools.WebScreenshotTool.IMAGE_PATH) as? kotlinx.serialization.json.JsonPrimitive)?.content
+    return p?.takeIf { java.io.File(it).exists() }
+}
+
+/** Screenshot preview in the tool card; tap for a fullscreen, zoomable view. */
+@Composable
+private fun ScreenshotThumb(path: String) {
+    var full by remember { mutableStateOf(false) }
+    var thumb by remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(path) {
+        thumb = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val o = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
+                android.graphics.BitmapFactory.decodeFile(path, o)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    thumb?.let { bmp ->
+        androidx.compose.foundation.Image(bmp, contentDescription = "Browser screenshot (tap to view fullscreen)",
+            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+            modifier = Modifier.padding(top = 8.dp).fillMaxWidth().heightIn(max = 240.dp).clip(RoundedCornerShape(8.dp))
+                .clickable { full = true })
+    }
+    if (full) {
+        var image by remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+        LaunchedEffect(path) {
+            image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { android.graphics.BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
+            }
+        }
+        androidx.compose.ui.window.Dialog(onDismissRequest = { full = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            var scale by remember { mutableStateOf(1f) }
+            var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, 6f); offset = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else offset + pan
+                    }
+                }
+                .clickable { full = false }) {
+                image?.let {
+                    androidx.compose.foundation.Image(it, contentDescription = "Browser screenshot",
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale,
+                            translationX = offset.x, translationY = offset.y))
+                } ?: CircularProgressIndicator(Modifier.align(Alignment.Center))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeBlock(label: String, code: String, language: String?) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            com.farrow.app.ui.components.CopyButton(code)
+        }
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)
+            .horizontalScroll(rememberScrollState()).padding(8.dp)) {
+            SelectionContainer {
+                Text(CodeHighlighter.highlight(code.take(8000), language, com.farrow.app.ui.components.CodeColors.of(MaterialTheme.colorScheme)), fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    }
+}

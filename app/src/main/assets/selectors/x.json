@@ -1,0 +1,222 @@
+{
+  "version": 5,
+  "site": "x",
+  "displayName": "X.com",
+  "domain": ".x.com",
+  "sessionName": "x",
+  "loginCookies": [
+    "auth_token",
+    "ct0"
+  ],
+  "readableLoginCookies": [
+    "twid",
+    "ct0"
+  ],
+  "urls": {
+    "home": "https://x.com/home",
+    "login": "https://x.com/i/flow/login",
+    "compose": "https://x.com/compose/post",
+    "timeline": "https://x.com/home",
+    "profile": "https://x.com/{handle}",
+    "search": "https://x.com/search?q={query}&src=typed_query&f=live"
+  },
+  "sessionExpiredUrlPatterns": [
+    "/i/flow/login",
+    "/i/jf/onboarding",
+    "/login",
+    "/logout",
+    "/account/access",
+    "/i/flow/signup"
+  ],
+  "selectors": {
+    "loggedIn": "[data-testid=\"SideNav_AccountSwitcher_Button\"], [data-testid=\"AppTabBar_Home_Link\"], [data-testid=\"SideNav_NewTweet_Button\"]",
+    "loginForm": "input[autocomplete=\"username\"], input[name=\"text\"], input[name=\"password\"], [data-testid=\"loginButton\"], a[href=\"/login\"], [data-testid=\"ocfEnterTextTextInput\"]",
+    "loginUsername": "input[autocomplete=\"username\"], input[name=\"text\"]:not([data-testid=\"ocfEnterTextTextInput\"]), input[type=\"email\"]",
+    "loginChallenge": "input[data-testid=\"ocfEnterTextTextInput\"]",
+    "loginPassword": "input[name=\"password\"]",
+    "composeOpen": "[data-testid=\"SideNav_NewTweet_Button\"]",
+    "composeText": "[data-testid=\"tweetTextarea_0\"]",
+    "composeSubmit": "[data-testid=\"tweetButton\"], [data-testid=\"tweetButtonInline\"]",
+    "postSuccess": "[data-testid=\"toast\"]",
+    "loginNext": "[role=\"button\"], button",
+    "loginChallengeNext": "[data-testid=\"ocfEnterTextNextButton\"]",
+    "loginSubmit": "[data-testid=\"LoginForm_Login_Button\"]"
+  },
+  "scrape": {
+    "item": "article[data-testid=\"tweet\"]",
+    "fields": {
+      "author": "[data-testid=\"User-Name\"]",
+      "text": "[data-testid=\"tweetText\"]",
+      "time": "time@datetime",
+      "url": "a[href*=\"/status/\"]@href",
+      "replies": "[data-testid=\"reply\"]@aria-label",
+      "reposts": "[data-testid=\"retweet\"]@aria-label",
+      "likes": "[data-testid=\"like\"]@aria-label"
+    },
+    "dedupeField": "url"
+  },
+  "postSteps": [
+    {
+      "action": "goto",
+      "url": "compose",
+      "timeoutMs": 45000
+    },
+    {
+      "action": "waitFor",
+      "selector": "composeText",
+      "timeoutMs": 45000,
+      "hint": "The compose box did not appear; X may be slow or showing a dialog."
+    },
+    {
+      "action": "click",
+      "selector": "composeText",
+      "timeoutMs": 45000
+    },
+    {
+      "action": "typeEditor",
+      "selector": "composeText",
+      "text": "{text}",
+      "timeoutMs": 45000
+    },
+    {
+      "action": "sleep",
+      "ms": 800
+    },
+    {
+      "action": "click",
+      "selector": "composeSubmit",
+      "timeoutMs": 45000,
+      "fallbackKey": "ctrl+Return"
+    },
+    {
+      "action": "waitPosted",
+      "selector": "postSuccess",
+      "selectors": [
+        "composeText"
+      ],
+      "timeoutMs": 25000
+    }
+  ],
+  "loginSteps": [
+    {
+      "action": "goto",
+      "url": "login",
+      "timeoutMs": 30000,
+      "label": "open the X login page"
+    },
+    {
+      "action": "clickText",
+      "match": "^(Refuse non-essential cookies|Refuser les cookies non essentiels)$",
+      "optional": true,
+      "timeoutMs": 5000,
+      "label": "dismiss the cookie banner (refuse non-essential)"
+    },
+    {
+      "action": "clickText",
+      "match": "^(Accept all cookies|Accepter tous les cookies)$",
+      "optional": true,
+      "timeoutMs": 1000,
+      "label": "dismiss the cookie banner (accept)"
+    },
+    {
+      "action": "type",
+      "match": "^(Email or username|Phone, email,? or username|Phone or username|E-mail ou nom d'utilisateur|Adresse e-mail ou nom d'utilisateur|Téléphone, e-mail ou nom d'utilisateur|Numéro de téléphone, adresse e-mail ou nom d'utilisateur)$",
+      "selector": "loginUsername",
+      "dialogFallback": true,
+      "text": "{username}",
+      "timeoutMs": 15000,
+      "label": "type into 'Email or username'",
+      "hint": "X didn't show its login form — see the screenshot/page text below"
+    },
+    {
+      "action": "clickText",
+      "match": "^(Next|Continue|Suivant|Continuer)$",
+      "exclude": "^(Continue|Continuer) (with|avec)\\b",
+      "fallbackKey": "Enter",
+      "timeoutMs": 8000,
+      "label": "click Next / Continue"
+    },
+    {
+      "action": "waitAny",
+      "selectors": [
+        "loginPassword",
+        "loginChallenge"
+      ],
+      "timeoutMs": 15000,
+      "label": "wait for the password or verification field",
+      "hint": "X may have rejected the username or shown an error — check the page text"
+    },
+    {
+      "action": "type",
+      "selector": "loginChallenge",
+      "match": "^(Phone or username|Phone number or username|Numéro de téléphone ou nom d'utilisateur|Téléphone ou nom d'utilisateur)$",
+      "text": "{challenge}",
+      "optional": true,
+      "timeoutMs": 1500,
+      "label": "answer the unusual-activity check (phone/username)"
+    },
+    {
+      "action": "clickText",
+      "match": "^(Next|Continue|Suivant|Continuer)$",
+      "exclude": "^(Continue|Continuer) (with|avec)\\b",
+      "optional": true,
+      "timeoutMs": 1500,
+      "label": "confirm the unusual-activity answer"
+    },
+    {
+      "action": "waitFor",
+      "selector": "loginPassword",
+      "timeoutMs": 15000,
+      "label": "wait for the password field",
+      "hint": "X asked for something else (phone/email/username?) — fill 'Unusual-activity answer' and retry"
+    },
+    {
+      "action": "type",
+      "match": "^(Password|Mot de passe)$",
+      "selector": "loginPassword",
+      "text": "{password}",
+      "timeoutMs": 10000,
+      "label": "type the password"
+    },
+    {
+      "action": "clickText",
+      "match": "^(Log in|Se connecter|Connexion)$",
+      "fallbackKey": "Enter",
+      "timeoutMs": 8000,
+      "label": "click Log in"
+    },
+    {
+      "action": "waitAny",
+      "selectors": [
+        "loggedIn",
+        "loginChallenge"
+      ],
+      "timeoutMs": 20000,
+      "label": "wait for the home timeline or a 2FA prompt",
+      "hint": "Wrong password, a captcha, or a blocked login — check the screenshot"
+    },
+    {
+      "action": "type",
+      "selector": "loginChallenge",
+      "match": "(code|Enter code|Saisissez le code|Entrez le code)",
+      "text": "{code}",
+      "optional": true,
+      "timeoutMs": 1500,
+      "label": "type the 2FA / confirmation code"
+    },
+    {
+      "action": "clickText",
+      "match": "^(Next|Suivant|Confirm|Confirmer|Verify|Vérifier)$",
+      "optional": true,
+      "timeoutMs": 1500,
+      "label": "confirm the code"
+    },
+    {
+      "action": "waitFor",
+      "selector": "loggedIn",
+      "timeoutMs": 20000,
+      "label": "wait for the logged-in home page",
+      "hint": "If X asks for a confirmation code, enter it in the 2FA field and retry, or use Paste cookies"
+    }
+  ]
+}

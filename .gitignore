@@ -1,0 +1,31 @@
+# Gradle / build
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local config & secrets
+local.properties
+*.keystore
+*.jks
+keystore.properties
+secrets.properties
+*.env
+.env*
+**/apikeys*.txt
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+.kotlin/
+
+# Outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+__pycache__/
