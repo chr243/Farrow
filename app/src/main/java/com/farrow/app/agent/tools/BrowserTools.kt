@@ -71,7 +71,8 @@ class WebScrapeTool(
 
 class WebClickTool(private val bridge: BridgeClient) : AgentTool {
     override val name = "web_click"
-    override val description = "Click an element on the current web page (human-like Bézier mouse movement). Internal browser (Firefox in Termux) — no accessibility permission needed."
+    override val description = "Click an element on the current web page (human-like Bézier mouse movement). Internal browser (Firefox in Termux) — no accessibility permission needed. " +
+        "NOT for X composers: replying/commenting on X = x_reply, posting = x_post (clicks on X reply/post boxes and buttons are refused)."
     override val parameters = schema(listOf("selector"),
         "selector" to prop("string", "CSS selector of the element to click"),
         "human" to prop("boolean", "Human-like mouse path (default true)"))
@@ -79,6 +80,7 @@ class WebClickTool(private val bridge: BridgeClient) : AgentTool {
     override suspend fun execute(args: JsonObject): String {
         val sel = args.str("selector")?.takeIf { it.isNotBlank() } ?: return errorJson("selector is required")
         if (!bridge.isAvailable()) return errorJson(BRIDGE_DOWN)
+        ComposerGuard.check(bridge, sel)?.let { return it }
         return try { bridge.click(sel, args.bool("human") ?: true).toToolJson { put("selector", sel) } }
         catch (e: IOException) { errorJson("bridge error: ${e.message}") }
     }
@@ -86,7 +88,8 @@ class WebClickTool(private val bridge: BridgeClient) : AgentTool {
 
 class WebTypeTool(private val bridge: BridgeClient) : AgentTool {
     override val name = "web_type"
-    override val description = "Type text into an element on the current web page with human typing delays. Internal browser (Firefox in Termux) — no accessibility permission needed."
+    override val description = "Type text into an element on the current web page with human typing delays. Internal browser (Firefox in Termux) — no accessibility permission needed. " +
+        "NOT for X: replies/comments = x_reply, posts = x_post (typing into X composers is refused)."
     override val parameters = schema(listOf("selector", "text"),
         "selector" to prop("string", "CSS selector of the input"),
         "text" to prop("string", "Text to type"),
@@ -96,6 +99,7 @@ class WebTypeTool(private val bridge: BridgeClient) : AgentTool {
         val sel = args.str("selector")?.takeIf { it.isNotBlank() } ?: return errorJson("selector is required")
         val text = args.str("text") ?: return errorJson("text is required")
         if (!bridge.isAvailable()) return errorJson(BRIDGE_DOWN)
+        ComposerGuard.check(bridge, sel)?.let { return it }
         return try { bridge.type(sel, text, args.bool("submit") == true).toToolJson { put("selector", sel) } }
         catch (e: IOException) { errorJson("bridge error: ${e.message}") }
     }

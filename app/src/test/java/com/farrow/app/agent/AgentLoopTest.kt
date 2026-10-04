@@ -86,14 +86,15 @@ class AgentLoopTest {
     private fun reply(content: String?, calls: List<ParsedToolCall> = emptyList(), finish: String? = "stop") =
         ChatOutcome.Success(ParsedCompletion(content, calls, finish, "m"), "m", "k")
 
-    private class Harness(val replies: List<ChatOutcome>, maxSteps: Int = 10, notifyFinish: Boolean = false) {
+    private class Harness(val replies: List<ChatOutcome>, maxSteps: Int = 10, notifyFinish: Boolean = false,
+                          tools: List<AgentTool> = listOf(ThrowingTool())) {
         val tasks = FakeTasks()
         val notifications = FakeNotifications()
         val sent = mutableListOf<List<ApiMessage>>()
         var systemNotified = 0
         private var i = 0
         val loop = AgentLoop(
-            tasks, FakeSettings(maxSteps), ToolRegistry(listOf(ThrowingTool())), notifications,
+            tasks, FakeSettings(maxSteps), ToolRegistry(tools), notifications,
             model = { m: List<ApiMessage>, _: JsonArray?, _: Long, _: suspend (String) -> Unit -> sent += m; replies[minOf(i++, replies.lastIndex)] },
             summarize = { _, _, _ -> },
             consumeExpiredSession = { null },
@@ -209,5 +210,38 @@ class AgentLoopTest {
         h.loop.run(1)
         assertEquals(listOf(NotificationType.COMPLETED), h.notifications.added)
         assertEquals(1, h.systemNotified)
+    }
+
+    private class FailingReply : AgentTool {
+        var runs = 0
+        override val name = "x_reply"
+        override val description = "reply"
+        override val parameters = JsonObject(emptyMap())
+        override suspend fun execute(args: JsonObject): String { runs++; return "{\"error\":\"could not open the reply composer\"}" }
+    }
+
+    @Test fun `x_reply on the same post a third time stops the task`() = runTest {
+        val tool = FailingReply()
+        fun call(i: Int, url: String) = reply(null, listOf(ParsedToolCall("c$i", "x_reply", "{\"url\":\"$url\",\"text\":\"hi\"}")), finish = "tool_calls")
+        val h = Harness(listOf(
+            call(1, "https://x.com/alice/status/1234567"),
+            call(2, "https://twitter.com/alice/status/1234567?s=20"),   // same post, other spelling
+            call(3, "https://x.com/i/status/1234567"),
+            call(4, "https://x.com/alice/status/1234567"),
+            reply("done"),
+        ), tools = listOf(tool))
+        h.tasks.messages += ChatMessage(0, 1, MessageRole.USER, "reply to it", MessageKind.NORMAL, null, null, null, null, false, null, 0)
+        assertEquals(RunResult.Stopped, h.loop.run(1))
+        assertEquals(2, tool.runs)
+        assertEquals(TaskStatus.PAUSED, h.tasks.task.status)
+        assertTrue(h.tasks.messages.any { it.role == MessageRole.TOOL && it.content.orEmpty().contains("already called 2 times") })
+    }
+
+    @Test fun `x_reply on different posts is not limited`() = runTest {
+        val tool = FailingReply()
+        val calls = (1..3).map { i -> reply(null, listOf(ParsedToolCall("c$i", "x_reply", "{\"url\":\"https://x.com/a/status/1000$i\",\"text\":\"hi\"}")), finish = "tool_calls") }
+        val h = Harness(calls + reply("done"), tools = listOf(tool))
+        assertEquals(RunResult.Completed, h.loop.run(1))
+        assertEquals(3, tool.runs)
     }
 }

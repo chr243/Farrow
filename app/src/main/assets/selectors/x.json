@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -217,8 +217,14 @@
       "timeoutMs": 45000
     },
     {
-      "action": "sleep",
-      "ms": 800
+      "action": "settleSubmit",
+      "selector": "composeText",
+      "selectors": [
+        "composeSubmit"
+      ],
+      "text": "{text}",
+      "timeoutMs": 9000,
+      "label": "wait until the text is exactly the post and the Post button is enabled"
     },
     {
       "action": "click",

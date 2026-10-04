@@ -12,6 +12,7 @@ import com.farrow.app.domain.repository.TaskRepository
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -216,8 +217,26 @@ class AgentLoop internal constructor(
                     saveCheckpoint(taskId, cp)
                     val results = mutableListOf<IntermediateResult>()
                     lastToolError = null
+                    var repeatStop: String? = null
                     for (call in calls) {
                         coroutineContext.ensureActive()
+                        // v1.0.6: x_reply on the same post more than twice since the user's last message → stop the task.
+                        val rk = ReplyRepeatGuard.key(call.name, call.argumentsJson)
+                        if (rk != null && repeatStop == null) {
+                            val since = tasks.getMessages(taskId).lastOrNull { it.role == MessageRole.USER }?.createdAt ?: 0L
+                            val prev = ReplyRepeatGuard.previous(tasks.observeToolCalls(taskId).first(), rk, since)
+                            if (ReplyRepeatGuard.blocked(prev)) repeatStop = ReplyRepeatGuard.message(rk.removePrefix("x:").let { if (it.all(Char::isDigit)) "post $it" else it }, prev)
+                        }
+                        if (repeatStop != null && (rk != null || call.name.startsWith("web_"))) {
+                            val j = LoopMessages.toolErrorJson(repeatStop!!)
+                            val recId = tasks.addToolCall(ToolCallRecord(0, taskId, msgId, call.id, call.name, call.argumentsJson, null,
+                                ToolCallStatus.PENDING, if (native.isNotEmpty()) "native" else "fenced", System.currentTimeMillis(), null))
+                            tasks.finishToolCall(recId, j, ToolCallStatus.ERROR)
+                            tasks.addMessage(ChatMessage(0, taskId, MessageRole.TOOL, j, MessageKind.NORMAL, null, call.id, call.name,
+                                null, false, null, System.currentTimeMillis()))
+                            results += IntermediateResult(step, call.name, j.take(300), true)
+                            continue
+                        }
                         val r = executeTool(taskId, msgId, call, if (native.isNotEmpty()) "native" else "fenced")
                         results += IntermediateResult(step, call.name, r.json.take(300), r.isError)
                         if (r.isError) lastToolError = "${call.name}: ${r.json.take(300)}"
@@ -228,6 +247,11 @@ class AgentLoop internal constructor(
                         intermediateResults = cp.intermediateResults + results,
                     )
                     saveCheckpoint(taskId, cp)
+                    repeatStop?.let { why ->
+                        tasks.addMessage(ChatMessage(0, taskId, MessageRole.ASSISTANT, "⚠️ $why", MessageKind.NORMAL, null, null, null,
+                            outcome.model, false, null, System.currentTimeMillis()))
+                        return pauseWithReason(taskId, "x_reply repeated on the same post", "⏸️ $why Tap Continue only after checking the post.")
+                    }
                     // Phase 5/9: a social tool hit a login wall -> pause until the user re-logs in.
                     consumeExpiredSession(taskId)?.let { site ->
                         tasks.pause(taskId, TaskStatus.PAUSED, "Session expired on $site – re-login needed", null,
@@ -379,10 +403,12 @@ class AgentLoop internal constructor(
               web_scrape, web_click, web_type, web_session, web_screenshot, and the site tools x_status / x_post / x_reply /
               x_scrape, fb_*. They need NO accessibility permission and no screen access. Use them for every web task
               (searching, reading pages, clicking/typing on websites, posting on X).
-              X rules: to reply to or comment on an X post ALWAYS call x_reply(url, text) with url = the post's status_url
-              from x_scrape (mode=quote to quote it); NEVER
-              reply with web_click / web_type or by clicking around the composer. New posts: x_post. Reading replies:
-              x_scrape kind=replies. If x_reply fails, report its error instead of improvising clicks.
+              X rules (strict): to reply to or comment on an X post ALWAYS call x_reply(url, text) with url = the post's
+              status_url from x_scrape (mode=quote to quote it); new posts: x_post. NEVER use web_click / web_type on X
+              composers, reply boxes or Reply/Post buttons: they are refused, and they caused "Save post?" prompts and
+              truncated text. Reading replies: x_scrape kind=replies. If x_reply or x_post fails, report its error and
+              steps to the user instead of improvising clicks; call x_reply at most twice per post (a third call stops
+              the task). If x_reply says "submitted but not confirmed", check with x_scrape kind=replies, never reply again.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display; they cannot see or click the internal browser.
               Never ask the user for accessibility permission for a web task.

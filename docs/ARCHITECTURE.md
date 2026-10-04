@@ -492,3 +492,33 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - Update downloads `Farrow-*-<buildType>.apk` (`pickAsset`) with OkHttp into `cacheDir/updates`, with a progress bar, and checks that the size matches the asset.
   - It then opens the system installer through FileProvider (`${applicationId}.updates`) + ACTION_VIEW (`REQUEST_INSTALL_PACKAGES`). Without the "Install unknown apps" permission it opens `ACTION_MANAGE_UNKNOWN_APP_SOURCES` for Farrow first.
   - The same debug key means it installs over the app. A silent check runs on app start at most every 6 h, and a dot on the gear and the row marks an available update.
+
+## v1.0.6
+- **Why the agent bypassed x_reply** (phone run: web_type 'testing.. testing...' + web_click `button[aria-label="Reply"]` → "Save post?", text truncated, screen locked):
+  - web_click and web_type had no X guard, and their descriptions didn't steer away from X composers.
+  - Most x_reply errors were bare `{"error": …}` with no step log and no "don't fall back" hint. Only ReplyFailed had that hint, and those results started with `"ok":false`, so the registry logged them as success.
+  - x_reply was only registered when the loaded selectors had a reply spec.
+  - The prompt rule was soft. A weak model improvised after the first error.
+- **Generic tools are guarded (`ComposerGuard`).** On x.com/twitter.com, web_click and web_type refuse compose surfaces with "Use x_reply (comments/replies) or x_post (new posts); generic clicks and typing on X composers are blocked":
+  - tweetTextarea_* and tweetButton*
+  - the reply bubble
+  - Reply/Post/Répondre/Poster buttons
+  - an inline reply box or a compose dialog
+  - the "Save post?" sheet
+
+  The check is one eval (`closest()` on the resolved element) plus a selector check, which fails closed when the page doesn't answer. There is no web_key tool.
+- **x_reply is always registered on X.** Every error carries the step log and a note: no web_click/web_type, at most once more. The prompt rules are strict.
+- **Before the submit (x_reply and x_post `settleSubmit`):**
+  - The composer text must EQUAL the intended text, unchanged for 500 ms (`SubmitGuard.Settle`), and the button must not have aria-disabled="true".
+  - Then exactly ONE trusted click. If TBP reports a failure, the app first checks whether the click went through before trying a JS click, so it never submits twice.
+- **After the submit:** a "Save post?" sheet means the text was not sent.
+  - x_reply discards it and retries the submit at most once.
+  - x_post reports the failure.
+
+  v1.0.5 counted a truncated box ("testing...") as "composer cleared". Now only an empty or closed composer that stays that way for about 1 s counts as success.
+- **Loop protection:**
+  - x_reply and x_post have a 60 s budget each. A reply timeout after the submit returns "submitted, not confirmed" with "do NOT reply again".
+  - At most 2 composer attempts.
+  - AgentLoop stops the task when x_reply targets the same post (by id: /i/status, twitter.com and the canonical URL count as one) more than twice since the user's last message.
+  - The intent URL and the /i/status reload no longer wait 30 s for a history match that can't come, because they redirect.
+  - The bubble is clicked only on the article identified by its own permalink. A focal-only match uses the inline box instead.

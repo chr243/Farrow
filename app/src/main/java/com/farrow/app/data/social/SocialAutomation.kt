@@ -401,6 +401,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 val text = fill(s.text).take(80)
                 val deadline = System.currentTimeMillis() + s.timeoutMs
                 while (true) {
+                    if (saveSheetOpen()) return StepOutcome.Failed(SAVE_SHEET_POST)
                     val st = try { mark(DomFinder.postedState(box, item, text)) } catch (e: AutomationException) { lastPollError = e.message; "open" }
                     if (st == "feed" || st == "closed") { stepNote = if (st == "feed") "text appeared in the feed" else "compose dialog closed"; return StepOutcome.Ok }
                     if (System.currentTimeMillis() >= deadline) return StepOutcome.Failed("the compose dialog is still open after ${s.timeoutMs / 1000} s and the post is not in the feed")
@@ -411,6 +412,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 val keys = listOfNotNull(s.selector ?: "postSuccess", s.selectors.firstOrNull() ?: "composeText")
                 val deadline = System.currentTimeMillis() + s.timeoutMs
                 while (true) {
+                    if (saveSheetOpen()) return StepOutcome.Failed(SAVE_SHEET_POST)
                     val i = try { firstPresent(keys) } catch (e: AutomationException) { lastPollError = e.message; 1 }
                     if (i != 1) { stepNote = if (i == 0) "success toast" else "compose box closed"; return StepOutcome.Ok }
                     if (System.currentTimeMillis() >= deadline) return StepOutcome.Failed("no success toast and the compose box is still open after ${s.timeoutMs / 1000} s")
@@ -437,6 +439,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             }
             "click" -> {
                 val sel = s.selector ?: return StepOutcome.Skipped
+                if (sel == "composeSubmit") submitClicked = true
                 if (!exists(sel)) {
                     if (s.optional) return StepOutcome.Skipped
                     if (!waitFor(sel, s.timeoutMs)) {
@@ -508,6 +511,13 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 if (s.optional && text.isBlank()) return StepOutcome.Skipped
                 if (!exists(sel) && !waitFor(sel, s.timeoutMs)) return StepOutcome.Failed("editor not found")
                 return typeIntoEditor(config.sel(sel), text, s.timeoutMs)
+            }
+            "settleSubmit" -> {
+                // v1.0.6: the editor text EQUALS the intended text, stable for 500 ms, and the submit button is enabled.
+                val box = config.sel(s.selector ?: "composeText")
+                val send = config.sel(s.selectors.firstOrNull() ?: "composeSubmit")
+                val why = settleBeforeSubmit(box, send, fill(s.text), config.reply?.stray ?: StraySpec(), { stepNote = it })
+                if (why != null) return StepOutcome.Failed(why)
             }
             "press" -> bridge.press(s.key ?: "Enter")
             "sleep" -> delay(s.ms.coerceIn(0, 30_000))
@@ -764,66 +774,138 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     suspend fun reply(postUrl: String, text: String, onStep: (String) -> Unit = {}): ReplyResult {
         val spec = config.reply ?: throw AutomationException("${config.displayName} has no reply spec")
         val canon = StatusUrl.canonical(postUrl) ?: throw AutomationException("not a post URL: $postUrl")
-        val id = canon.id
         val steps = mutableListOf<String>()
+        lastReplySteps = steps
         fun log(m: String) { steps += m; onStep(m) }
+        val run = ReplyRun()
+        val t0 = System.currentTimeMillis()
+        // Loop protection: the whole x_reply is bounded (~60 s); after the submit click only the confirmation runs.
+        val r = withTimeoutOrNull(REPLY_BUDGET_MS) { replyAttempts(spec, canon, text, steps, ::log, run) }
+        if (r != null) return r
+        log("x_reply budget of ${REPLY_BUDGET_MS / 1000} s used up after ${(System.currentTimeMillis() - t0) / 1000} s")
+        if (run.submitted) return ReplyResult(null, run.confirmed ?: "submitted (not confirmed in time)", run.kind ?: ComposerKind.MODAL, run.attempt, steps)
+        throw replyFailure("x_reply timed out after ${REPLY_BUDGET_MS / 1000} s before submitting; nothing was posted", steps)
+    }
+
+    /** Steps of the last x_reply (also for errors that are not a [ReplyFailedException]). */
+    @Volatile var lastReplySteps: List<String> = emptyList()
+        private set
+
+    private class ReplyRun { var submitted = false; var confirmed: String? = null; var kind: ComposerKind? = null; var attempt = 0; var saveSheetRetry = false }
+
+    private suspend fun replyAttempts(spec: ReplyComposerSpec, canon: StatusUrl.Canon, text: String, steps: MutableList<String>,
+                                      log: (String) -> Unit, run: ReplyRun): ReplyResult {
+        val postUrl = canon.url
+        val id = canon.id
         var lastWhy = ""
         // Leftovers from earlier runs (unsent posts view, schedule picker, old composer) block the composer.
         // Always on the post itself (never the feed / a profile / search): hard navigation unless already exactly there.
-        if (!ensureCleanPost(spec, canon.url, ::log)) log("could not get a clean post page; trying anyway")
-        for (attempt in 1..spec.maxAttempts.coerceIn(1, 3)) {
-            val viaIntent = attempt > 1
+        if (!ensureCleanPost(spec, postUrl, log)) log("could not get a clean post page; trying anyway")
+        val maxAttempts = spec.maxAttempts.coerceIn(1, 2)
+        var attempt = 0
+        while (attempt < maxAttempts) {
+            attempt++
+            run.attempt = attempt
+            val viaIntent = attempt > 1 && !run.saveSheetRetry
             val pick = try {
-                openComposer(spec, postUrl, id, viaIntent, ::log)
+                openComposer(spec, postUrl, id, viaIntent, log)
             } catch (e: SessionExpiredException) { throw e } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) { ComposerPick.Missing(e.message ?: e.javaClass.simpleName) }
             if (pick !is ComposerPick.Found) {
                 lastWhy = (pick as? ComposerPick.Wrong)?.why ?: (pick as ComposerPick.Missing).why
                 log("attempt $attempt: $lastWhy")
-                closeStrayDialogs(spec, ::log, postUrl)
+                closeStrayDialogs(spec, log, postUrl)
                 continue
             }
+            run.kind = pick.kind
             log("attempt $attempt: ${pick.kind.name.lowercase()} composer")
             // Type exactly like x_post (focus by eval → xdotool → verify → insertText), into OUR box only.
             if (pick.kind == ComposerKind.INLINE) jsFocusOrClick(pick.box)
-            val typed = typeIntoEditor(pick.box, text, 45_000)
+            val typed = typeIntoEditor(pick.box, text, 30_000)
             log("typing: ${if (typed == StepOutcome.Ok) "ok" else (typed as? StepOutcome.Failed)?.why} ${stepNote.orEmpty()}".trim())
-            // Re-locate: the page must still be the reply composer, with our text, and its button enabled.
+            // Re-locate: the page must still be the reply composer (same box).
             val after = locateComposer(spec, preferInline = pick.kind == ComposerKind.INLINE)
             if (after !is ComposerPick.Found || after.box != pick.box) {
                 lastWhy = "the composer changed while typing (${(after as? ComposerPick.Wrong)?.why ?: (after as? ComposerPick.Missing)?.why ?: "different box"})"
-                log(lastWhy); closeStrayDialogs(spec, ::log, postUrl); continue
+                log(lastWhy); closeStrayDialogs(spec, log, postUrl); continue
             }
-            if (!DomFinder.containsText(editorText(pick.box), text)) {
-                lastWhy = "the text did not land in the reply box"
-                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log, postUrl); continue
+            // Settle: text EQUALS the intended text, unchanged for 500 ms, and the Reply button enabled.
+            val settled = settleBeforeSubmit(after.box, after.send, text, spec.stray, log)
+            if (settled != null) {
+                lastWhy = settled
+                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, log, postUrl); continue
             }
-            if (!after.sendEnabled) {
-                lastWhy = "the composer's Reply button stays disabled"
-                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log, postUrl); continue
+            // Submit ONCE with the composer's own button. Nothing touches the page in between (no blur).
+            run.submitted = submitOnce(after, spec, log)
+            if (!run.submitted) throw replyFailure("could not click the composer's Reply button", steps)
+            when (val c = confirmReply(spec, pick, text, log)) {
+                is Confirm.Ok -> {
+                    run.confirmed = c.how
+                    val url = c.link ?: findOwnReply(postUrl, text)
+                    log(if (url != null) "reply found: $url" else "reply URL not found in the conversation")
+                    return ReplyResult(url, c.how, pick.kind, attempt, steps)
+                }
+                Confirm.SaveSheet -> {
+                    // X kept the text and asks "Save post?": the reply was NOT sent. Discard, then retry the submit once.
+                    log("X showed 'Save post?' after the submit click: the reply was not sent")
+                    cleanStray(spec, log)
+                    if (run.saveSheetRetry) throw replyFailure("X showed 'Save post?' after the submit click twice; the reply was not sent (discarded)", steps)
+                    run.saveSheetRetry = true; run.submitted = false
+                    if (attempt >= maxAttempts) attempt = maxAttempts - 1 // exactly one more try
+                    closeStrayDialogs(spec, log, postUrl)
+                    continue
+                }
+                Confirm.Timeout -> throw replyFailure("the reply was submitted but neither a toast nor the emptied/closed composer confirmed it " +
+                    "(check the post before trying again; do not re-submit blindly)", steps)
             }
-            // Submit: the composer's own button only (no keyboard fallback that could hit another control).
-            val clicked = try { withTimeoutOrNull(clickTryMs(AutomationStep("click"))) { bridge.click(after.send) } } catch (e: java.io.IOException) { null }
-            if (clicked?.ok != true) {
-                waitIdle()
-                if (jsFocusOrClick(after.send) == null) throw replyFailure("could not click the composer's Reply button", steps)
-                log("submit: JS click")
-            } else log("submit: clicked")
-            val confirm = confirmReply(spec, pick, text, ::log)
-                ?: throw replyFailure("the reply was submitted but neither a toast nor the cleared composer confirmed it", steps)
-            val url = findOwnReply(postUrl, text)
-            log(if (url != null) "reply found: $url" else "reply URL not found in the conversation")
-            return ReplyResult(confirm.second ?: url, confirm.first, pick.kind, attempt, steps)
         }
         throw replyFailure("could not open the reply composer: $lastWhy", steps)
+    }
+
+    /** Null = ready to submit; else why not (after ≤ [SubmitGuard.SETTLE_TIMEOUT_MS]). */
+    private suspend fun settleBeforeSubmit(box: String, send: String, text: String, stray: StraySpec, log: (String) -> Unit): String? {
+        val settle = SubmitGuard.Settle(text)
+        val deadline = System.currentTimeMillis() + SubmitGuard.SETTLE_TIMEOUT_MS
+        val probe = SubmitGuard.probeJs(box, send, stray)
+        var polls = 0
+        while (true) {
+            val o = try { evalString(probe)?.let { Json.parseToJsonElement(it).jsonObject } } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; null }
+            polls++
+            if (o?.get("save")?.jsonPrimitive?.booleanOrNull == true) return "a 'Save post?' sheet is open before the submit"
+            val t = o?.get("t")?.jsonPrimitive?.contentOrNull
+            val en = o?.get("en")?.jsonPrimitive?.booleanOrNull == true
+            if (o != null && settle.feed(t, en, System.currentTimeMillis())) { log("pre-submit: text matches and is stable, button enabled ($polls probes)"); return null }
+            if (System.currentTimeMillis() >= deadline) return "not submitted: ${settle.lastWhy}"
+            delay(FastScrape.POLL_MS)
+        }
+    }
+
+    /**
+     * One trusted click on the submit button. If the TBP click reports a failure, first check whether it went through
+     * anyway (composer gone/emptied) before a single JS click — never two submits.
+     */
+    private suspend fun submitOnce(after: ComposerPick.Found, spec: ReplyComposerSpec, log: (String) -> Unit): Boolean {
+        val clicked = try { withTimeoutOrNull(15_000) { bridge.click(after.send) } } catch (e: java.io.IOException) { null }
+        if (clicked?.ok == true) { log("submit: clicked once"); return true }
+        waitIdle(15)
+        val st = runCatching { evalString(SubmitGuard.probeJs(after.box, after.send, spec.stray))?.let { Json.parseToJsonElement(it).jsonObject } }.getOrNull()
+        val t = st?.get("t")?.jsonPrimitive?.contentOrNull
+        if (st != null && (st["send"]?.jsonPrimitive?.booleanOrNull == false || SubmitGuard.isEmpty(t))) {
+            log("submit: the click went through (composer ${if (SubmitGuard.isEmpty(t)) "emptied" else "closed"})"); return true
+        }
+        if (jsFocusOrClick(after.send) == null) return false
+        log("submit: JS click (TBP click failed)")
+        return true
     }
 
     private suspend fun openComposer(spec: ReplyComposerSpec, postUrl: String, id: String, viaIntent: Boolean, log: (String) -> Unit): ComposerPick {
         if (viaIntent) {
             val u = config.url("replyIntent", mapOf("id" to id))
             cleanStray(spec, log)
-            log("path: intent URL; open " + navigateTo(u, 30_000))
-            if (!waitFor(spec.textarea, 20_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
+            // The intent URL redirects (compose), so history never shows it: short confirmation, then wait for the box.
+            val n = runCatching { navigateTo(u, 10_000) }.onFailure { if (it is SessionExpiredException) throw it }
+            log("path: intent URL; open " + (n.getOrNull() ?: "unconfirmed (${n.exceptionOrNull()?.message?.take(80)})"))
+            if (!waitFor(spec.textarea, 15_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
             return locateComposer(spec)
         }
         if (!ensureCleanPost(spec, postUrl, log)) {
@@ -833,8 +915,13 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         locateComposer(spec).let { if (it is ComposerPick.Wrong) return it }
         // Primary path: the target post's own speech-bubble reply button → composer dialog with the box focused.
         val target = findTarget(spec, id)
-        if (target?.replyButton == null) {
-            log(if (target == null) "path: no target post found → inline box" else "path: target post has no reply button → inline box")
+        if (target?.replyButton == null || target.how != "status id") {
+            // Only the article whose own permalink is the id gets the bubble click (a focal fallback could be another post).
+            log(when {
+                target == null -> "path: no target post found → inline box"
+                target.how != "status id" -> "path: post ${id} not identified by its permalink (only ${target.how}) → inline box"
+                else -> "path: target post has no reply button → inline box"
+            })
         } else {
             log("target post by ${target.how}")
             if (clickBubble(target.replyButton, log) && waitFor("${spec.dialog} ${spec.textarea}", spec.bubbleWaitMs)) {
@@ -981,25 +1068,41 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         runCatching { evalString("""(()=>{const e=document.querySelector(${js(css)});const t=e&&(e.querySelector('[contenteditable="true"]')||e);if(!t)return '';t.focus();document.execCommand('selectAll');document.execCommand('delete');return 'cleared'})()""") }
     }
 
-    /** (how, toast link URL) once the toast shows or our composer is gone/emptied; null on timeout or an error toast. */
-    private suspend fun confirmReply(spec: ReplyComposerSpec, pick: ComposerPick.Found, text: String, log: (String) -> Unit): Pair<String, String?>? {
+    private sealed interface Confirm {
+        data class Ok(val how: String, val link: String?) : Confirm
+        data object SaveSheet : Confirm
+        data object Timeout : Confirm
+    }
+
+    /**
+     * After the submit click: toast (its View link), or our composer closed / EMPTIED — but a "Save post?" sheet means
+     * the reply was not sent (v1.0.5 counted a truncated box, e.g. "testing...", as "cleared").
+     */
+    private suspend fun confirmReply(spec: ReplyComposerSpec, pick: ComposerPick.Found, text: String, log: (String) -> Unit): Confirm {
         val probe = """(()=>{const t=document.querySelector(${js(spec.toast)});const b=document.querySelector(${js(pick.box)});
             const a=t&&t.querySelector('a[href*="/status/"]');
-            return JSON.stringify({toast:t?(t.innerText||''):null,link:a?a.href:null,box:b?(b.innerText||''):null})})()""".trimIndent()
+            return JSON.stringify({toast:t?(t.innerText||''):null,link:a?a.href:null,box:b?(b.innerText||''):null,save:${SubmitGuard.saveSheetExpr(spec.stray)}})})()""".trimIndent()
         val err = spec.errorToast?.let { Regex(it, RegexOption.IGNORE_CASE) }
-        val deadline = System.currentTimeMillis() + 25_000
-        val needle = text.take(40)
+        val deadline = System.currentTimeMillis() + 20_000
+        var closedSince: Long? = null
         while (System.currentTimeMillis() < deadline) {
             val o = runCatching { evalString(probe)?.let { Json.parseToJsonElement(it).jsonObject } }.getOrNull()
+            if (o?.get("save")?.jsonPrimitive?.booleanOrNull == true) return Confirm.SaveSheet
             val toast = o?.get("toast")?.jsonPrimitive?.contentOrNull
             if (toast != null && err?.containsMatchIn(toast) == true) { log("error toast: $toast"); throw replyFailure("X refused the reply: $toast", listOf()) }
-            if (toast != null) { log("toast: ${toast.take(80)}"); return "toast" to o["link"]?.jsonPrimitive?.contentOrNull }
+            if (toast != null) { log("toast: ${toast.take(80)}"); return Confirm.Ok("toast", o["link"]?.jsonPrimitive?.contentOrNull) }
             val box = o?.get("box")
-            if (o != null && (box == null || box is JsonNull)) return "composer closed" to null
-            if (o != null && !DomFinder.containsText(box?.jsonPrimitive?.contentOrNull, needle)) return "composer cleared" to null
-            delay(POLL_MS)
+            val gone = o != null && (box == null || box is JsonNull)
+            val emptied = o != null && !gone && SubmitGuard.isEmpty(box?.jsonPrimitive?.contentOrNull)
+            if (gone || emptied) {
+                // A closing dialog can still turn into the Save sheet: accept after it stays so for ~1 s.
+                val now = System.currentTimeMillis()
+                val since = closedSince ?: now.also { closedSince = it }
+                if (now - since >= 1_000) return Confirm.Ok(if (gone) "composer closed" else "composer emptied", null)
+            } else closedSince = null
+            delay(FastScrape.POLL_MS * 2)
         }
-        return null
+        return Confirm.Timeout
     }
 
     /** The new reply by the logged-in account in the conversation (reloads the post once if needed). */
@@ -1007,7 +1110,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         if (config.replies == null) return null
         val needle = text.trim().replace(Regex("\\s+"), " ").take(40)
         repeat(2) { round ->
-            if (round == 1) runCatching { navigateTo(postUrl, 30_000) }
+            if (round == 1) runCatching { navigateTo(postUrl, if (StatusUrl.canonical(postUrl)?.user == "i") 8_000 else 20_000) }
             delay(1_500)
             val r = runCatching { scrapeReplies(postUrl, 40, maxScrolls = 2, navigate = false) }.getOrNull() ?: return@repeat
             r.replies.firstOrNull { it["is_self"]?.jsonPrimitive?.booleanOrNull == true &&
@@ -1031,8 +1134,19 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 cleanStray(spec)
             }
         }
-        runSteps(config.postSteps, mapOf("text" to text))
+        submitClicked = false
+        val done = withTimeoutOrNull(POST_BUDGET_MS) { runSteps(config.postSteps, mapOf("text" to text)); true }
+        if (done == null) throw AutomationException("x_post timed out after ${POST_BUDGET_MS / 1000} s" +
+            if (submitClicked) " after the Post click: check the profile before posting again (no blind retry)" else "; nothing was posted")
     }
+
+    /** X's "Save post?" sheet is open (the post/reply was NOT sent). */
+    private suspend fun saveSheetOpen(): Boolean = config.reply?.stray?.let { st ->
+        runCatching { evalString("String(" + SubmitGuard.saveSheetExpr(st) + ")") == "true" }.getOrDefault(false)
+    } ?: false
+
+    /** Set when a post script clicked its submit button (composeSubmit): a timeout after that may still have posted. */
+    @Volatile private var submitClicked = false
 
     /**
      * Credential login through the site's login step script; credentials are never stored.
@@ -1160,6 +1274,12 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 return t.replace(/\n{3,}/g,'\n\n').trim()})()""".trimIndent()
         }
         private const val POLL_MS = 600L
+        /** Whole-x_reply budget (loop protection). */
+        const val REPLY_BUDGET_MS = 60_000L
+        /** Whole-x_post budget (loop protection). */
+        const val POST_BUDGET_MS = 60_000L
+        const val SAVE_SHEET_POST = "X showed 'Save post?' after the Post click: the post was NOT sent (the text stayed in the composer). " +
+            "Do not retry with web_click/web_type; report it."
         /** Extra step budget for click / typeEditor fallbacks (idle wait + JS focus + insertText). */
         private const val FALLBACK_BUDGET_MS = 75_000L
         private const val OLD_BRIDGE_IDLE_MS = 3_000L

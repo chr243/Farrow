@@ -66,6 +66,9 @@ class XAutomationTest {
                 "eval" -> {
                     val e = args["expression"]!!.jsonPrimitive.content
                     when {
+                        // v1.0.6 pre-submit settle probe: editor text + submit enabled + no "Save post?" sheet.
+                        e.contains("JSON.stringify({t:ed") -> reply(true, buildJsonObject {
+                            put("result", buildJsonObject { put("t", editor); put("en", true); put("send", true); put("save", false) }.toString()) })
                         e.contains("B.first(") -> reply(true, buildJsonObject { put("result", if (posted) "0" else "1") })
                         e.contains("B.exists(") -> {
                             val n = composeChecks.incrementAndGet()
