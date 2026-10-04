@@ -17,8 +17,8 @@ android {
         applicationId = "com.farrow.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 37
-        versionName = "1.0.11"
+        versionCode = 38
+        versionName = "1.0.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }

@@ -524,7 +524,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - Kept around x_post, without touching focus, typing or submit: the stray-dialog cleanup before the steps start, and the Grok shield + image filter after navigation.
 - Regression test `XPostV100Test`: x_post's steps equal v1.0.0's, and the bridge calls of a post run (`nav`, `click`, `editor_type`, `click`) match v1.0.0's sequence and arguments.
 
-## v1.0.12 (unreleased, work in progress)
+## v1.0.12
 - Chat bubbles render GFM tables (`MarkdownTables` parser + `MarkdownTableView`): header row, zebra rows, inline
   markdown in cells, horizontal scroll, theme colors.
 - New `chart` tool (`ChartTool`, `ChartSpecs`, `ChartMath`): bar/line/pie/scatter/table from
