@@ -131,6 +131,8 @@ object AppModule {
         ) +
             // Phase 5: X.com (x_status, x_post, x_scrape)
             SocialToolFactory("x", SelectorStore.X, selectors, bridge, sessionGuard).tools(postMaxChars = 280) +
+            // v1.0.15: x_post_beta (off by default, Tools page "Beta: faster X posting"), separate from x_post
+            listOf(com.farrow.app.agent.tools.XPostBetaTool(selectors, bridge, sessionGuard)) +
             // Phase 9: Facebook (fb_status, fb_post, fb_scrape) — same engine, lower priority/minimal
             SocialToolFactory("fb", SelectorStore.FACEBOOK, selectors, bridge, sessionGuard).tools(postMaxChars = 5_000) +
             // Phase 6: Shizuku shell, JGit, Accessibility

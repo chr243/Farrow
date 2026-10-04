@@ -8,22 +8,39 @@ import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Persisted on/off per agent tool (Settings > Tools). Only the disabled names are stored, so new tools default to on. */
+/**
+ * Persisted on/off per agent tool (Settings > Tools). Only the disabled names are stored, so new tools default to on —
+ * except [DEFAULT_OFF] tools (betas), which are off until the user turns them on (stored as opt-ins).
+ * [disabled] is the effective set (stored disabled + default-off tools not opted in).
+ */
 @Singleton
 class ToolPrefs @Inject constructor(@ApplicationContext context: Context) : ToolSwitches {
     private val prefs = context.getSharedPreferences("tool_prefs", Context.MODE_PRIVATE)
-    private val _disabled = MutableStateFlow(prefs.getStringSet(KEY_DISABLED, emptySet()).orEmpty().toSet())
+    private var stored = prefs.getStringSet(KEY_DISABLED, emptySet()).orEmpty().toSet()
+    private var optIn = prefs.getStringSet(KEY_OPT_IN, emptySet()).orEmpty().toSet()
+    private val _disabled = MutableStateFlow(effective(stored, optIn))
     val disabled: StateFlow<Set<String>> = _disabled.asStateFlow()
 
     override fun isEnabled(name: String): Boolean = name !in _disabled.value
 
     fun setEnabled(name: String, enabled: Boolean) {
-        val next = if (enabled) _disabled.value - name else _disabled.value + name
-        prefs.edit().putStringSet(KEY_DISABLED, next).apply()
-        _disabled.value = next
+        if (name in DEFAULT_OFF) {
+            optIn = if (enabled) optIn + name else optIn - name
+            prefs.edit().putStringSet(KEY_OPT_IN, optIn).apply()
+        } else {
+            stored = if (enabled) stored - name else stored + name
+            prefs.edit().putStringSet(KEY_DISABLED, stored).apply()
+        }
+        _disabled.value = effective(stored, optIn)
     }
 
-    private companion object { const val KEY_DISABLED = "disabled" }
+    companion object {
+        private const val KEY_DISABLED = "disabled"
+        private const val KEY_OPT_IN = "opt_in"
+        /** Tools that start switched off (v1.0.15: x_post_beta). */
+        val DEFAULT_OFF: Set<String> = setOf("x_post_beta")
+        fun effective(disabled: Set<String>, optIn: Set<String>): Set<String> = (disabled - DEFAULT_OFF) + (DEFAULT_OFF - optIn)
+    }
 }
 
 /** What [com.farrow.app.agent.tools.ToolRegistry] needs (testable without Android). */

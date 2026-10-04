@@ -578,3 +578,39 @@ x_post clicks taking 30 s+ and a wedged browser (the next x_post's navigation st
 - **Bounded cleanup and shield:** the stray-overlay `location.replace(home)` is capped at 10 s, then the app waits for
   idle. Shield evals are capped at 10 s.
 - Bridge 1.15.0.
+
+## x_post_beta (unreleased, after v1.0.14)
+
+`x_post_beta` is a separate tool and is off by default. On the Tools page its label is "Beta: faster X posting". Its
+code lives in `XPostBeta.kt`, `XPostBetaShield.kt` and `agent/tools/XPostBetaTool.kt`. x_post is unchanged: no x_post
+file, x.json or XPostV100Test hash was touched. The shield/media JS and the URL check are copies; a test checks that
+the copies still match the originals. ToolPrefs gained `DEFAULT_OFF`, stored as opt-ins. The system prompt says to use
+x_post unless the user turned the beta on or asks for it.
+
+Why x_post took 152 s on the phone (and 260 s on the first attempt). Every bridge eval costs about 3–4 s: CLI start,
+DevTools console focus, clipboard paste, then clipboard polling.
+- stray_cleanup (45 s): the snapshot counts every `#layers` child that has a button as an overlay, not only real
+  dialogs. Each round is a snapshot eval, then a TBP click or Escape, then up to 1.5 s of settle snapshots. That repeats
+  up to 6 rounds. When an overlay can't be closed, it hard-navigates home, waits idle, polls for 3 s and runs a second
+  cleanup. The cleanup log was discarded, so this never showed.
+- click (14 s; 68 s on v1.0.13): an exists eval, the bridge's element-centre eval, 28 xdotool moves, the TBP click
+  eval and a refocus. On v1.0.13 there was also a 30 s timeout and an idle wait before the JS fallback, which is the
+  one that worked.
+- typeEditor (36 s): an exists eval, a focus eval, and about 20 s of human-paced xdotool keystrokes that never reach
+  Draft.js on the phone. Then 3 more evals: verify, insertText, verify. That is why the result always said
+  "via insertText".
+
+The beta does one eval per phase. TBP is only a fallback, used when the JS action had no visible effect.
+
+| phase | what | evals |
+|---|---|---|
+| ready | `ready` | 1 |
+| stray_check | shield on, URL/login check and real dialogs only. A dialog found is acted on in the same eval: Discard, never Save; else Close; else the mask; else Escape. Stops at the first clean probe; after 3 tries it goes on. | 1 when clean, +1 per dialog |
+| goto_compose | keyboard `nav` (no shield eval after it) | 0 |
+| focus_composeText | find the editor (the dialog's one first), mark it, focus it, verify `activeElement`. If focus didn't land: TBP click, then one verify eval. | 1 |
+| insert_text | selectAll + insertText + verify in one eval. If 'pending': one re-check. If it failed: a paste event. | 1 |
+| click_composeSubmit | JS click on the Post button in our editor's dialog. Waits ≤ 5 s if it is disabled; then TBP click, then ctrl+Return. | 1 |
+| waitPosted | per poll: toast / no visible box holds the text / sending / open. The shield is switched off in the same eval. If it stays 'open' with an enabled button for 6 s: one TBP click. | 1–2 |
+
+If the post fails before any text was inserted, the browser is restarted once and the post retried. There is never a
+retry after the insert.

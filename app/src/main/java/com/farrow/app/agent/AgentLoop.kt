@@ -381,7 +381,8 @@ class AgentLoop internal constructor(
               reading pages, clicking/typing on websites, posting on X).
               X rules (strict): new posts ALWAYS with x_post. NEVER use web_click / web_type on X composers or the Post
               button: they are refused. Reading a post's thread: x_scrape kind=replies. If x_post fails, report its error
-              and steps to the user instead of improvising clicks.
+              and steps to the user instead of improvising clicks. x_post_beta (a faster beta of x_post, off by default):
+              use x_post unless the user turned x_post_beta on in Tools or asks for the beta; then post with x_post_beta.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display; they cannot see or click the internal browser.
               Never ask the user for accessibility permission for a web task.
