@@ -66,6 +66,7 @@ class XAutomationTest {
                 "eval" -> {
                     val e = args["expression"]!!.jsonPrimitive.content
                     when {
+                        e.contains("return B.postDone(") -> reply(true, buildJsonObject { put("result", if (posted) "toast" else "open") })
                         e.contains("B.first(") -> reply(true, buildJsonObject { put("result", if (posted) "0" else "1") })
                         e.contains("B.exists(") -> {
                             val n = composeChecks.incrementAndGet()

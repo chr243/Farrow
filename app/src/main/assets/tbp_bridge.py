@@ -42,7 +42,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 HOME = os.path.expanduser("~")
 STATE_DIR = os.path.join(HOME, ".farrow")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
@@ -815,7 +815,7 @@ def open_console(main_wid, wait_s=8):
             xdotool("windowactivate", "--sync", dt)
             time.sleep(0.3)
             return dt
-        time.sleep(0.4)
+        time.sleep(0.2)  # 1.14.0: poll for the DevTools window every 0.2 s (was 0.4 s)
     return None
 
 
@@ -1137,6 +1137,9 @@ def url_matches(url, target):
     return not tp or (u.path or "/").rstrip("/").startswith(tp)
 
 
+NAV_POLL_S = 0.2
+
+
 def cmd_nav(a):
     """Keyboard navigation (no JS), returns as soon as the history shows the target URL (or after `timeout` s).
     Not waiting for 'load' — SPAs like X keep connections open. Falls back to `tbp goto` without xdotool."""
@@ -1152,11 +1155,11 @@ def cmd_nav(a):
     if bad:
         return {"ok": False, "code": 3, "stdout": "", "stderr": "TBP daemon not running: %s" % bad.get("error"), "data": None}
     wid = None
-    for _ in range(10):
+    for _ in range(20):
         wid, _t = main_window()
         if wid:
             break
-        time.sleep(0.5)
+        time.sleep(0.25)
     if not wid:
         return {"ok": False, "code": 1, "stdout": "", "stderr": "no Firefox window on %s" % DISPLAY, "data": None}
     before = last_visited_url()
@@ -1165,7 +1168,7 @@ def cmd_nav(a):
     steps.append("typed URL + Enter (%.1f s)" % (time.time() - t0))
     url, title = before, ""
     while time.time() - t0 < timeout:
-        time.sleep(0.7)
+        time.sleep(NAV_POLL_S)  # 1.14.0: was 0.7 s
         url = last_visited_url()
         _w, title = main_window()
         if url_matches(url, target) and (url != before or url_matches(before, target)):
@@ -1710,6 +1713,7 @@ def dispatch(cmd, args):
     if fn is None:
         return {"ok": False, "code": 2, "stdout": "", "stderr": "unknown cmd: %s" % cmd, "data": None}
     tracked = cmd not in NO_DAEMON_CMDS
+    t_start = time.time()
     if tracked:
         with inflight_cv:
             inflight["n"] += 1; inflight["cmds"].append(cmd)
@@ -1724,6 +1728,8 @@ def dispatch(cmd, args):
                 if cmd in inflight["cmds"]:
                     inflight["cmds"].remove(cmd)
                 inflight_cv.notify_all()
+    if isinstance(res, dict):
+        res["ms"] = int((time.time() - t_start) * 1000)  # 1.14.0: bridge-side duration (x_post timings_ms)
     broadcast({"event": "cmd", "cmd": cmd, "ok": res.get("ok", False)})
     return res
 

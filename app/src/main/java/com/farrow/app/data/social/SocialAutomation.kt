@@ -338,13 +338,16 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     ) {
         fun fill(t: String?): String = (t ?: "").let { var r = it; vars.forEach { (k, v) -> r = r.replace("{$k}", v) }; r }
         val stepLog = mutableListOf<String>()
+        val timings = LinkedHashMap<String, Long>().also { lastStepTimings = it }
         for ((i, s) in steps.withIndex()) {
             val name = "Step ${i + 1}/${steps.size} (${describe(s)})"
             onStep(i + 1, steps.size, describe(s))
             val t0 = System.currentTimeMillis()
             stepNote = null; lastPollError = null
             fun fail(why: String): Nothing {
-                stepLog += "${i + 1}. ${describe(s)}: FAILED after ${(System.currentTimeMillis() - t0) / 1000.0} s" +
+                val ms = System.currentTimeMillis() - t0
+                timings[stepKey(i, s)] = ms
+                stepLog += "${i + 1}. ${describe(s)}: FAILED after $ms ms" +
                     (lastPollError?.let { " (last eval error: ${it.take(160)})" } ?: "")
                 throw StepFailedException(i + 1, steps.size, describe(s),
                     "$name $why${selectorDetail(s)}" + (s.hint?.let { ". $it" } ?: "") + "\nStep log:\n" + stepLog.joinToString("\n"))
@@ -370,11 +373,20 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 is StepOutcome.Failed -> if (!s.optional) fail(outcome.why)
                 StepOutcome.Ok, StepOutcome.Skipped -> Unit
             }
-            stepLog += "${i + 1}. ${describe(s)}: ${if (outcome == StepOutcome.Skipped) "skipped" else "ok"} " +
-                "${(System.currentTimeMillis() - t0) / 1000.0} s" + (stepNote?.let { " ($it)" } ?: "")
+            val ms = System.currentTimeMillis() - t0
+            timings[stepKey(i, s)] = ms
+            stepLog += "${i + 1}. ${describe(s)}: ${if (outcome == StepOutcome.Skipped) "skipped" else "ok"} $ms ms" +
+                (stepNote?.let { " ($it)" } ?: "")
         }
         lastStepLog = stepLog.toList()
     }
+
+    /** `timings_ms` key of a step: "3_click_composeText". */
+    private fun stepKey(i: Int, s: AutomationStep) = "${i + 1}_${s.action}" + (s.selector ?: s.url)?.let { "_$it" }.orEmpty()
+
+    /** Per-step durations (ms) of the last [runSteps] (also on failure), in step order. */
+    @Volatile var lastStepTimings: Map<String, Long> = emptyMap()
+        private set
 
     @Volatile private var stepNote: String? = null
     /** Per-step log of the last successful [runSteps] (for tool results). */
@@ -392,7 +404,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             "goto" -> {
                 stepNote = navigateTo(config.url(s.url ?: "home", urlParams), maxOf(s.timeoutMs - 5_000, 10_000))
             }
-            "waitPosted" -> if (s.text != null) {
+            "waitPosted" -> if (s.text != null && s.selector == null) {
                 // Posted = the compose dialog closed, or the text shows in a feed item outside the dialog.
                 val box = config.sel(s.selectors.firstOrNull() ?: "composeText")
                 val item = config.scrape?.item ?: "[role=\"article\"]"
@@ -405,12 +417,19 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                     delay(POLL_MS)
                 }
             } else {
-                // Posted = the success toast shows, or the compose box closed (one eval per poll: index 0 toast, 1 box).
-                val keys = listOfNotNull(s.selector ?: "postSuccess", s.selectors.firstOrNull() ?: "composeText")
+                // Posted = the success toast shows, the compose box closed, or (v1.0.13, with text) no visible compose box
+                // still holds the text — X's home page keeps an empty inline composer with the same test id, so "box
+                // closed" alone could miss a sent post and wait out the whole timeout. One eval per poll.
+                val toast = config.sel(s.selector ?: "postSuccess")
+                val box = config.sel(s.selectors.firstOrNull() ?: "composeText")
+                val expr = DomFinder.postDone(toast, box, s.text?.let(fill))
                 val deadline = System.currentTimeMillis() + s.timeoutMs
                 while (true) {
-                    val i = try { firstPresent(keys) } catch (e: AutomationException) { lastPollError = e.message; 1 }
-                    if (i != 1) { stepNote = if (i == 0) "success toast" else "compose box closed"; return StepOutcome.Ok }
+                    val st = try { mark(expr) } catch (e: AutomationException) { lastPollError = e.message; "open" }
+                    if (st != "open") {
+                        stepNote = when (st) { "toast" -> "success toast"; "cleared" -> "compose box emptied"; else -> "compose box closed" }
+                        return StepOutcome.Ok
+                    }
                     if (System.currentTimeMillis() >= deadline) return StepOutcome.Failed("no success toast and the compose box is still open after ${s.timeoutMs / 1000} s")
                     delay(POLL_MS)
                 }
@@ -802,7 +821,13 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 }
             }
             log("stray dialog '${top.summary}'${if (top.isSaveSheet) " (Save/Discard sheet)" else ""}: $what")
-            delay(700)
+            // v1.0.13: was a fixed 700 ms; now polls until that overlay is gone or changed (≤ 1.5 s, closing animations).
+            val until = System.currentTimeMillis() + STRAY_SETTLE_MAX_MS
+            while (System.currentTimeMillis() < until) {
+                delay(POLL_MS)
+                val s2 = runCatching { evalString(StrayDialogs.snapshotJs(st))?.let { Json.parseToJsonElement(it).jsonObject } }.getOrNull() ?: break
+                if (StrayDialogs.analyze(s2["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), st, ours).lastOrNull()?.signature != top.signature) break
+            }
         }
         if (left.isNotEmpty()) log("still open after cleanup: ${left.joinToString { it.summary }}")
         return left
@@ -815,16 +840,34 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * leftover-dialog cleanup BEFORE the flow starts, and the Grok shield + image filter installed after navigation.
      */
     suspend fun post(text: String) {
+        val t0 = System.currentTimeMillis()
+        val pre = LinkedHashMap<String, Long>()
+        lastPostTimings = pre
         config.stray?.let { st ->
             // A stuck overlay → hard navigation home, then one more cleanup round; all before the post flow starts.
             if (cleanStray(st).isNotEmpty()) {
                 runCatching { bridge.eval("location.replace(${js(config.url("home"))})") }
-                delay(2_000)
+                // v1.0.13: was a fixed 2 s; now polls until the home page is loading/loaded (≤ 3 s).
+                val until = System.currentTimeMillis() + 3_000
+                while (System.currentTimeMillis() < until) {
+                    delay(POLL_MS)
+                    val href = runCatching { evalString("location.href+'|'+document.readyState") }.getOrNull().orEmpty()
+                    if (NavCheck.sameTarget(href.substringBefore('|'), config.url("home")) && !href.endsWith("|loading")) break
+                }
                 cleanStray(st)
             }
         }
-        shielded { runSteps(config.postSteps, mapOf("text" to text)) }
+        pre["stray_cleanup"] = System.currentTimeMillis() - t0
+        try {
+            shielded { runSteps(config.postSteps, mapOf("text" to text)) }
+        } finally {
+            lastPostTimings = LinkedHashMap(pre).apply { putAll(lastStepTimings); put("total", System.currentTimeMillis() - t0) }
+        }
     }
+
+    /** x_post `timings_ms`: stray_cleanup, one entry per step (see [lastStepTimings]) and total. */
+    @Volatile var lastPostTimings: Map<String, Long> = emptyMap()
+        private set
 
     /**
      * Credential login through the site's login step script; credentials are never stored.
@@ -951,7 +994,9 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 if(x)r.querySelectorAll(x).forEach(e=>{const s=(e.innerText||'').trim();if(s)t=t.split(s).join('')});
                 return t.replace(/\n{3,}/g,'\n\n').trim()})()""".trimIndent()
         }
-        private const val POLL_MS = 600L
+        /** v1.0.13: was 600 ms. Each poll is one eval (the eval itself takes most of the time on a phone). */
+        private const val POLL_MS = 200L
+        private const val STRAY_SETTLE_MAX_MS = 1_500L
         /** Extra step budget for click / typeEditor fallbacks (idle wait + JS focus + insertText). */
         private const val FALLBACK_BUDGET_MS = 75_000L
         private const val OLD_BRIDGE_IDLE_MS = 3_000L

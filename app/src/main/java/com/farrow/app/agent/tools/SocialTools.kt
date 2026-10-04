@@ -76,6 +76,7 @@ class SocialToolFactory(
             return guarded(ctx) { a ->
                 a.post(text)
                 buildJsonObject { put("ok", true); put("site", site); put("posted_chars", text.length)
+                    put("timings_ms", buildJsonObject { a.lastReadyMs?.let { put("ready", it) }; a.lastPostTimings.forEach { (k, v) -> put(k, v) } })
                     put("steps", JsonArray(a.lastStepLog.map { JsonPrimitive(it) })) }.toString()
             }
         }

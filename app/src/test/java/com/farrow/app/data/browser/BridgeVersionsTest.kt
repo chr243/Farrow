@@ -20,7 +20,7 @@ class BridgeVersionsTest {
         assertEquals("1.8.0", BridgeVersions.parse("import os\nVERSION = \"1.8.0\"\n"))
         assertNull(BridgeVersions.parse("no version"))
         val asset = listOf("src/main/assets/tbp_bridge.py", "app/src/main/assets/tbp_bridge.py").map(::File).first { it.exists() }
-        assertEquals("1.13.0", BridgeVersions.parse(asset.readText()))
+        assertEquals("1.14.0", BridgeVersions.parse(asset.readText()))
         assertTrue(BridgeVersions.isOutdated("1.9.0", "1.10.0"))
     }
 }

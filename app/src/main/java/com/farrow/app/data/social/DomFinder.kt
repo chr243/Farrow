@@ -44,6 +44,9 @@ B.posted=(box,item,text)=>{const n=t=>String(t||'').replace(/\u200b/g,'').replac
  for(const [e] of B.all(box)){if(B.vis(e))return 'open'}
  if(T){for(const [e] of B.all(item)){if(!e.closest('[role="dialog"]')&&n(B.txt(e)).includes(T))return 'feed'}}
  return 'closed'};
+B.postDone=(toast,box,text)=>{if(B.exists(toast))return 'toast';const n=t=>String(t||'').replace(/\u200b/g,'').replace(/\s+/g,' ').trim();
+ const T=n(text).slice(0,40);const boxes=B.all(box).filter(([e])=>B.vis(e));if(!boxes.length)return 'closed';
+ if(T&&!boxes.some(([e])=>n(e.innerText||e.textContent).includes(T)))return 'cleared';return 'open'};
 B.okInput=e=>B.vis(e)&&!e.disabled&&!e.readOnly&&e.type!=='hidden';
 B.findInput=(re,sel,fallback)=>{if(re){const R=new RegExp(re,'i');
   for(const [e,top] of B.all('input,textarea')){if(B.okInput(e)&&B.labelOf(e).some(t=>R.test(t)))return B.mark(e,top)}}
@@ -67,6 +70,8 @@ B.setMarked=v=>{const e=B.marked();if(!e)return 'no';const w=e.ownerDocument.def
     fun findInput(labelRegex: String?, css: String?, dialogFallback: Boolean) = call("B.findInput(${js(labelRegex)},${js(css)},$dialogFallback)")
     fun clickMarked() = call("B.clickMarked()")
     /** "open" (compose box still visible) | "feed" (an article outside the dialog shows the text) | "closed". */
+    /** x_post (v1.0.13): "toast" | "closed" (no visible compose box) | "cleared" (no visible box holds [text]) | "open". */
+    fun postDone(toastCss: String, boxCss: String, text: String?) = call("B.postDone(${js(toastCss)},${js(boxCss)},${js(text)})")
     fun postedState(boxCss: String, itemCss: String, text: String) = call("B.posted(${js(boxCss)},${js(itemCss)},${js(text)})")
     fun setMarked(value: String) = call("B.setMarked(${js(value)})")
 

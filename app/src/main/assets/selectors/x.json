@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -164,7 +164,7 @@
     },
     {
       "action": "sleep",
-      "ms": 800
+      "ms": 150
     },
     {
       "action": "click",
@@ -178,6 +178,7 @@
       "selectors": [
         "composeText"
       ],
+      "text": "{text}",
       "timeoutMs": 25000
     }
   ],

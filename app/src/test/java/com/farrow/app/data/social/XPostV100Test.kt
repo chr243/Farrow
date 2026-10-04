@@ -15,6 +15,10 @@ import java.security.MessageDigest
  * v1.0.11 regression guard: x_post must stay EXACTLY v1.0.0's flow (tag v1.0.0, the last version that typed on the
  * phone). v1.0.9/v1.0.10 added a `target` step, marker selectors, a settle step and bridge 1.12.0's probe/paste
  * `editor_type`, and x_post stopped typing. If one of these assertions fails, compare with `git diff v1.0.0 HEAD`.
+ *
+ * v1.0.13 (faster x_post): only the WAITING changed — the settle sleep is 150 ms (was 800), waitPosted also returns as
+ * soon as the compose box no longer holds the text, polls are 200 ms. Focus, typing and clicks (commands, selectors,
+ * order, the bridge's focus/type/click/key code and the app's click/typeEditor code) are still v1.0.0's, checked below.
  */
 class XPostV100Test {
     private val server = MiniHttpServer()
@@ -27,10 +31,22 @@ class XPostV100Test {
     /** selectors/x.json `postSteps` at tag v1.0.0. */
     private val V100_POST_STEPS = """[{"action": "goto", "url": "compose", "timeoutMs": 45000}, {"action": "waitFor", "selector": "composeText", "timeoutMs": 45000, "hint": "The compose box did not appear; X may be slow or showing a dialog."}, {"action": "click", "selector": "composeText", "timeoutMs": 45000}, {"action": "typeEditor", "selector": "composeText", "text": "{text}", "timeoutMs": 45000}, {"action": "sleep", "ms": 800}, {"action": "click", "selector": "composeSubmit", "timeoutMs": 45000, "fallbackKey": "ctrl+Return"}, {"action": "waitPosted", "selector": "postSuccess", "selectors": ["composeText"], "timeoutMs": 25000}]"""
 
-    @Test fun `x json post steps, selectors and compose URL are v1_0_0's`() {
+    /** v1.0.13: v1.0.0's steps with only the waits changed (sleep 800 → 150, waitPosted gets the text). */
+    private val V113_POST_STEPS = V100_POST_STEPS
+        .replace("""{"action": "sleep", "ms": 800}""", """{"action": "sleep", "ms": 150}""")
+        .replace(""""selectors": ["composeText"], "timeoutMs": 25000}""", """"selectors": ["composeText"], "text": "{text}", "timeoutMs": 25000}""")
+
+    private fun acting(steps: List<AutomationStep>) = steps.filter { it.action !in setOf("sleep", "waitFor", "waitPosted") }
+
+    @Test fun `x json post steps act like v1_0_0's, only the waits changed`() {
         val raw = json.parseToJsonElement(file("src/main/assets/selectors/x.json").readText()).jsonObject
-        assertEquals(json.parseToJsonElement(V100_POST_STEPS), raw["postSteps"])
-        assertEquals(json.decodeFromString(ListSerializerSteps, V100_POST_STEPS), x.postSteps)
+        assertNotEquals(V100_POST_STEPS, V113_POST_STEPS)
+        assertEquals(json.parseToJsonElement(V113_POST_STEPS), raw["postSteps"])
+        val v100 = json.decodeFromString(ListSerializerSteps, V100_POST_STEPS)
+        assertEquals(v100.map { it.action }, x.postSteps.map { it.action })
+        // goto / click / typeEditor / click: identical to v1.0.0 (url, selectors, timeouts, fallback key)
+        assertEquals(acting(v100), acting(x.postSteps))
+        assertEquals(v100.first { it.action == "waitFor" }, x.postSteps.first { it.action == "waitFor" })
         assertEquals("[data-testid=\"tweetTextarea_0\"]", x.selectors["composeText"])
         assertEquals("[data-testid=\"tweetButton\"], [data-testid=\"tweetButtonInline\"]", x.selectors["composeSubmit"])
         assertEquals("[data-testid=\"toast\"]", x.selectors["postSuccess"])
@@ -61,12 +77,20 @@ class XPostV100Test {
         assertFalse(py.contains("clipboard_paste") || py.contains("PREP_JS") || py.contains("data-farrow-typing"))
     }
 
-    @Test fun `SocialAutomation step engine (runSteps, click, typeEditor, waitPosted) is v1_0_0's`() {
+    /**
+     * The acting code is v1.0.0's byte for byte (hashes = the same blocks at tag v1.0.0): runOne's click/clickText/
+     * type/typeEditor branches and sturdyClick → waitIdle → jsFocusOrClick → pressKey → typeIntoEditor. (v1.0.13 changed
+     * runSteps' timing/log and the waitPosted/stray waits, so the whole-engine hash is gone.)
+     */
+    @Test fun `SocialAutomation click and typing code is v1_0_0's`() {
         val kt = file("src/main/java/com/farrow/app/data/social/SocialAutomation.kt").readText()
-        val a = kt.indexOf("    private fun escapeRegex")
+        val a = kt.indexOf("    private suspend fun sturdyClick(")
         val b = kt.indexOf("    /** URL, a page-text snippet", a)
-        assertTrue(a >= 0 && b > a)
-        assertEquals("SocialAutomation step engine differs from v1.0.0", "5a617d47ab1a23ff2b0940180bd801769310f8d38af134a73c28a714c4de1721", sha(kt.substring(a, b)))
+        val c = kt.indexOf("            \"click\" -> {\n                val sel = s.selector ?: return StepOutcome.Skipped")
+        val d = kt.indexOf("            \"press\" -> ", c)
+        assertTrue(a >= 0 && b > a && c >= 0 && d > c)
+        assertEquals("sturdyClick..typeIntoEditor differs from v1.0.0", "a5c63b7d856df799f4d17b7cf72ca400c49941ac808b15cfd19147da98c3a76e", sha(kt.substring(a, b)))
+        assertEquals("runOne click/type branches differ from v1.0.0", "bf8d02a76ae07afc579afd9fca8c7bf412aa05a7ff805be0744ac379270b210c", sha(kt.substring(c, d)))
     }
 
     @Test fun `a post run makes v1_0_0's bridge calls in v1_0_0's order`() = runBlocking {
@@ -90,7 +114,7 @@ class XPostV100Test {
                 "eval" -> {
                     val e = args["expression"]!!.jsonPrimitive.content
                     when {
-                        e.contains("B.first(") -> result(if (posted) "0" else "1")
+                        e.contains("return B.postDone(") -> result(if (posted) "cleared" else "open")
                         e.contains("B.exists(") -> result("true")
                         else -> result("")
                     }
@@ -117,7 +141,17 @@ class XPostV100Test {
         assertFalse(calls.any { (c, args) -> args.toString().contains("data-farrow-compose") || args.toString().contains("data-farrow-submit") || c == "key" })
         val log = a.lastStepLog
         assertEquals(log.joinToString("\n"), 7, log.size)
-        assertTrue(log.joinToString("\n"), log[3].startsWith("4. typeEditor composeText: ok") && log[4].startsWith("5. sleep 800 ms: ok"))
+        assertTrue(log.joinToString("\n"), log[3].startsWith("4. typeEditor composeText: ok") && log[4].startsWith("5. sleep 150 ms: ok"))
+        assertTrue(log.joinToString("\n"), log[6].startsWith("7. waitPosted postSuccess: ok") && log[6].contains("compose box emptied"))
+        assertTrue(log.all { Regex(""": (ok|skipped) \d+ ms""").containsMatchIn(it) })
+        // v1.0.13 timings_ms: stray cleanup, one entry per step, total
+        val t = a.lastPostTimings
+        assertEquals(listOf("stray_cleanup", "1_goto_compose", "2_waitFor_composeText", "3_click_composeText", "4_typeEditor_composeText",
+            "5_sleep", "6_click_composeSubmit", "7_waitPosted_postSuccess", "total"), t.keys.toList())
+        assertTrue(t.toString(), t["5_sleep"]!! in 150L..1_000L && t["total"]!! >= t.filterKeys { it != "total" }.values.sum())
+        // No wait runs to its timeout when its condition already holds: every wait step returns within ~a poll.
+        listOf("2_waitFor_composeText", "7_waitPosted_postSuccess").forEach { k -> assertTrue("$k = ${t[k]} ms", t[k]!! < 1_500) }
+        assertTrue("total ${t["total"]} ms", t["total"]!! < 6_000)
     }
 
     private companion object {

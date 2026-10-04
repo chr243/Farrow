@@ -541,3 +541,18 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   after Restore, send a message to continue.
 - Tests: Robolectric (JVM) DAO + migration tests that build v1/v4 databases from the exported schema JSON and let
   Room migrate and validate.
+
+## v1.0.13
+- **Faster x_post (waits only):** focus, typing and clicks are unchanged from v1.0.0 (same commands, selectors and
+  order; `XPostV100Test` hashes the click/typing code and compares it with tag v1.0.0). Changes:
+  - Step polls 600 → 200 ms (each poll is one eval); bridge `nav` history poll 0.7 → 0.2 s, window/console polls 0.2–0.25 s.
+  - Settle sleep before the Post click 800 → 150 ms (`editor_type` already verified the text and the click step's
+    presence eval adds a render tick).
+  - `waitPosted` (x.json v14, `text`): done on the success toast, a closed compose box, or no visible compose box still
+    holding the text. X's home page keeps an empty inline composer with the same test id, so "box closed" alone could
+    miss a sent post when the toast was missed and run the full 25 s.
+  - Stray-dialog cleanup: fixed 700 ms per action → polls until the overlay is gone (≤ 1.5 s); hard-nav recovery
+    fixed 2 s → polls until home is loading/loaded (≤ 3 s).
+  - The step budgets (45 s, 45 s + 400 ms/char for typing) are caps (`withTimeoutOrNull`), never slept.
+  - Result `timings_ms` (ready, stray_cleanup, `<n>_<action>_<selector>` per step, total); the step log is in ms; the
+    bridge (1.14.0) adds `ms` to every command reply.
