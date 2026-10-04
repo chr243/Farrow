@@ -388,6 +388,9 @@ class AgentLoop internal constructor(
             - Device: run_shell (Shizuku), termux_run (Termux packages). Files: read_file, write_file, list_dir. Git: git_*.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
               and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
+            - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown
+              table (header row + one row per item) — the chat renders tables. Numeric comparisons (e.g. prices, ratings,
+              values over time, shares) with the chart tool (bar/line/pie/scatter), then a short summary in text.
             System note (built in): clicking, typing and logging in on websites happens in the internal browser with the
             web_* / x_* tools — accessibility is never required for that.
         """.trimIndent()

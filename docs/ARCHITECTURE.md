@@ -523,3 +523,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Bridge 1.13.0:** `editor_type` is v1.0.0's (bridge 1.9.0) again: focus by eval → xdotool typing into the main Firefox window → verify → `execCommand('insertText')` fallback. The version bump makes the app update the bridge on the phone.
 - Kept around x_post, without touching focus, typing or submit: the stray-dialog cleanup before the steps start, and the Grok shield + image filter after navigation.
 - Regression test `XPostV100Test`: x_post's steps equal v1.0.0's, and the bridge calls of a post run (`nav`, `click`, `editor_type`, `click`) match v1.0.0's sequence and arguments.
+
+## v1.0.12 (unreleased, work in progress)
+- Chat bubbles render GFM tables (`MarkdownTables` parser + `MarkdownTableView`): header row, zebra rows, inline
+  markdown in cells, horizontal scroll, theme colors.
+- New `chart` tool (`ChartTool`, `ChartSpecs`, `ChartMath`): bar/line/pie/scatter/table from
+  `{type, title, x_label, y_label, labels[], series[{name, values[]}]}`. Rendered natively in the tool card
+  (`ChartCard`, shared `ChartPainter`), tap = fullscreen with Share; PNG exported to `filesDir/charts/`
+  (FileProvider path `charts`).
+- System prompt: lists of items → Markdown tables, numeric comparisons → `chart`.

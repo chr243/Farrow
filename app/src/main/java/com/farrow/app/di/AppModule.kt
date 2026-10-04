@@ -140,6 +140,8 @@ object AppModule {
                 ScreenReadTool(), ScreenTapTool(), ScreenSwipeTool(), ScreenTypeTool(), ScreenGlobalActionTool(),
                 // v0.9.16: persistent memory
                 MemorySaveTool(memory), MemorySearchTool(memory), MemoryDeleteTool(memory),
+                // v1.0.12: native charts in the chat (+ PNG export for sharing)
+                ChartTool(File(context.filesDir, "charts"), com.farrow.app.ui.chart.AndroidChartPng()),
             ) +
             StubTool.all(),
         toolPrefs,

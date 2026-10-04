@@ -312,6 +312,10 @@ internal fun ToolCallCard(call: ToolCallRecord) {
                 Text(if (expanded) "▲" else "▼", fontSize = 12.sp)
             }
             screenshotPath(call)?.let { ScreenshotThumb(it) }
+            if (call.name == com.farrow.app.agent.tools.ChartTool.NAME && call.status == ToolCallStatus.SUCCESS) {
+                remember(call.resultJson) { com.farrow.app.agent.tools.ChartSpecs.fromResult(call.resultJson) }
+                    ?.let { (spec, png) -> com.farrow.app.ui.chart.ChartCard(spec, png) }
+            }
             AnimatedVisibility(expanded) {
                 Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     CodeBlock("arguments", pretty(call.argumentsJson), if (call.name == "run_shell") "json" else null)
