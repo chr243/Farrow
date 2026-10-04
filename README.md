@@ -2,8 +2,11 @@
 
 **An on-device AI agent for Android that actually does things:** it browses with a real Firefox (via Termux), runs shell commands through Shizuku, drives apps with Accessibility, and works with Git, all on **free OpenRouter / Kilo models** with automatic model and key fallback and rate-limit recovery. No server and no cloud backend: your keys stay encrypted on your phone.
 
-<!-- TODO(maintainer): replace with a real screenshot or GIF (chat list + a tool-using task). Suggested path: docs/images/demo.gif -->
-![Farrow screenshot placeholder](docs/images/screenshot-placeholder.png)
+<p align="center">
+  <img src="docs/images/chat-list.jpg" alt="Farrow chat list" width="300">
+  &nbsp;&nbsp;
+  <img src="docs/images/settings.jpg" alt="Farrow settings" width="300">
+</p>
 
 ## Features
 
