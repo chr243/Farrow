@@ -78,6 +78,10 @@ data class SiteConfig(
     val sessionExpiredUrlPatterns: List<String> = emptyList(),
     val selectors: Map<String, String> = emptyMap(),
     val scrape: ScrapeSpec? = null,
+    /** Replies under a post (x_scrape kind=replies); see [RepliesSpec]. */
+    val replies: RepliesSpec? = null,
+    /** web_scrape on this site without a selector returns only this part of the page (no nav/sidebar/account banner). */
+    val textScope: TextScope? = null,
     val postSteps: List<AutomationStep> = emptyList(),
     val loginSteps: List<AutomationStep> = emptyList(),
 ) {

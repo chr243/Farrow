@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html><body>
+<div id="react-root">
+  <header role="banner">
+    <nav role="navigation" aria-label="Primary">
+      <a data-testid="AppTabBar_Home_Link" href="/home">Home</a>
+      <a data-testid="AppTabBar_Profile_Link" href="/Me_Account">Profile</a>
+    </nav>
+    <button data-testid="SideNav_AccountSwitcher_Button">
+      <div data-testid="UserAvatar-Container-Me_Account"></div>
+      <span>Me Account</span><span>@Me_Account</span>
+      <!-- the logged-in banner even has a status-looking link in some layouts -->
+      <a href="/Me_Account/status/999">pinned</a>
+    </button>
+  </header>
+  <main role="main">
+    <div data-testid="primaryColumn">
+      <div data-testid="TopNavBar"><h2 role="heading">Post</h2></div>
+      <section role="region" aria-label="Timeline: Conversation">
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/alice">Alice</a><a href="/alice">@alice</a></div>
+            <a href="/alice/status/99"><time datetime="2026-10-03T08:00:00.000Z">Oct 3</time></a>
+            <div data-testid="tweetText">Earlier post in the thread</div>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="-1">
+            <div data-testid="User-Name"><a href="/alice">Alice</a><a href="/alice">@alice</a></div>
+            <div data-testid="tweetText">What do you all think about Farrow?</div>
+            <a href="/alice/status/100"><time datetime="2026-10-03T09:00:00.000Z">9:00 AM · Oct 3, 2026</time></a>
+            <button data-testid="reply" aria-label="3 Replies. Reply"></button>
+            <button data-testid="like" aria-label="12 Likes. Like"></button>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <div data-testid="inline_reply_offscreen">
+            <div data-testid="UserAvatar-Container-Me_Account"></div>
+            <span>Me Account</span><span>@Me_Account</span>
+            <label data-testid="tweetTextarea_0_label">Post your reply</label>
+            <div data-testid="tweetTextarea_0" contenteditable="true"></div>
+            <button data-testid="tweetButtonInline">Reply</button>
+          </div>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/bob">Bob</a><a href="/bob">@bob</a></div>
+            <a href="/bob/status/101?s=20"><time datetime="2026-10-03T09:05:00.000Z">5m</time></a>
+            <div data-testid="tweetText">Looks great!</div>
+            <button data-testid="reply" aria-label="0 Replies. Reply"></button>
+            <button data-testid="like" aria-label="2 Likes. Like"></button>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/Me_Account">Me Account</a><a href="/Me_Account">@Me_Account</a></div>
+            <a href="/Me_Account/status/102"><time datetime="2026-10-03T09:06:00.000Z">4m</time></a>
+            <div data-testid="tweetText">Thanks, I built it</div>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/dave">Dave</a><a href="/dave">@dave</a></div>
+            <div data-testid="tweetText">Quoting this one</div>
+            <div role="link"><a href="/alice/status/100">quoted: What do you all think…</a></div>
+            <a href="/dave/status/103"><time datetime="2026-10-03T09:07:00.000Z">3m</time></a>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/bob">Bob</a></div>
+            <a href="/bob/status/101"><time datetime="2026-10-03T09:05:00.000Z">5m</time></a>
+            <div data-testid="tweetText">Looks great!</div>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/promo">Promo</a></div>
+            <div data-testid="tweetText">Ad without a permalink</div>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv"><div role="button">Show more replies</div></div>
+        <div data-testid="cellInnerDiv"><h2 role="heading">Discover more</h2></div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <div data-testid="User-Name"><a href="/carol">Carol</a></div>
+            <a href="/carol/status/200"><time datetime="2026-10-02T09:00:00.000Z">Oct 2</time></a>
+            <div data-testid="tweetText">Unrelated recommended post</div>
+          </article>
+        </div>
+      </section>
+    </div>
+    <div data-testid="sidebarColumn">
+      <aside aria-label="Who to follow">
+        <article data-testid="tweet"><a href="/eve/status/300"><time>1h</time></a><div data-testid="tweetText">Sidebar</div></article>
+      </aside>
+    </div>
+  </main>
+</div>
+</body></html>

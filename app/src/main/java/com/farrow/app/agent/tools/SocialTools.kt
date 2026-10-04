@@ -76,9 +76,11 @@ class SocialToolFactory(
 
     private fun scrape() = object : AgentTool {
         override val name = "${prefix}_scrape"
-        override val description = "Scrape posts from $displayName: kind=timeline (home feed), profile (needs handle) or search (needs query)."
+        override val description = "Scrape posts from $displayName: kind=timeline (home feed), profile (needs handle), search (needs query)" +
+            (if (store.get(site).replies != null) " or replies (needs url of the post: only real reply posts below it, never the logged-in account's sidebar banner or the post itself; is_self marks your own replies)." else ".")
         override val parameters = schema(listOf("kind"),
-            "kind" to prop("string", "timeline | profile | search"),
+            "kind" to prop("string", "timeline | profile | search" + if (store.get(site).replies != null) " | replies" else ""),
+            "url" to prop("string", "Post URL for kind=replies (e.g. https://x.com/user/status/123)"),
             "handle" to prop("string", "Profile handle/username for kind=profile (without @)"),
             "query" to prop("string", "Search query for kind=search"),
             "limit" to prop("integer", "Max posts to return (default 20, max 100)"))
@@ -91,7 +93,24 @@ class SocialToolFactory(
                     ?: return errorJson("handle is required for kind=profile")))
                 "search" -> mapOf("query" to (args.str("query")?.takeIf { it.isNotBlank() }
                     ?: return errorJson("query is required for kind=search")))
-                else -> return errorJson("kind must be timeline, profile or search")
+                "replies" -> {
+                    val cfg = store.get(site)
+                    if (cfg.replies == null) return errorJson("kind=replies is not supported for $displayName")
+                    val url = args.str("url")?.trim()?.takeIf { u -> ThreadReplies.statusId(u, cfg.replies) != null && SiteScopes.matches(u, cfg) }
+                        ?: return errorJson("url of a $displayName post (…/status/<id>) is required for kind=replies")
+                    val limit = (args.int("limit") ?: 20).coerceIn(1, 100)
+                    return guarded(ctx) { a ->
+                        val r = a.scrapeReplies(url, limit)
+                        buildJsonObject {
+                            put("site", site); put("kind", kind); put("url", url)
+                            r.selfHandle?.let { put("logged_in_as", it) }
+                            r.focal?.let { put("post", it) }
+                            put("count", r.replies.size); put("items", JsonArray(r.replies))
+                            if (r.dropped.isNotEmpty()) put("ignored", JsonArray(r.dropped.map { JsonPrimitive(it) }))
+                        }.toString()
+                    }
+                }
+                else -> return errorJson("kind must be timeline, profile, search" + if (store.get(site).replies != null) " or replies" else "")
             }
             val limit = (args.int("limit") ?: 20).coerceIn(1, 100)
             return guarded(ctx) { a ->
@@ -100,4 +119,16 @@ class SocialToolFactory(
             }
         }
     }
+}
+
+/** Which site config (if any) a URL belongs to, for scoped page text in web_scrape. */
+object SiteScopes {
+    fun matches(url: String, cfg: SiteConfig): Boolean {
+        val host = runCatching { java.net.URI(url).host }.getOrNull()?.lowercase()?.removePrefix("www.")?.removePrefix("mobile.") ?: return false
+        val domains = listOf(cfg.domain.trimStart('.')) + if (cfg.site == SelectorStore.X) listOf("twitter.com") else emptyList()
+        return domains.any { d -> d.isNotBlank() && (host == d || host.endsWith(".$d")) }
+    }
+
+    fun textScopeFor(url: String, store: SelectorStore): TextScope? =
+        listOf(SelectorStore.X, SelectorStore.FACEBOOK).map(store::get).firstOrNull { it.textScope != null && matches(url, it) }?.textScope
 }

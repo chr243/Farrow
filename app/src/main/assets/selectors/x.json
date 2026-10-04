@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -18,7 +18,8 @@
     "compose": "https://x.com/compose/post",
     "timeline": "https://x.com/home",
     "profile": "https://x.com/{handle}",
-    "search": "https://x.com/search?q={query}&src=typed_query&f=live"
+    "search": "https://x.com/search?q={query}&src=typed_query&f=live",
+    "status": "https://x.com/i/status/{id}"
   },
   "sessionExpiredUrlPatterns": [
     "/i/flow/login",
@@ -54,6 +55,53 @@
       "likes": "[data-testid=\"like\"]@aria-label"
     },
     "dedupeField": "url"
+  },
+  "replies": {
+    "scope": "[data-testid=\"primaryColumn\"]",
+    "item": "article[data-testid=\"tweet\"]",
+    "exclude": [
+      "header[role=\"banner\"]",
+      "nav",
+      "[data-testid=\"sidebarColumn\"]",
+      "[data-testid=\"SideNav_AccountSwitcher_Button\"]",
+      "[data-testid=\"AppTabBar_Profile_Link\"]",
+      "[data-testid=\"inline_reply_offscreen\"]",
+      "[data-testid=\"tweetTextarea_0_label\"]",
+      "[data-testid=\"tweetTextarea_0\"]",
+      "[data-testid=\"tweetButtonInline\"]",
+      "[data-testid=\"toolBar\"]",
+      "[data-testid=\"TopNavBar\"]",
+      "[role=\"progressbar\"]"
+    ],
+    "focal": "article[tabindex=\"-1\"]",
+    "stopHeading": "^(Discover more|More (posts|replies)|Plus à découvrir|Découvrir plus)\\b",
+    "fields": {
+      "author": "[data-testid=\"User-Name\"]",
+      "text": "[data-testid=\"tweetText\"]",
+      "time": "time@datetime",
+      "replies": "[data-testid=\"reply\"]@aria-label",
+      "reposts": "[data-testid=\"retweet\"]@aria-label",
+      "likes": "[data-testid=\"like\"]@aria-label"
+    },
+    "selfLink": "a[data-testid=\"AppTabBar_Profile_Link\"]",
+    "statusIdPattern": "/status/(\\d+)"
+  },
+  "textScope": {
+    "scope": "[data-testid=\"primaryColumn\"]",
+    "exclude": [
+      "header[role=\"banner\"]",
+      "nav",
+      "[data-testid=\"sidebarColumn\"]",
+      "[data-testid=\"SideNav_AccountSwitcher_Button\"]",
+      "[data-testid=\"AppTabBar_Profile_Link\"]",
+      "[data-testid=\"inline_reply_offscreen\"]",
+      "[data-testid=\"tweetTextarea_0_label\"]",
+      "[data-testid=\"tweetTextarea_0\"]",
+      "[data-testid=\"tweetButtonInline\"]",
+      "[data-testid=\"toolBar\"]",
+      "[data-testid=\"TopNavBar\"]",
+      "[role=\"progressbar\"]"
+    ]
   },
   "postSteps": [
     {

@@ -19,7 +19,12 @@ private const val BRIDGE_DOWN =
     "Browser bridge is not running. Open Settings > Internal browser setup to install/start Termux Browser Pilot."
 
 /** web_scrape: real Firefox via the Termux bridge, else OkHttp + Jsoup (no JavaScript). */
-class WebScrapeTool(private val bridge: BridgeClient, private val fallback: FallbackBrowser) : AgentTool {
+class WebScrapeTool(
+    private val bridge: BridgeClient,
+    private val fallback: FallbackBrowser,
+    /** Site-specific readable part of a page (X: main column only, no nav/sidebar/account banner); null = whole page. */
+    private val textScope: (String) -> com.farrow.app.data.social.TextScope? = { null },
+) : AgentTool {
     override val name = "web_scrape"
     override val description = "Internal browser (no accessibility permission needed): load a web page and return its readable text (real Firefox via Termux bridge; falls back to a plain HTTP fetch without JavaScript). " +
         "To search the web, load https://html.duckduckgo.com/html/?q=<url-encoded query> (no consent wall, no JS needed) rather than Google."
@@ -37,6 +42,17 @@ class WebScrapeTool(private val bridge: BridgeClient, private val fallback: Fall
             return try {
                 val nav = bridge.goto(url, args.bool("cloudflare") == true)
                 if (!nav.ok) return errorJson("navigation failed: ${nav.errorMessage}")
+                val scope = if (selector == null && args.bool("html") != true) textScope(url) else null
+                if (scope != null) {
+                    // e.g. X: without this the side nav's account switcher (your own name/@handle) reads like content.
+                    val r = bridge.eval(com.farrow.app.data.social.SocialAutomation.scopedTextJs(scope))
+                    val text = r.valueString()?.takeIf { r.ok && it.isNotBlank() && it != "null" }
+                    if (text != null) return buildJsonObject {
+                        put("ok", true); put("url", url); put("engine", "tbp-firefox"); put("text", text.take(MAX_TEXT))
+                        put("scope", scope.scope)
+                        put("note", "Main column only (navigation, sidebar, account switcher and reply composer removed). For replies under a post use x_scrape kind=replies.")
+                    }.toString()
+                }
                 val content = if (args.bool("html") == true) bridge.html(selector) else bridge.text(selector)
                 content.toToolJson { put("url", url); put("engine", "tbp-firefox") }
             } catch (e: IOException) { errorJson("bridge error: ${e.message}") }

@@ -13,6 +13,7 @@ Standard library only. Listens on 127.0.0.1 and wraps the `tbp` CLI
   POST /daemon/start              -> single-flight: clean orphans/stale locks, `tbp start` detached, wait ≤30 s
   POST /daemon/reset              -> stop everything (tbp stop, kill trees, Xvfb, locks) and start fresh
   POST /cmd {"cmd": str, "args": {...}}  -> {"ok", "code", "stdout", "stderr", "data"}
+  POST /cmd job_start {"cmd": "cookies_import", "args"} / job_status {"job"}  -> background job (v1.10.0)
   GET  /ws  (WebSocket)           -> send {"id", "cmd", "args"} frames, receive {"id", ...result} + {"event": ...}
 
 Every request must carry the header `X-Bridge-Token: <TOKEN>` (WebSocket: `?token=<TOKEN>`),
@@ -41,7 +42,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 HOME = os.path.expanduser("~")
 STATE_DIR = os.path.join(HOME, ".farrow")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
@@ -1065,7 +1066,7 @@ def cmd_goto(a):
 # waits for in-flight commands and probes the console, and a cookie-store + URL `site_status` (no JS).
 inflight = {"n": 0, "cmds": []}
 inflight_cv = threading.Condition()
-NO_DAEMON_CMDS = {"ready", "site_status", "status", "cookies_check", "cookies_list", "exec", "fingerprint", "set_language", "start", "stop"}
+NO_DAEMON_CMDS = {"job_start", "job_status", "ready", "site_status", "status", "cookies_check", "cookies_list", "exec", "fingerprint", "set_language", "start", "stop"}
 
 
 def url_matches(url, target):
@@ -1408,6 +1409,72 @@ def cmd_cookies_import(a):
                      "goto_ok": nav.get("ok"), "daemon_down": False}}
 
 
+# ---------------- background jobs (v1.10.0) ----------------
+# cookies_import stops Firefox, writes cookies.sqlite and restarts the daemon. Run as a job it is ONE atomic bridge-side
+# operation: the app only starts it and polls job_status, so the app closing, going to the background, losing the
+# connection or the user cancelling (the app just stops waiting) can never leave the browser stopped — the write and
+# the restart always finish here. Results are kept in memory and in ~/.farrow/jobs/<id>.json.
+JOBS_DIR = os.path.join(STATE_DIR, "jobs")
+JOB_CMDS = {"cookies_import"}
+jobs = {}
+jobs_lock = threading.Lock()
+
+
+def _job_save(job):
+    try:
+        os.makedirs(JOBS_DIR, exist_ok=True)
+        tmp = os.path.join(JOBS_DIR, job["id"] + ".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(job, f)
+        os.replace(tmp, os.path.join(JOBS_DIR, job["id"] + ".json"))
+    except (OSError, TypeError, ValueError) as e:
+        log("job %s: could not persist: %r" % (job.get("id"), e))
+
+
+def cmd_job_start(a):
+    """{"cmd": "cookies_import", "args": {...}} -> {"job": id} at once; the command runs in a bridge thread.
+    Single-flight per command: while one runs, a second start returns the running job (attached = true)."""
+    cmd = a.get("cmd")
+    if cmd not in JOB_CMDS:
+        return {"ok": False, "code": 2, "stdout": "", "stderr": "not a job command: %s" % cmd, "data": None}
+    with jobs_lock:
+        for j in jobs.values():
+            if j["cmd"] == cmd and j["state"] == "running":
+                return {"ok": True, "code": 0, "stdout": "", "stderr": "", "data": {"job": j["id"], "attached": True}}
+        jid = "%s-%d-%s" % (cmd, int(time.time() * 1000), os.urandom(3).hex())
+        job = {"id": jid, "cmd": cmd, "state": "running", "started": time.time(), "finished": None, "result": None}
+        jobs[jid] = job
+    _job_save(job)
+
+    def work():
+        res = dispatch(cmd, a.get("args") or {})
+        with jobs_lock:
+            job["result"] = res
+            job["state"] = "done"
+            job["finished"] = time.time()
+        _job_save(job)
+        log("job %s done ok=%s" % (jid, res.get("ok")))
+
+    threading.Thread(target=work, name="job-" + jid, daemon=False).start()
+    return {"ok": True, "code": 0, "stdout": "", "stderr": "", "data": {"job": jid, "attached": False}}
+
+
+def cmd_job_status(a):
+    """{"job": id} -> {"state": running|done|unknown, "result": <command result when done>}."""
+    jid = safe_name(a.get("job") or "")
+    with jobs_lock:
+        job = dict(jobs[jid]) if jid in jobs else None
+    if job is None:
+        try:
+            with open(os.path.join(JOBS_DIR, jid + ".json")) as f:
+                job = json.load(f)
+            if job.get("state") == "running":   # the bridge restarted while it ran: it can't still be running
+                job["state"] = "lost"
+        except (OSError, ValueError):
+            job = {"id": jid, "state": "unknown"}
+    return {"ok": True, "code": 0, "stdout": "", "stderr": "", "data": job}
+
+
 def cmd_cookies_load(a):
     """Restore a saved login: if Firefox's cookie store still has the cookies (the normal case — they're persistent
     now), nothing to do; otherwise re-import <name>.import.json (restarts the browser)."""
@@ -1565,6 +1632,8 @@ COMMANDS = {
     "fingerprint": cmd_fingerprint,
     "cookie_set": cmd_cookie_set,
     "cookies_import": cmd_cookies_import,
+    "job_start": cmd_job_start,
+    "job_status": cmd_job_status,
     "dismiss_cookie_banner": cmd_dismiss_cookie_banner,
     "cookies_check": cmd_cookies_check,
     "exec": cmd_exec,

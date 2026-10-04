@@ -655,6 +655,52 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         return JsonArray(seen.values.take(limit))
     }
 
+    /**
+     * Replies under one post (x_scrape kind=replies): only `article` posts inside the conversation column AFTER the
+     * focal post. The side nav / account switcher (the logged-in account's own name), the inline reply composer and
+     * the focal post itself are never returned. The page HTML is parsed by [ThreadReplies] (unit-tested on fixtures).
+     */
+    suspend fun scrapeReplies(statusUrl: String, limit: Int, maxScrolls: Int = 8): RepliesResult {
+        val spec = config.replies ?: throw AutomationException("no replies spec for ${config.site}")
+        val nav = bridge.goto(statusUrl)
+        if (!nav.ok) throw AutomationException("navigation failed: ${nav.errorMessage}")
+        if (!waitFor(spec.item, 20_000)) {
+            ensureLoggedIn(navigate = false)
+            throw AutomationException("the post did not load (no ${spec.item} on the page)")
+        }
+        // Strip heavy/irrelevant markup in the page so the HTML we ship back stays small.
+        val grab = """(()=>{const r=document.querySelector(${js(spec.scope)})||document.body;const c=r.cloneNode(true);
+            c.querySelectorAll('svg,img,video,picture,style,script,noscript').forEach(e=>e.remove());
+            c.querySelectorAll('*').forEach(e=>{e.removeAttribute('class');e.removeAttribute('style')});
+            const p=${spec.selfLink?.let { "document.querySelector(${js(it)})" } ?: "null"};
+            return JSON.stringify({h:c.outerHTML,self:p?p.getAttribute('href'):null,u:location.href})})()""".trimIndent()
+        val replies = LinkedHashMap<String, JsonObject>()
+        var focal: JsonObject? = null
+        var self: String? = null
+        val dropped = mutableListOf<String>()
+        var scrolls = 0
+        while (replies.size < limit) {
+            val raw = evalString(grab) ?: break
+            val o = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: break
+            val page = ThreadReplies.parse(o["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), statusUrl, spec,
+                selfHref = o["self"]?.jsonPrimitive?.contentOrNull)
+            focal = focal ?: page.focal
+            self = self ?: page.selfHandle
+            dropped += page.dropped
+            val before = replies.size
+            page.replies.forEach { r -> r["url"]?.jsonPrimitive?.contentOrNull?.let { replies.putIfAbsent(it, r) } }
+            if (replies.size >= limit || scrolls >= maxScrolls) break
+            if (replies.size == before && scrolls > 1) break
+            bridge.command("scroll")
+            scrolls++
+            delay(1_200)
+        }
+        return RepliesResult(focal, replies.values.take(limit), dropped.distinct(), self)
+    }
+
+    /** Page text limited to [TextScope] (X: the main column without nav, sidebar, account banner or composer). */
+    suspend fun scopedPageText(scope: TextScope): String? = evalString(scopedTextJs(scope))
+
     suspend fun post(text: String) {
         runSteps(config.postSteps, mapOf("text" to text))
     }
@@ -717,12 +763,26 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * restarts it, opens [home], dismisses the cookie banner and reads the store back (report + final URL).
      */
     suspend fun importBrowserCookies(list: List<CapturedCookie>, origin: String? = null,
-                                     onStep: (Int, Int, String) -> Unit = { _, _, _ -> }): LoginStatus {
+                                     onStep: (Int, Int, String) -> Unit = { _, _, _ -> }, onJob: (String) -> Unit = {}): LoginStatus {
         lastCookieReport = null
         val home = config.url("home")
         onStep(1, 2, "write ${list.size} cookies into Firefox's cookie store (restarts the internal browser)")
-        val r = withTimeoutOrNull(230_000) { bridge.importCookies(config.sessionName, WebLoginCookies.toTbpJson(list), origin, home) }
-            ?: throw AutomationException("Cookie import timed out after 230 s")
+        // One atomic bridge job (write + restart): stopping to wait here never leaves the browser stopped.
+        val r = withTimeoutOrNull(230_000) { bridge.importCookiesAtomic(config.sessionName, WebLoginCookies.toTbpJson(list), origin, home, onJob) }
+            ?: throw AutomationException("Cookie import timed out after 230 s (the bridge still finishes it and restarts the browser)")
+        return finishImport(r, list.size, onStep)
+    }
+
+    /** Waits again for an import job started before the app was closed/killed, then verifies it like a fresh import. */
+    suspend fun resumeImport(jobId: String, count: Int, onStep: (Int, Int, String) -> Unit = { _, _, _ -> }): LoginStatus {
+        lastCookieReport = null
+        onStep(1, 2, "waiting for the cookie import that was already running in the internal browser")
+        val r = withTimeoutOrNull(230_000) { bridge.awaitJob(jobId) }
+            ?: throw AutomationException("Cookie import still not finished after 230 s")
+        return finishImport(r, count, onStep)
+    }
+
+    private suspend fun finishImport(r: BridgeResult, count: Int, onStep: (Int, Int, String) -> Unit): LoginStatus {
         val data = r.raw["data"]?.let { runCatching { it.jsonObject }.getOrNull() }
         val report = data?.get("report")?.jsonPrimitive?.contentOrNull
         lastCookieReport = listOfNotNull(report?.takeIf { it.isNotBlank() }, r.stderr.takeIf { it.isNotBlank() },
@@ -741,7 +801,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         val st = out.status(config.displayName)
         if (st.state != LoginState.LOGGED_IN) {
             val shot = withTimeoutOrNull(35_000) { bridge.screenshot() } ?: Result.failure(Exception("screenshot timed out"))
-            throw LoginFailedException("Imported ${list.size} cookies but ${config.displayName} still shows: ${st.reason}." +
+            throw LoginFailedException("Imported $count cookies but ${config.displayName} still shows: ${st.reason}." +
                 (r.takeIf { !it.ok }?.let { " (cookie import: ${it.errorMessage.take(200)})" } ?: ""),
                 LoginDiagnostics(out.url, null, shot.getOrNull(), shot.exceptionOrNull()?.message))
         }
@@ -762,6 +822,14 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     }
 
     companion object {
+        /** innerText of the scope minus the innerText of every excluded subtree inside it. */
+        fun scopedTextJs(scope: TextScope): String {
+            val sel = JsonPrimitive(scope.scope).toString()
+            val ex = JsonPrimitive(scope.exclude.joinToString(", ")).toString()
+            return """(()=>{const r=document.querySelector($sel);if(!r)return null;let t=r.innerText||'';const x=$ex;
+                if(x)r.querySelectorAll(x).forEach(e=>{const s=(e.innerText||'').trim();if(s)t=t.split(s).join('')});
+                return t.replace(/\n{3,}/g,'\n\n').trim()})()""".trimIndent()
+        }
         private const val POLL_MS = 600L
         /** Extra step budget for click / typeEditor fallbacks (idle wait + JS focus + insertText). */
         private const val FALLBACK_BUDGET_MS = 75_000L

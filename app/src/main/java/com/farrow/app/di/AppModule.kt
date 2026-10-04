@@ -120,7 +120,7 @@ object AppModule {
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
             // Phase 4: internal browser (Termux Browser Pilot bridge, HTTP+Jsoup fallback)
-            WebScrapeTool(bridge, fallbackBrowser), WebClickTool(bridge), WebTypeTool(bridge), WebSessionTool(bridge),
+            WebScrapeTool(bridge, fallbackBrowser) { url -> com.farrow.app.agent.tools.SiteScopes.textScopeFor(url, selectors) }, WebClickTool(bridge), WebTypeTool(bridge), WebSessionTool(bridge),
             WebScreenshotTool(bridge, File(context.filesDir, "screenshots"), com.farrow.app.data.browser.AndroidImageEncoder(),
                 activeModelSeesImages = {
                     val m = client.lastModel.value ?: settings.currentModels().firstOrNull()

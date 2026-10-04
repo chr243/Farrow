@@ -216,18 +216,63 @@ class BridgeClient(private val config: BridgeEndpoint) {
             .post(payload.toRequestBody(JSON_MEDIA))
             .build()
         val body = http.newCall(req).awaitBody()
-        return withContext(Dispatchers.Default) {
-            val o = json.parseToJsonElement(body).jsonObject
-            BridgeResult(
-                ok = o["ok"]?.jsonPrimitive?.booleanOrNull == true,
-                code = o["code"]?.jsonPrimitive?.intOrNull ?: -1,
-                stdout = o["stdout"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                stderr = o["stderr"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                data = o["data"]?.takeUnless { it is JsonNull },
-                raw = o,
-            )
+        return withContext(Dispatchers.Default) { parseResult(json.parseToJsonElement(body).jsonObject) }
+    }
+
+    /**
+     * v1.10.0: [importCookies] as an atomic bridge-side job. The bridge stops Firefox, writes cookies.sqlite and ALWAYS
+     * restarts the daemon in its own thread; we only start it and poll, so cancelling or losing the app can never leave
+     * the browser stopped. [onJob] receives the job id (persist it to resume waiting after a restart). Bridges older
+     * than 1.10.0 fall back to the blocking command.
+     */
+    suspend fun importCookiesAtomic(name: String, cookies: JsonArray, origin: String? = null, then: String? = null,
+                                    onJob: (String) -> Unit = {}): BridgeResult {
+        val args = buildJsonObject {
+            put("name", name); put("cookies", cookies)
+            origin?.let { put("origin", it) }; then?.let { put("then", it) }
+        }
+        val start = command("job_start", buildJsonObject { put("cmd", "cookies_import"); put("args", args) })
+        val id = (start.data as? JsonObject)?.get("job")?.jsonPrimitive?.contentOrNull
+        if (!start.ok || id == null) {
+            if (start.stderr.contains("unknown cmd")) return command("cookies_import", args)
+            return start
+        }
+        onJob(id)
+        return awaitJob(id)
+    }
+
+    /** Polls `job_status` until the job is done; tolerates short connection drops (the job keeps running bridge-side). */
+    suspend fun awaitJob(id: String, pollMs: Long = 1_500, maxFailures: Int = 40): BridgeResult {
+        var failures = 0
+        var lastError: String? = null
+        while (true) {
+            kotlinx.coroutines.delay(pollMs)
+            val st = try { command("job_status", buildJsonObject { put("job", id) }) } catch (e: IOException) { lastError = e.message; null }
+                catch (e: kotlinx.serialization.SerializationException) { lastError = e.message; null }
+            val d = st?.data as? JsonObject
+            if (d == null) {
+                if (++failures >= maxFailures) throw IOException("Lost contact with the bridge while it finishes job $id (${lastError ?: "no answer"}). " +
+                    "The bridge still completes the import and restarts the browser.")
+                continue
+            }
+            failures = 0
+            when (val state = d["state"]?.jsonPrimitive?.contentOrNull) {
+                "running" -> continue
+                "done" -> return (d["result"] as? JsonObject)?.let(::parseResult)
+                    ?: throw IOException("bridge job $id finished without a result")
+                else -> throw IOException("bridge job $id is $state (the bridge restarted while it ran) — tap Start browser if it is down")
+            }
         }
     }
+
+    private fun parseResult(o: JsonObject) = BridgeResult(
+        ok = o["ok"]?.jsonPrimitive?.booleanOrNull == true,
+        code = o["code"]?.jsonPrimitive?.intOrNull ?: -1,
+        stdout = o["stdout"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        stderr = o["stderr"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        data = o["data"]?.takeUnless { it is JsonNull },
+        raw = o,
+    )
 
     private suspend fun Call.awaitBody(): String = suspendCancellableCoroutine { cont ->
         cont.invokeOnCancellation { runCatching { cancel() } }

@@ -431,7 +431,7 @@ class StepScriptsTest {
             |st = b.cmd_site_status({"domain": ".x.com", "key_cookies": ["auth_token", "kdt"]})["data"]
             |assert st["state"] == "LOGGED_OUT" and st["missing"] == ["kdt"], st
             |assert "ready" in b.NO_DAEMON_CMDS and "eval" not in b.NO_DAEMON_CMDS and {"nav", "ready", "site_status"} <= set(b.COMMANDS)
-            |assert {"editor_type", "key", "focus"} <= set(b.COMMANDS) and b.VERSION >= "1.8.0"
+            |assert {"editor_type", "key", "focus"} <= set(b.COMMANDS) and tuple(map(int, b.VERSION.split("."))) >= tuple(map(int, "1.8.0".split(".")))
             |assert b.norm_text(" hi\u200b \n there ") == "hi there"
             |ed = {"t": ""}
             |def ftbp(*a, timeout=90):
