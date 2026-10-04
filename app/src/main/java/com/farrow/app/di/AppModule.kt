@@ -128,7 +128,7 @@ object AppModule {
                 }),
         ) +
             // Phase 5: X.com (x_status, x_post, x_scrape)
-            SocialToolFactory("x", SelectorStore.X, selectors, bridge, sessionGuard).tools(postMaxChars = 280) +
+            SocialToolFactory("x", SelectorStore.X, selectors, bridge, sessionGuard, File(context.filesDir, "screenshots")).tools(postMaxChars = 280) +
             // Phase 9: Facebook (fb_status, fb_post, fb_scrape) — same engine, lower priority/minimal
             SocialToolFactory("fb", SelectorStore.FACEBOOK, selectors, bridge, sessionGuard).tools(postMaxChars = 5_000) +
             // Phase 6: Shizuku shell, JGit, Accessibility

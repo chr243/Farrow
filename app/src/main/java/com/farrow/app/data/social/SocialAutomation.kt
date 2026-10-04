@@ -68,6 +68,12 @@ data class FastCheck(val status: LoginStatus, val busy: List<String>?, val bridg
 /** The cookie import left the TBP daemon down (restart failed twice); [daemonLog] = tail of ~/.tbp/daemon.log. */
 class BrowserDownException(message: String, val daemonLog: String) : Exception(message)
 
+/** x_reply failed; [diagnostics] has URL, page text and a screenshot; [steps] what was done. */
+class ReplyFailedException(message: String, val diagnostics: LoginDiagnostics?, val steps: List<String>) : Exception(message)
+
+/** x_reply result. [replyUrl] when the new reply (or the toast's View link) was found. */
+data class ReplyResult(val replyUrl: String?, val confirmedBy: String, val composer: ComposerKind, val attempts: Int, val steps: List<String>)
+
 /** Parsed `cookies_import` result (bridge ≥ 1.6.0) — verified WITHOUT page JS (cookies.sqlite + history URL). */
 data class ImportOutcome(
     val present: List<String>, val missing: List<String>, val url: String?, val loggedIn: Boolean?,
@@ -660,10 +666,12 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * focal post. The side nav / account switcher (the logged-in account's own name), the inline reply composer and
      * the focal post itself are never returned. The page HTML is parsed by [ThreadReplies] (unit-tested on fixtures).
      */
-    suspend fun scrapeReplies(statusUrl: String, limit: Int, maxScrolls: Int = 8): RepliesResult {
+    suspend fun scrapeReplies(statusUrl: String, limit: Int, maxScrolls: Int = 8, navigate: Boolean = true): RepliesResult {
         val spec = config.replies ?: throw AutomationException("no replies spec for ${config.site}")
-        val nav = bridge.goto(statusUrl)
-        if (!nav.ok) throw AutomationException("navigation failed: ${nav.errorMessage}")
+        if (navigate) {
+            val nav = bridge.goto(statusUrl)
+            if (!nav.ok) throw AutomationException("navigation failed: ${nav.errorMessage}")
+        }
         if (!waitFor(spec.item, 20_000)) {
             ensureLoggedIn(navigate = false)
             throw AutomationException("the post did not load (no ${spec.item} on the page)")
@@ -700,6 +708,154 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
 
     /** Page text limited to [TextScope] (X: the main column without nav, sidebar, account banner or composer). */
     suspend fun scopedPageText(scope: TextScope): String? = evalString(scopedTextJs(scope))
+
+    /**
+     * Deterministic reply (x_reply): open the post, wait for the focal post, open ITS reply composer (reply button →
+     * modal) or use the inline reply box of the conversation, type with the x_post editor method, verify the text,
+     * submit only with that composer's own button, confirm (toast / composer cleared / the new reply). Never touches the
+     * composer toolbar (schedule, GIF, poll, emoji, location, media). A wrong dialog/page is closed with Escape and the
+     * whole thing is retried once via the reply intent URL. Nothing is retried after the submit click (no double posts).
+     */
+    suspend fun reply(postUrl: String, text: String, onStep: (String) -> Unit = {}): ReplyResult {
+        val spec = config.reply ?: throw AutomationException("${config.displayName} has no reply spec")
+        val id = config.replies?.let { ThreadReplies.statusId(postUrl, it) } ?: Regex("/status/(\\d+)").find(postUrl)?.groupValues?.get(1)
+            ?: throw AutomationException("not a post URL: $postUrl")
+        val steps = mutableListOf<String>()
+        fun log(m: String) { steps += m; onStep(m) }
+        var lastWhy = ""
+        for (attempt in 1..spec.maxAttempts.coerceIn(1, 3)) {
+            val viaIntent = attempt > 1
+            val pick = try {
+                openComposer(spec, postUrl, id, viaIntent, ::log)
+            } catch (e: SessionExpiredException) { throw e } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) { ComposerPick.Missing(e.message ?: e.javaClass.simpleName) }
+            if (pick !is ComposerPick.Found) {
+                lastWhy = (pick as? ComposerPick.Wrong)?.why ?: (pick as ComposerPick.Missing).why
+                log("attempt $attempt: $lastWhy")
+                closeStrayDialogs(spec, ::log)
+                continue
+            }
+            log("attempt $attempt: ${pick.kind.name.lowercase()} composer")
+            // Type exactly like x_post (focus by eval → xdotool → verify → insertText), into OUR box only.
+            jsFocusOrClick(pick.box)
+            val typed = typeIntoEditor(pick.box, text, 45_000)
+            log("typing: ${if (typed == StepOutcome.Ok) "ok" else (typed as? StepOutcome.Failed)?.why} ${stepNote.orEmpty()}".trim())
+            // Re-locate: the page must still be the reply composer, with our text, and its button enabled.
+            val after = locateComposer(spec, preferInline = pick.kind == ComposerKind.INLINE)
+            if (after !is ComposerPick.Found || after.box != pick.box) {
+                lastWhy = "the composer changed while typing (${(after as? ComposerPick.Wrong)?.why ?: (after as? ComposerPick.Missing)?.why ?: "different box"})"
+                log(lastWhy); closeStrayDialogs(spec, ::log); continue
+            }
+            if (!DomFinder.containsText(editorText(pick.box), text)) {
+                lastWhy = "the text did not land in the reply box"
+                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log); continue
+            }
+            if (!after.sendEnabled) {
+                lastWhy = "the composer's Reply button stays disabled"
+                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log); continue
+            }
+            // Submit: the composer's own button only (no keyboard fallback that could hit another control).
+            val clicked = try { withTimeoutOrNull(clickTryMs(AutomationStep("click"))) { bridge.click(after.send) } } catch (e: java.io.IOException) { null }
+            if (clicked?.ok != true) {
+                waitIdle()
+                if (jsFocusOrClick(after.send) == null) throw replyFailure("could not click the composer's Reply button", steps)
+                log("submit: JS click")
+            } else log("submit: clicked")
+            val confirm = confirmReply(spec, pick, text, ::log)
+                ?: throw replyFailure("the reply was submitted but neither a toast nor the cleared composer confirmed it", steps)
+            val url = findOwnReply(postUrl, text)
+            log(if (url != null) "reply found: $url" else "reply URL not found in the conversation")
+            return ReplyResult(confirm.second ?: url, confirm.first, pick.kind, attempt, steps)
+        }
+        throw replyFailure("could not open the reply composer: $lastWhy", steps)
+    }
+
+    private suspend fun openComposer(spec: ReplyComposerSpec, postUrl: String, id: String, viaIntent: Boolean, log: (String) -> Unit): ComposerPick {
+        if (viaIntent) {
+            val u = config.url("replyIntent", mapOf("id" to id))
+            log("open " + navigateTo(u, 30_000))
+            if (!waitFor(spec.textarea, 20_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
+            return locateComposer(spec)
+        }
+        log("open " + navigateTo(postUrl, 30_000))
+        if (!waitFor(spec.focal, 25_000)) {
+            ensureLoggedIn(navigate = false)
+            return ComposerPick.Missing("the post did not load (no focal post)")
+        }
+        locateComposer(spec).let { if (it is ComposerPick.Wrong) return it }
+        // Primary: the focal post's own reply button → modal composer.
+        val btn = "${spec.focal} ${spec.replyButton}"
+        if (exists(btn)) {
+            val r = try { withTimeoutOrNull(clickTryMs(AutomationStep("click"))) { bridge.click(btn) } } catch (e: java.io.IOException) { null }
+            if (r?.ok != true) { waitIdle(); jsFocusOrClick(btn) }
+            if (waitFor("${spec.dialog} ${spec.textarea}", 8_000)) { log("focal reply button → modal"); return locateComposer(spec) }
+            log("reply button opened no modal")
+            locateComposer(spec).let { if (it is ComposerPick.Wrong) return it }
+        }
+        // Fallback: the inline reply box of the conversation.
+        return locateComposer(spec, preferInline = true)
+    }
+
+    private suspend fun locateComposer(spec: ReplyComposerSpec, preferInline: Boolean = false): ComposerPick {
+        val raw = evalString(ReplyComposer.markJs(spec)) ?: return ComposerPick.Missing("page did not answer")
+        val o = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return ComposerPick.Missing("bad page snapshot")
+        return ReplyComposer.locate(o["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), spec, o["u"]?.jsonPrimitive?.contentOrNull, preferInline)
+    }
+
+    /** Escape (twice) and the dialog's own close button — never a toolbar control. */
+    private suspend fun closeStrayDialogs(spec: ReplyComposerSpec, log: (String) -> Unit) {
+        pressKey("Escape"); delay(400); pressKey("Escape"); delay(600)
+        val closed = runCatching { evalString("""(()=>{const d=[...document.querySelectorAll(${js(spec.dialog)})].pop();if(!d)return 'none';
+            const b=d.querySelector('[data-testid="app-bar-close"],[aria-label="Close"],[data-testid="confirmationSheetCancel"]');if(b){b.click();return 'closed'}return 'open'})()""".trimIndent()) }.getOrNull()
+        // "Discard post?" sheet after Escape on a non-empty composer.
+        runCatching { evalString("""(()=>{const b=document.querySelector('[data-testid="confirmationSheetConfirm"]');if(b&&/discard/i.test(b.innerText)){b.click();return 'discarded'}return ''})()""") }
+        log("closed stray dialogs (${closed ?: "?"})")
+    }
+
+    private suspend fun clearBox(css: String) {
+        runCatching { evalString("""(()=>{const e=document.querySelector(${js(css)});const t=e&&(e.querySelector('[contenteditable="true"]')||e);if(!t)return '';t.focus();document.execCommand('selectAll');document.execCommand('delete');return 'cleared'})()""") }
+    }
+
+    /** (how, toast link URL) once the toast shows or our composer is gone/emptied; null on timeout or an error toast. */
+    private suspend fun confirmReply(spec: ReplyComposerSpec, pick: ComposerPick.Found, text: String, log: (String) -> Unit): Pair<String, String?>? {
+        val probe = """(()=>{const t=document.querySelector(${js(spec.toast)});const b=document.querySelector(${js(pick.box)});
+            const a=t&&t.querySelector('a[href*="/status/"]');
+            return JSON.stringify({toast:t?(t.innerText||''):null,link:a?a.href:null,box:b?(b.innerText||''):null})})()""".trimIndent()
+        val err = spec.errorToast?.let { Regex(it, RegexOption.IGNORE_CASE) }
+        val deadline = System.currentTimeMillis() + 25_000
+        val needle = text.take(40)
+        while (System.currentTimeMillis() < deadline) {
+            val o = runCatching { evalString(probe)?.let { Json.parseToJsonElement(it).jsonObject } }.getOrNull()
+            val toast = o?.get("toast")?.jsonPrimitive?.contentOrNull
+            if (toast != null && err?.containsMatchIn(toast) == true) { log("error toast: $toast"); throw replyFailure("X refused the reply: $toast", listOf()) }
+            if (toast != null) { log("toast: ${toast.take(80)}"); return "toast" to o["link"]?.jsonPrimitive?.contentOrNull }
+            val box = o?.get("box")
+            if (o != null && (box == null || box is JsonNull)) return "composer closed" to null
+            if (o != null && !DomFinder.containsText(box?.jsonPrimitive?.contentOrNull, needle)) return "composer cleared" to null
+            delay(POLL_MS)
+        }
+        return null
+    }
+
+    /** The new reply by the logged-in account in the conversation (reloads the post once if needed). */
+    private suspend fun findOwnReply(postUrl: String, text: String): String? {
+        if (config.replies == null) return null
+        val needle = text.trim().replace(Regex("\\s+"), " ").take(40)
+        repeat(2) { round ->
+            if (round == 1) runCatching { navigateTo(postUrl, 30_000) }
+            delay(1_500)
+            val r = runCatching { scrapeReplies(postUrl, 40, maxScrolls = 2, navigate = false) }.getOrNull() ?: return@repeat
+            r.replies.firstOrNull { it["is_self"]?.jsonPrimitive?.booleanOrNull == true &&
+                (it["text"]?.jsonPrimitive?.contentOrNull.orEmpty().replace(Regex("\\s+"), " ").contains(needle)) }
+                ?.let { return it["url"]?.jsonPrimitive?.contentOrNull }
+        }
+        return null
+    }
+
+    private suspend fun replyFailure(why: String, steps: List<String>): ReplyFailedException {
+        val d = runCatching { diagnostics() }.getOrNull()
+        return ReplyFailedException(why + (d?.url?.let { " (page: $it)" } ?: ""), d, steps)
+    }
 
     suspend fun post(text: String) {
         runSteps(config.postSteps, mapOf("text" to text))

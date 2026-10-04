@@ -1,0 +1,42 @@
+<html><body><div id="react-root">
+<header role="banner"><nav><a data-testid="AppTabBar_Profile_Link" href="/Me_Account">Profile</a>
+  <a data-testid="SideNav_NewTweet_Button" href="/compose/post">Post</a></nav>
+  <button data-testid="SideNav_AccountSwitcher_Button">Me Account @Me_Account</button></header>
+<main><div data-testid="primaryColumn"><section aria-label="Timeline: Conversation">
+  <div data-testid="cellInnerDiv"><article data-testid="tweet" tabindex="-1">
+    <div data-testid="User-Name"><a href="/alice">Alice</a></div>
+    <div data-testid="tweetText">What do you all think?</div>
+    <a href="/alice/status/100"><time datetime="2026-10-03T09:00:00Z">9:00</time></a>
+    <div role="group"><button data-testid="reply" aria-label="3 Replies. Reply"></button><button data-testid="retweet"></button><button data-testid="like"></button></div>
+  </article></div>
+  <div data-testid="cellInnerDiv"><div data-testid="inline_reply_offscreen">
+    <div data-testid="UserAvatar-Container-Me_Account"></div>
+    <div data-testid="tweetTextarea_0RichTextInputContainer">
+      <div data-testid="tweetTextarea_0" role="textbox" contenteditable="true" aria-label="Post text"><span>Great point!</span></div>
+    </div>
+    <div data-testid="toolBar">
+      <div role="tablist">
+        <button data-testid="fileInput" aria-label="Add photos or video"></button>
+        <button data-testid="gifSearchButton" aria-label="Add a GIF"></button>
+        <button data-testid="createPollButton" aria-label="Add poll"></button>
+        <button aria-label="Add emoji"></button>
+        <button data-testid="scheduleOption" aria-label="Schedule post"></button>
+        <button data-testid="geoButton" aria-label="Tag location"></button>
+      </div>
+      <button data-testid="tweetButtonInline" role="button">Reply</button>
+    </div>
+  </div></div>
+  <div data-testid="cellInnerDiv"><article data-testid="tweet" tabindex="0">
+    <div data-testid="User-Name"><a href="/bob">Bob</a></div>
+    <a href="/bob/status/101"><time>5m</time></a><div data-testid="tweetText">Looks great</div>
+    <button data-testid="reply" aria-label="Reply"></button>
+  </article></div>
+</section></div>
+<div data-testid="sidebarColumn"><button data-testid="tweetButton">Post</button></div></main>
+<div id="layers"><div role="dialog" aria-modal="true">
+  <div><button data-testid="app-bar-close" aria-label="Close"></button><h2>Schedule</h2>
+  <button data-testid="scheduledConfirmationPrimaryAction">Confirm</button></div>
+  <div>Date<select id="SELECTOR_1"><option>October</option></select><select id="SELECTOR_2"><option>4</option></select></div>
+  <a href="/compose/post/unsent/scheduled">Scheduled posts</a>
+</div></div>
+</div></body></html>

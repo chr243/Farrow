@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -19,7 +19,8 @@
     "timeline": "https://x.com/home",
     "profile": "https://x.com/{handle}",
     "search": "https://x.com/search?q={query}&src=typed_query&f=live",
-    "status": "https://x.com/i/status/{id}"
+    "status": "https://x.com/i/status/{id}",
+    "replyIntent": "https://x.com/intent/post?in_reply_to={id}"
   },
   "sessionExpiredUrlPatterns": [
     "/i/flow/login",
@@ -102,6 +103,47 @@
       "[data-testid=\"TopNavBar\"]",
       "[role=\"progressbar\"]"
     ]
+  },
+  "reply": {
+    "conversation": "[data-testid=\"primaryColumn\"]",
+    "focal": "[data-testid=\"primaryColumn\"] article[data-testid=\"tweet\"][tabindex=\"-1\"]",
+    "replyButton": "[data-testid=\"reply\"]",
+    "dialog": "[role=\"dialog\"]",
+    "textarea": "[data-testid=\"tweetTextarea_0\"]",
+    "submit": [
+      "[data-testid=\"tweetButton\"]",
+      "[data-testid=\"tweetButtonInline\"]"
+    ],
+    "forbidden": [
+      "[data-testid=\"scheduleOption\"]",
+      "[data-testid=\"gifSearchButton\"]",
+      "[data-testid=\"createPollButton\"]",
+      "[data-testid=\"geoButton\"]",
+      "[data-testid=\"fileInput\"]",
+      "[data-testid=\"grokImgGen\"]",
+      "[aria-label*=\"emoji\" i]",
+      "[aria-label*=\"Schedule\" i]",
+      "[aria-label*=\"location\" i]",
+      "[aria-label*=\"media\" i]",
+      "[aria-label*=\"GIF\" i]",
+      "[aria-label*=\"poll\" i]"
+    ],
+    "wrongUrlPatterns": [
+      "/compose/post/schedule",
+      "/compose/post/unsent",
+      "/schedule",
+      "/i/flow/",
+      "/compose/post/media",
+      "/gif"
+    ],
+    "wrongDialog": [
+      "[data-testid=\"scheduledConfirmationPrimaryAction\"]",
+      "[data-testid=\"unsentButton\"]",
+      "select"
+    ],
+    "toast": "[data-testid=\"toast\"]",
+    "errorToast": "(went wrong|try again|whoops|already said that|not allowed|daily limit|rate limit|could not|couldn.t)",
+    "maxAttempts": 2
   },
   "postSteps": [
     {
