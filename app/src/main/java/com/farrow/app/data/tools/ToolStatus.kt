@@ -22,6 +22,7 @@ data class ToolStatus(val ready: Boolean, val text: String) {
             name.startsWith("fb_") -> if (env.browserUp) ToolStatus(true, "Ready if logged in (Settings > Facebook account)")
                 else ToolStatus(false, "Needs the internal browser and a Facebook login (Settings > Facebook account)")
             name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku, accessibility & Git)")
+            name == "reset_browser" -> if (env.bridgeUp) READY else ToolStatus(false, "Needs the Termux bridge (Settings > Internal browser setup)")
             name == "termux_run" -> if (env.bridgeUp) READY else ToolStatus(false, "Needs the Termux bridge (Settings > Internal browser setup)")
             name == "git_push" || name == "git_clone" -> if (env.gitToken) READY
                 else ToolStatus(true, "Ready for public repos — private ones need a Git token (Settings > Shizuku, accessibility & Git)")

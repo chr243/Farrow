@@ -640,3 +640,18 @@ Fixes, beta only:
 - On any failure after the compose page was opened, the beta cleans up: bridge `cancel`, wait until idle, empty and
   close the composer, discard a "Save post?" sheet (never Save), shield off, keyboard nav home.
 - On a retry, the result also carries `first_attempt` (its timings and steps), and failures report `text_inserted`.
+
+## v1.0.17
+
+- **x_post_beta rewritten** as x_post 1:1 with exactly one difference. `XPostBetaAutomation` is a copy of the
+  `SocialAutomation` class, and `XPostBetaTool` copies x_post's tool body and `guarded`. Its typeIntoEditor skips the
+  bridge's human-paced `editor_type` keystrokes and goes straight to x_post's insertText fallback, with the same
+  verification. The v1.0.15/16 beta logic is gone: JS-first clicks, quick stray probe, registered/button checks and
+  failure cleanup. XPostBetaCopyTest checks three things: the class equals SocialAutomation's except typeIntoEditor;
+  the tool body and guard equal x_post's; and a run makes the same bridge calls, steps and timings minus `editor_type`.
+  To change x_post later, re-copy its class into the beta.
+- **reset_browser tool** (on by default): the same as Settings > Internal browser setup > Reset browser. It starts
+  BrowserOpsManager's background reset (or waits for one already running), waits up to 5 min, and returns
+  ok/error, the message, the log tail on failure, and seconds. The prompt says to use it once when browser tools hang
+  or fail repeatedly.
+- **Colorful chat avatars:** a stable tonal color hashed from the chat id, and a topic/type/initial glyph.

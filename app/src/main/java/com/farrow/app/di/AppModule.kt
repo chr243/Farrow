@@ -117,12 +117,15 @@ object AppModule {
         settings: com.farrow.app.domain.repository.SettingsRepository,
         vision: com.farrow.app.data.network.ModelCapabilities,
         appPrefs: com.farrow.app.data.prefs.AppPrefs,
+        browserOps: com.farrow.app.data.browser.BrowserOpsManager,
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
             // Phase 4: internal browser (Termux Browser Pilot bridge, HTTP+Jsoup fallback)
             WebScrapeTool(bridge, fallbackBrowser, { url -> com.farrow.app.agent.tools.SiteScopes.textScopeFor(url, selectors) }) { !appPrefs.loadImages.value },
             WebClickTool(bridge) { !appPrefs.loadImages.value }, WebTypeTool(bridge) { !appPrefs.loadImages.value }, WebSessionTool(bridge),
+            // reset_browser: Settings > Internal browser setup > Reset browser, from the agent (background op, awaited)
+            com.farrow.app.agent.tools.ResetBrowserTool(browserOps::resetBrowser, browserOps.state),
             WebScreenshotTool(bridge, File(context.filesDir, "screenshots"), com.farrow.app.data.browser.AndroidImageEncoder(),
                 activeModelSeesImages = {
                     val m = client.lastModel.value ?: settings.currentModels().firstOrNull()
@@ -131,7 +134,7 @@ object AppModule {
         ) +
             // Phase 5: X.com (x_status, x_post, x_scrape)
             SocialToolFactory("x", SelectorStore.X, selectors, bridge, sessionGuard).tools(postMaxChars = 280) +
-            // v1.0.15: x_post_beta (off by default, Tools page "Beta: faster X posting"), separate from x_post
+            // x_post_beta (off by default, Tools page "Beta: faster X posting"): x_post 1:1 with instant typing
             listOf(com.farrow.app.agent.tools.XPostBetaTool(selectors, bridge, sessionGuard)) +
             // Phase 9: Facebook (fb_status, fb_post, fb_scrape) — same engine, lower priority/minimal
             SocialToolFactory("fb", SelectorStore.FACEBOOK, selectors, bridge, sessionGuard).tools(postMaxChars = 5_000) +
