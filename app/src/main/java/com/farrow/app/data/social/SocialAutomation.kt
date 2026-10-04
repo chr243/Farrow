@@ -723,6 +723,8 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         val steps = mutableListOf<String>()
         fun log(m: String) { steps += m; onStep(m) }
         var lastWhy = ""
+        // Leftovers from earlier runs (unsent posts view, schedule picker, old composer) block the composer.
+        if (!ensureCleanPost(spec, postUrl, ::log)) log("could not get a clean post page; trying anyway")
         for (attempt in 1..spec.maxAttempts.coerceIn(1, 3)) {
             val viaIntent = attempt > 1
             val pick = try {
@@ -732,7 +734,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             if (pick !is ComposerPick.Found) {
                 lastWhy = (pick as? ComposerPick.Wrong)?.why ?: (pick as ComposerPick.Missing).why
                 log("attempt $attempt: $lastWhy")
-                closeStrayDialogs(spec, ::log)
+                closeStrayDialogs(spec, ::log, postUrl)
                 continue
             }
             log("attempt $attempt: ${pick.kind.name.lowercase()} composer")
@@ -744,15 +746,15 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             val after = locateComposer(spec, preferInline = pick.kind == ComposerKind.INLINE)
             if (after !is ComposerPick.Found || after.box != pick.box) {
                 lastWhy = "the composer changed while typing (${(after as? ComposerPick.Wrong)?.why ?: (after as? ComposerPick.Missing)?.why ?: "different box"})"
-                log(lastWhy); closeStrayDialogs(spec, ::log); continue
+                log(lastWhy); closeStrayDialogs(spec, ::log, postUrl); continue
             }
             if (!DomFinder.containsText(editorText(pick.box), text)) {
                 lastWhy = "the text did not land in the reply box"
-                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log); continue
+                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log, postUrl); continue
             }
             if (!after.sendEnabled) {
                 lastWhy = "the composer's Reply button stays disabled"
-                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log); continue
+                log(lastWhy); clearBox(pick.box); closeStrayDialogs(spec, ::log, postUrl); continue
             }
             // Submit: the composer's own button only (no keyboard fallback that could hit another control).
             val clicked = try { withTimeoutOrNull(clickTryMs(AutomationStep("click"))) { bridge.click(after.send) } } catch (e: java.io.IOException) { null }
@@ -773,11 +775,12 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     private suspend fun openComposer(spec: ReplyComposerSpec, postUrl: String, id: String, viaIntent: Boolean, log: (String) -> Unit): ComposerPick {
         if (viaIntent) {
             val u = config.url("replyIntent", mapOf("id" to id))
+            cleanStray(spec, log)
             log("open " + navigateTo(u, 30_000))
             if (!waitFor(spec.textarea, 20_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
             return locateComposer(spec)
         }
-        log("open " + navigateTo(postUrl, 30_000))
+        if (!ensureCleanPost(spec, postUrl, log)) return ComposerPick.Wrong("a stray dialog stays open or the post does not load")
         if (!waitFor(spec.focal, 25_000)) {
             ensureLoggedIn(navigate = false)
             return ComposerPick.Missing("the post did not load (no focal post)")
@@ -802,14 +805,68 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         return ReplyComposer.locate(o["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), spec, o["u"]?.jsonPrimitive?.contentOrNull, preferInline)
     }
 
-    /** Escape (twice) and the dialog's own close button — never a toolbar control. */
-    private suspend fun closeStrayDialogs(spec: ReplyComposerSpec, log: (String) -> Unit) {
-        pressKey("Escape"); delay(400); pressKey("Escape"); delay(600)
-        val closed = runCatching { evalString("""(()=>{const d=[...document.querySelectorAll(${js(spec.dialog)})].pop();if(!d)return 'none';
-            const b=d.querySelector('[data-testid="app-bar-close"],[aria-label="Close"],[data-testid="confirmationSheetCancel"]');if(b){b.click();return 'closed'}return 'open'})()""".trimIndent()) }.getOrNull()
-        // "Discard post?" sheet after Escape on a non-empty composer.
-        runCatching { evalString("""(()=>{const b=document.querySelector('[data-testid="confirmationSheetConfirm"]');if(b&&/discard/i.test(b.innerText)){b.click();return 'discarded'}return ''})()""") }
-        log("closed stray dialogs (${closed ?: "?"})")
+    /**
+     * Closes leftover overlays (unsent posts/drafts view, schedule picker, an old composer, a "Save post?" sheet) that
+     * aren't [ours]. Per overlay, escalating: Discard (never Save) → its close button → Escape → the mask. Re-checks
+     * after each action. Returns the overlays still open (empty = clean).
+     */
+    suspend fun cleanStray(spec: ReplyComposerSpec, log: (String) -> Unit = {}, ours: String? = null): List<Stray> {
+        val st = spec.stray
+        val tried = HashMap<String, Int>()
+        var left: List<Stray> = emptyList()
+        repeat(st.maxRounds.coerceIn(1, 12)) {
+            val snap = runCatching { evalString(StrayDialogs.snapshotJs(st))?.let { Json.parseToJsonElement(it).jsonObject } }.getOrNull()
+                ?: return left.also { log("stray check: page did not answer") }
+            left = StrayDialogs.analyze(snap["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), st, ours)
+            val top = left.lastOrNull() ?: return emptyList()
+            val n = (tried.getOrDefault(top.signature, 0)).also { tried[top.signature] = it + 1 }
+            val actions = buildList {
+                top.discard?.let { add("discard" to it) }
+                top.close?.let { add("close" to it) }
+                add("escape" to "")
+                if (snap["mask"]?.jsonPrimitive?.booleanOrNull == true && st.mask != null) add("mask" to st.mask)
+            }
+            val (what, css) = actions[n % actions.size]
+            when (what) {
+                "escape" -> pressKey("Escape")
+                else -> {
+                    val r = try { withTimeoutOrNull(10_000) { bridge.click(css) } } catch (e: java.io.IOException) { null }
+                    if (r?.ok != true) runCatching { evalString("(()=>{const e=document.querySelector(${js(css)});if(e){e.click();return 'clicked'}return 'none'})()") }
+                }
+            }
+            log("stray dialog '${top.summary}'${if (top.isSaveSheet) " (Save/Discard sheet)" else ""}: $what")
+            delay(700)
+        }
+        if (left.isNotEmpty()) log("still open after cleanup: ${left.joinToString { it.summary }}")
+        return left
+    }
+
+    /**
+     * Clean start on the post: close strays; if any remain or the URL isn't the post (/compose/, /schedule, /unsent,
+     * /drafts…), hard-navigate with location.replace and wait for the focal post; if that fails, go home and back.
+     */
+    suspend fun ensureCleanPost(spec: ReplyComposerSpec, postUrl: String, log: (String) -> Unit): Boolean {
+        val clean = postUrl.substringBefore('?').substringBefore('#')
+        val left = cleanStray(spec, log)
+        val url = runCatching { evalString("location.href") }.getOrNull()?.trim('"')
+        val wrong = StrayDialogs.notOnPost(url, spec.stray)
+        val onPost = url != null && url.substringBefore('?').trimEnd('/') == clean.trimEnd('/')
+        if (left.isEmpty() && onPost && wrong == null && exists(spec.focal)) return true
+        log("hard navigation to the post (" + (if (left.isNotEmpty()) "stray dialog open" else wrong?.let { "on $url" } ?: "not on the post") + ")")
+        runCatching { bridge.eval("location.replace(${js(clean)})") }
+        delay(1_500)
+        if (waitFor(spec.focal, 25_000) && cleanStray(spec, log).isEmpty()) return true
+        log("still not clean → x.com home, then back to the post")
+        runCatching { navigateTo(config.url("home"), 30_000) }
+        cleanStray(spec, log)
+        runCatching { navigateTo(clean, 30_000) }
+        return waitFor(spec.focal, 25_000) && cleanStray(spec, log).isEmpty()
+    }
+
+    /** Before a retry: strays closed, else back to a clean post page. */
+    private suspend fun closeStrayDialogs(spec: ReplyComposerSpec, log: (String) -> Unit, postUrl: String? = null) {
+        val left = cleanStray(spec, log)
+        if (postUrl != null && left.isNotEmpty()) ensureCleanPost(spec, postUrl, log)
     }
 
     private suspend fun clearBox(css: String) {
@@ -858,6 +915,14 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     }
 
     suspend fun post(text: String) {
+        config.reply?.let { spec ->
+            // Same leftover-dialog cleanup as x_reply; a stuck overlay → hard navigation home.
+            if (cleanStray(spec).isNotEmpty()) {
+                runCatching { bridge.eval("location.replace(${js(config.url("home"))})") }
+                delay(2_000)
+                cleanStray(spec)
+            }
+        }
         runSteps(config.postSteps, mapOf("text" to text))
     }
 

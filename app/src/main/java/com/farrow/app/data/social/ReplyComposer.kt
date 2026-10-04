@@ -29,6 +29,8 @@ data class ReplyComposerSpec(
     /** Regex (case-insensitive) of toast texts that mean the reply was NOT posted. */
     val errorToast: String? = null,
     val maxAttempts: Int = 2,
+    /** Leftover dialogs to close before replying/posting. */
+    val stray: StraySpec = StraySpec(),
 )
 
 enum class ComposerKind { MODAL, INLINE }

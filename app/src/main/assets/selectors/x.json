@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -134,7 +134,9 @@
       "/schedule",
       "/i/flow/",
       "/compose/post/media",
-      "/gif"
+      "/gif",
+      "/unsent",
+      "/drafts"
     ],
     "wrongDialog": [
       "[data-testid=\"scheduledConfirmationPrimaryAction\"]",
@@ -143,7 +145,49 @@
     ],
     "toast": "[data-testid=\"toast\"]",
     "errorToast": "(went wrong|try again|whoops|already said that|not allowed|daily limit|rate limit|could not|couldn.t)",
-    "maxAttempts": 2
+    "maxAttempts": 2,
+    "stray": {
+      "overlays": [
+        "[role=\"dialog\"]",
+        "[aria-modal=\"true\"]",
+        "div[data-testid=\"sheetDialog\"]"
+      ],
+      "layers": "#layers",
+      "markers": [
+        "[data-testid=\"unsentButton\"]",
+        "[data-testid=\"scheduledConfirmationPrimaryAction\"]",
+        "[data-testid=\"app-bar-close\"]",
+        "[data-testid=\"confirmationSheetConfirm\"]",
+        "[data-testid=\"confirmationSheetCancel\"]"
+      ],
+      "ignore": [
+        "[data-testid=\"toast\"]",
+        "[data-testid=\"HoverCard\"]",
+        "[role=\"status\"]",
+        "[role=\"alert\"]"
+      ],
+      "closeButtons": [
+        "[data-testid=\"app-bar-close\"]",
+        "[aria-label=\"Close\"]",
+        "[aria-label=\"Fermer\"]",
+        "[data-testid=\"app-bar-back\"]"
+      ],
+      "discardButtons": [
+        "[data-testid=\"confirmationSheetCancel\"]",
+        "[data-testid=\"confirmationSheetConfirm\"]"
+      ],
+      "discardText": "^(discard|supprimer|ignorer|abandonner|ne pas enregistrer)$",
+      "saveText": "^(save|enregistrer|sauvegarder)\\b",
+      "mask": "[data-testid=\"mask\"]",
+      "notPostUrlPatterns": [
+        "/compose/",
+        "/schedule",
+        "/unsent",
+        "/drafts",
+        "/i/flow/"
+      ],
+      "maxRounds": 6
+    }
   },
   "postSteps": [
     {
