@@ -556,3 +556,25 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - The step budgets (45 s, 45 s + 400 ms/char for typing) are caps (`withTimeoutOrNull`), never slept.
   - Result `timings_ms` (ready, stray_cleanup, `<n>_<action>_<selector>` per step, total); the step log is in ms; the
     bridge (1.14.0) adds `ms` to every command reply.
+
+## v1.0.14
+
+x_post clicks taking 30 s+ and a wedged browser (the next x_post's navigation stayed on /home).
+
+- **Cause (TBP, not v1.0.13):** the bridge called `tbp click --human`. TBP's human click makes two DevTools-console
+  evals for the element's centre and bounds, then 8–40 CDP-emulated mouse moves. Each move re-reads the viewport offset
+  through the console because the offset is cached for only 2 s, and a phone needs seconds per console eval. Every TBP
+  command runs under one global daemon lock, so the click blocked everything (even `ready` and the JS fallback). Killing
+  the CLI didn't stop the daemon handler, and the ongoing console/xdotool activity stole the keyboard focus from the
+  next keyboard navigation.
+- **Click:** bridge `click` keeps our xdotool Bézier mouse path but uses TBP's plain click (one eval, JS `.click()` and
+  a refocus). `tbp_human: true` restores `--human`. The per-click try cap is now 10 s (was 30 s).
+- **Hard step timeout:** each step runs detached with a hard budget. On a timeout the app calls the new bridge `cancel`
+  command, which kills the bridge's hung `tbp` CLI calls (never the daemon), then waits until TBP is idle. An abandoned
+  `click` also fires `cancel`.
+- **Wedge restart:** if x_post fails before any text was typed, because the browser isn't ready/busy, a step hit the
+  hard timeout, or the navigation failed, the browser daemon is restarted once and the post retried. The result then
+  carries `recovered`. There is never a retry after typing or the Post click.
+- **Bounded cleanup and shield:** the stray-overlay `location.replace(home)` is capped at 10 s, then the app waits for
+  idle. Shield evals are capped at 10 s.
+- Bridge 1.15.0.

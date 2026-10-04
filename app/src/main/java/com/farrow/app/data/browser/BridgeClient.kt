@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -346,6 +347,9 @@ class BridgeClient(private val config: BridgeEndpoint) {
         put("logged_out_patterns", JsonArray(loggedOutPatterns.map { JsonPrimitive(it) }))
     })
     suspend fun currentUrl() = command("url")
+
+    /** Bridge ≥ 1.15.0: kill the bridge's hung `tbp` CLI calls (never the daemon); "unknown cmd" on older bridges. */
+    suspend fun cancel() = command("cancel")
     suspend fun press(key: String) = command("press", buildJsonObject { put("key", key) })
 
     /** Bridge ≥ 1.8.0: focus (editable) or JS-click the element with one eval — no `tbp click`. */
@@ -363,15 +367,26 @@ class BridgeClient(private val config: BridgeEndpoint) {
     /** Click with a human-like Bézier path (normalised 0..1, mapped by the bridge from the pointer to the element). */
     suspend fun click(selector: String, human: Boolean = true): BridgeResult {
         val path = HumanInput.bezierPath(Point(0.0, 0.0), Point(1.0, 1.0), steps = 28)
-        return command("click", buildJsonObject {
+        return cancelOnAbandon { command("click", buildJsonObject {
             put("selector", selector)
             put("human", human)
             if (human) {
                 put("mouse_path", JsonArray(path.map { JsonArray(listOf(JsonPrimitive(it.x), JsonPrimitive(it.y))) }))
                 put("step_delay_ms", 14)
             }
-        })
+        }) }
     }
+
+    /**
+     * v1.0.14: when the caller gives up on [block] (timeout/cancel), tell the bridge (≥ 1.15.0 `cancel`) to kill the
+     * hung `tbp` CLI call, fire-and-forget, so the bridge command returns and the next one isn't queued behind it.
+     */
+    private suspend fun <T> cancelOnAbandon(block: suspend () -> T): T = try { block() } catch (e: kotlinx.coroutines.CancellationException) {
+        abandonScope.launch { runCatching { kotlinx.coroutines.withTimeoutOrNull(10_000) { cancel() } } }
+        throw e
+    }
+
+    private val abandonScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
     /** Types with per-character human delays computed on the phone. */
     suspend fun type(selector: String, text: String, submit: Boolean = false, human: Boolean = true): BridgeResult =

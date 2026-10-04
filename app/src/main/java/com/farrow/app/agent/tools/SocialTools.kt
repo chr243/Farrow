@@ -19,11 +19,11 @@ class SocialToolFactory(
     private val automation: SocialAutomation get() = SocialAutomation(store.get(site), bridge)
     private val displayName: String get() = runCatching { store.get(site).displayName }.getOrDefault(site)
 
-    private suspend fun guarded(ctx: ToolContext, block: suspend (SocialAutomation) -> String): String {
+    private suspend fun guarded(ctx: ToolContext, ready: Boolean = true, block: suspend (SocialAutomation) -> String): String {
         if (!bridge.isAvailable()) return errorJson("Browser bridge is not running. Open Settings > Internal browser setup.")
         return try {
             val a = automation
-            a.ensureBrowserReady(30)
+            if (ready) a.ensureBrowserReady(30)
             block(a)
         } catch (e: SessionExpiredException) {
             guard.flag(ctx.taskId, site, displayName, e.message ?: "")
@@ -73,9 +73,29 @@ class SocialToolFactory(
             val text = args.str("text")?.trim().orEmpty()
             if (text.isEmpty()) return errorJson("text is required")
             if (text.length > maxChars) return errorJson("text is ${text.length} chars; max is $maxChars")
-            return guarded(ctx) { a ->
-                a.post(text)
+            return guarded(ctx, ready = false) { a0 ->
+                var a = a0
+                var recovered: String? = null
+                // v1.0.14: a wedged browser (TBP stuck/busy, navigation failing, hard step timeout before anything was
+                // typed) → restart the browser once and retry. Never after typing or the Post click (no double post).
+                val reason: String? = try {
+                    a.ensureBrowserReady(30); a.post(text); null
+                } catch (e: AutomationException) {
+                    "not ready: ${e.message}"
+                } catch (e: StepFailedException) {
+                    if (!a.wedgedBeforeTyping(e)) throw e
+                    e.message ?: "step ${e.index} failed"
+                }
+                if (reason != null) {
+                    val t0 = System.currentTimeMillis()
+                    runCatching { kotlinx.coroutines.withTimeoutOrNull(120_000) { bridge.resetDaemonAtomic() } }
+                    a = automation
+                    a.ensureBrowserReady(60)
+                    recovered = "browser restarted in ${(System.currentTimeMillis() - t0) / 1000} s after: ${reason.take(200)}"
+                    a.post(text)
+                }
                 buildJsonObject { put("ok", true); put("site", site); put("posted_chars", text.length)
+                    recovered?.let { put("recovered", it) }
                     put("timings_ms", buildJsonObject { a.lastReadyMs?.let { put("ready", it) }; a.lastPostTimings.forEach { (k, v) -> put(k, v) } })
                     put("steps", JsonArray(a.lastStepLog.map { JsonPrimitive(it) })) }.toString()
             }

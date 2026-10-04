@@ -42,7 +42,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "1.14.0"
+VERSION = "1.15.0"
 HOME = os.path.expanduser("~")
 STATE_DIR = os.path.join(HOME, ".farrow")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
@@ -570,10 +570,18 @@ def replay_path(selector, path, step_delay_ms):
     return True
 
 
+# bridge 1.15.0 (Farrow v1.0.14): why x_post's clicks took 30 s+ and wedged the browser — TBP's `click --human` emulates
+# CDP mouse events with xdotool and re-reads the viewport offset through the DevTools console every 2 s (its cache TTL),
+# plus two console evals for the element's centre and bounds. A phone needs seconds per console eval, so one Bézier path
+# took tens of seconds while holding TBP's global command lock (every other command, even `ready`, queued behind it, and
+# its console activity stole the keyboard focus from the next keyboard navigation). The human mouse path is ours anyway
+# (replayed above with xdotool, no console); the click itself now uses TBP's normal click (JS .click() + refocus of the
+# main window, one eval) — the same click the app's JS fallback already did successfully. `tbp_human: true` restores
+# TBP's --human click.
 def cmd_click(a):
     sel = a.get("selector") or ""
     moved = replay_path(sel, a.get("mouse_path"), a.get("step_delay_ms"))
-    res = tbp("click", sel, *(["--human"] if a.get("human", True) else []))
+    res = tbp("click", sel, *(["--human"] if a.get("tbp_human", False) else []))
     res["mouse_path_replayed"] = moved
     return res
 
@@ -1122,7 +1130,7 @@ def cmd_goto(a):
 # waits for in-flight commands and probes the console, and a cookie-store + URL `site_status` (no JS).
 inflight = {"n": 0, "cmds": []}
 inflight_cv = threading.Condition()
-NO_DAEMON_CMDS = {"job_start", "job_status", "ready", "site_status", "status", "cookies_check", "cookies_list", "exec", "fingerprint", "set_language", "set_media", "start", "stop", "reset"}
+NO_DAEMON_CMDS = {"cancel", "job_start", "job_status", "ready", "site_status", "status", "cookies_check", "cookies_list", "exec", "fingerprint", "set_language", "set_media", "start", "stop", "reset"}
 
 
 def url_matches(url, target):
@@ -1294,6 +1302,47 @@ def cmd_key(a):
     xdotool("windowactivate", "--sync", wid)
     code, _o, err = xdotool("key", "--clearmodifiers", keys)
     return {"ok": code == 0, "code": code, "stdout": "", "stderr": err, "data": {"keys": keys}}
+
+
+# bridge 1.15.0 (Farrow v1.0.14): new `cancel` command (kills hung tbp CLI calls).
+CANCELLABLE = {"click", "eval", "type", "press", "goto", "text", "html", "screenshot"}
+
+
+def cmd_cancel(a):
+    """Kill this bridge's hung `tbp <cmd> --json` CLI calls (the app gave up on them), so the bridge commands waiting on
+    them return and `ready` can drain. Never touches the TBP daemon, Firefox or Xvfb (only CLI client processes)."""
+    keep = set()
+    for dpid in {read_pid(TBP_PID), live_tbp_pid()}:
+        if dpid:
+            keep.add(dpid)
+            keep.update(children_of(dpid))
+    killed = []
+    for pid in children_of(os.getpid()):
+        if pid in keep:
+            continue
+        try:
+            with open("/proc/%d/cmdline" % pid, "rb") as f:
+                argv = [x.decode("utf-8", "replace") for x in f.read().split(b"\0") if x]
+        except OSError:
+            continue
+        names = [os.path.basename(x) for x in argv[:3]]
+        if "--json" not in argv or "tbp" not in names:
+            continue
+        i = names.index("tbp")
+        sub = argv[i + 1] if i + 1 < len(argv) else ""
+        if sub not in CANCELLABLE:
+            continue
+        for v in [pid] + [c for c in children_of(pid) if c not in keep]:
+            try:
+                os.kill(v, 9)
+            except OSError:
+                pass
+        killed.append("%d %s" % (pid, sub))
+    if killed:
+        log("cancel: killed %s" % ", ".join(killed))
+    with inflight_cv:
+        busy = list(inflight["cmds"])
+    return {"ok": True, "code": 0, "stdout": "", "stderr": "", "data": {"killed": killed, "busy": busy}}
 
 
 # bridge 1.13.0 (Farrow v1.0.11): editor_type is again exactly v1.0.0's (bridge 1.9.0) — focus by eval → xdotool
@@ -1669,6 +1718,7 @@ def cmd_screenshot(a):
 
 
 COMMANDS = {
+    "cancel": cmd_cancel,
     "goto": cmd_goto,
     "text": lambda a: tbp("text", *(["--selector", a["selector"]] if a.get("selector") else [])),
     "html": lambda a: tbp("html", *(["--selector", a["selector"]] if a.get("selector") else [])),

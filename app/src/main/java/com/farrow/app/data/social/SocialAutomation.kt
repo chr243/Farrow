@@ -2,6 +2,7 @@ package com.farrow.app.data.social
 
 import com.farrow.app.data.browser.BridgeClient
 import com.farrow.app.data.browser.BridgeResult
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -151,7 +152,9 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
      * Returns a short log line.
      */
     suspend fun navigateTo(url: String, timeoutMs: Long = 30_000): String =
-        try { navigateRaw(url, timeoutMs) } finally { if (pageShield) withContext(kotlinx.coroutines.NonCancellable) { shield() } }
+        try { navigateRaw(url, timeoutMs) } finally {
+            if (pageShield) withContext(kotlinx.coroutines.NonCancellable) { withTimeoutOrNull(SHIELD_EVAL_MAX_MS) { shield() } }
+        }
 
     private suspend fun navigateRaw(url: String, timeoutMs: Long): String {
         val t0 = System.currentTimeMillis()
@@ -338,6 +341,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     ) {
         fun fill(t: String?): String = (t ?: "").let { var r = it; vars.forEach { (k, v) -> r = r.replace("{$k}", v) }; r }
         val stepLog = mutableListOf<String>()
+        hung = false
         val timings = LinkedHashMap<String, Long>().also { lastStepTimings = it }
         for ((i, s) in steps.withIndex()) {
             val name = "Step ${i + 1}/${steps.size} (${describe(s)})"
@@ -364,12 +368,12 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             }
             val budget = maxOf(s.timeoutMs, s.ms) + typeBudget + 5_000
             val outcome = try {
-                withTimeoutOrNull(budget) { runOne(s, ::fill, urlParams) }
+                hardTimeout(budget) { runOne(s, ::fill, urlParams) }
             } catch (e: StepFailedException) { throw e } catch (e: SessionExpiredException) { throw e
             } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) { fail("failed: ${e.message ?: e.javaClass.simpleName}") }
             when (outcome) {
-                null -> fail("timed out after ${budget / 1000} s")
+                null -> { hung = true; fail("timed out after ${budget / 1000} s; ${recoverAfterTimeout()}") }
                 is StepOutcome.Failed -> if (!s.optional) fail(outcome.why)
                 StepOutcome.Ok, StepOutcome.Skipped -> Unit
             }
@@ -380,6 +384,40 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         }
         lastStepLog = stepLog.toList()
     }
+
+    /**
+     * v1.0.14: [block] with a HARD deadline. It runs in a detached child that is cancelled at [ms]; we stop waiting at
+     * [ms] even if that child doesn't finish cancelling (on the phone a hung click step returned only after 225 s of a
+     * 125 s budget). Exceptions from [block] propagate; null = timed out.
+     */
+    private suspend fun <T : Any> hardTimeout(ms: Long, block: suspend () -> T): T? {
+        val scope = kotlinx.coroutines.CoroutineScope(kotlin.coroutines.coroutineContext.minusKey(kotlinx.coroutines.Job) + kotlinx.coroutines.SupervisorJob())
+        val d = scope.async { block() }
+        return try {
+            withTimeoutOrNull(ms) { d.await() } ?: run { d.cancel(); null }
+        } catch (e: kotlinx.coroutines.CancellationException) { d.cancel(); throw e }
+    }
+
+    /**
+     * After a step timed out: kill the bridge's hung `tbp` CLI calls (bridge ≥ 1.15.0 `cancel`) and wait until TBP is
+     * idle, so the next command (or the next x_post) isn't queued behind the hung one. Returns a log line.
+     */
+    private suspend fun recoverAfterTimeout(): String {
+        val c = runCatching { hardTimeout(10_000) { bridge.cancel() } }.getOrNull()
+        val what = when {
+            c == null -> "cancel: no answer"
+            c.unknownCmd() -> "cancel: old bridge"
+            else -> "cancel: killed " + ((c.data as? JsonObject)?.get("killed")?.let { runCatching { it.jsonArray.size }.getOrNull() } ?: 0) + " hung call(s)"
+        }
+        val idle = runCatching { hardTimeout(45_000) { waitIdle() } }.getOrNull() ?: "browser still busy after 45 s"
+        return "$what; $idle"
+    }
+
+    /**
+     * True when a step of the last [runSteps] ran into its hard budget (a bridge/TBP call hung): x_post then restarts
+     * the browser once and retries (see SocialTools).
+     */
+    @Volatile var hung = false
 
     /** `timings_ms` key of a step: "3_click_composeText". */
     private fun stepKey(i: Int, s: AutomationStep) = "${i + 1}_${s.action}" + (s.selector ?: s.url)?.let { "_$it" }.orEmpty()
@@ -534,7 +572,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     }
 
     /** Upper bound for the TBP click attempt (tests shorten it). */
-    internal var clickTryMaxMs = 30_000L
+    internal var clickTryMaxMs = CLICK_TRY_MAX_MS
 
     /** TBP click attempt length inside a click step; the rest of the step budget is for the fallbacks. */
     private fun clickTryMs(s: AutomationStep) = minOf(s.timeoutMs, clickTryMaxMs)
@@ -662,7 +700,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         return try { shield(); block() } finally {
             pageShield = false
             // Grok shield off; the media filter is left to lapse (images stay blocked while the page is on screen).
-            withContext(kotlinx.coroutines.NonCancellable) { runCatching { evalString(GrokShield.OFF) } }
+            withContext(kotlinx.coroutines.NonCancellable) { withTimeoutOrNull(SHIELD_EVAL_MAX_MS) { runCatching { evalString(GrokShield.OFF) } } }
         }
     }
 
@@ -846,7 +884,10 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         config.stray?.let { st ->
             // A stuck overlay → hard navigation home, then one more cleanup round; all before the post flow starts.
             if (cleanStray(st).isNotEmpty()) {
-                runCatching { bridge.eval("location.replace(${js(config.url("home"))})") }
+                // v1.0.14: bounded; if the page doesn't answer, wait until TBP is idle so a late, queued replace can't
+                // send the browser home after the compose navigation.
+                val r = runCatching { hardTimeout(10_000) { bridge.eval("location.replace(${js(config.url("home"))})") } }.getOrNull()
+                if (r == null) runCatching { hardTimeout(45_000) { waitIdle() } }
                 // v1.0.13: was a fixed 2 s; now polls until the home page is loading/loaded (≤ 3 s).
                 val until = System.currentTimeMillis() + 3_000
                 while (System.currentTimeMillis() < until) {
@@ -863,6 +904,18 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         } finally {
             lastPostTimings = LinkedHashMap(pre).apply { putAll(lastStepTimings); put("total", System.currentTimeMillis() - t0) }
         }
+    }
+
+    /**
+     * v1.0.14: true when a failed [post] looks like a wedged browser and nothing can have been posted or typed yet:
+     * the failing step comes before the first typing step (so before the Post click) and it either hit the hard step
+     * timeout ([hung]) or was the navigation step. x_post then restarts the browser once and retries.
+     */
+    fun wedgedBeforeTyping(e: StepFailedException): Boolean {
+        val firstType = config.postSteps.indexOfFirst { it.action == "typeEditor" || it.action == "type" || it.action == "press" }
+            .let { if (it < 0) config.postSteps.size else it }
+        if (e.index < 1 || e.index > firstType) return false
+        return hung || config.postSteps.getOrNull(e.index - 1)?.action == "goto"
     }
 
     /** x_post `timings_ms`: stray_cleanup, one entry per step (see [lastStepTimings]) and total. */
@@ -996,7 +1049,14 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         }
         /** v1.0.13: was 600 ms. Each poll is one eval (the eval itself takes most of the time on a phone). */
         private const val POLL_MS = 200L
+        /**
+         * v1.0.14: cap of the TBP click attempt before the JS focus/click fallback (was 30 s). Bridge 1.15.0 no longer
+         * uses TBP's slow `--human` click, so a normal click takes ~1 eval; this only bounds a hung one.
+         */
+        const val CLICK_TRY_MAX_MS = 10_000L
         private const val STRAY_SETTLE_MAX_MS = 1_500L
+        /** v1.0.14: the non-cancellable Grok-shield evals after navigation / at the end of x_post never block longer. */
+        private const val SHIELD_EVAL_MAX_MS = 10_000L
         /** Extra step budget for click / typeEditor fallbacks (idle wait + JS focus + insertText). */
         private const val FALLBACK_BUDGET_MS = 75_000L
         private const val OLD_BRIDGE_IDLE_MS = 3_000L

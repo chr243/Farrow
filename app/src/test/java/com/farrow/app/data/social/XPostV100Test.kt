@@ -71,7 +71,9 @@ class XPostV100Test {
             "def cmd_focus(a):" to "623af5d1a7db1f6b32ed4263b392569b0f9b9c376f8a6243e63e5c53def9dd64",
             "def cmd_key(a):" to "436f391fd0ba71973a875c0910889039c18f9b787b5d29e3052848b28766ea1e",
             "def cmd_editor_type(a):" to "74e3db6fb00ba9d7f17d65f2456e62cc890e456373ddec3cfe8d575b0b9ccc89",
-            "def cmd_click(a):" to "333a5739f9fde016a7ff3ddd1e756994ce66d6d5415f2a69cca1fa1e2c484422",
+            // v1.0.14: the only change is TBP's `click --human` → plain `click` (opt-in via tbp_human); our xdotool mouse path is
+            // unchanged. TBP's human click re-read the viewport through the DevTools console every 2 s → 30 s+ clicks on a phone.
+            "def cmd_click(a):" to "0a74ec74c24a12a469d8df5fee821b51383a6e6ca5cce5ce95c948be31b070cf",
             "def cmd_type(a):" to "c9857c7ea0723cb53ae1e795c61b8b43fa09d49f4b6accbf8e46afccc3dc6d04",
         ).forEach { (start, hash) -> assertEquals("tbp_bridge.py '$start' differs from v1.0.0", hash, sha(pyBlock(py, start))) }
         assertFalse(py.contains("clipboard_paste") || py.contains("PREP_JS") || py.contains("data-farrow-typing"))
