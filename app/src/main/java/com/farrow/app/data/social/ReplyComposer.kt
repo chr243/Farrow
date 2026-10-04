@@ -149,58 +149,41 @@ object ReplyComposer {
             return JSON.stringify({h:h,u:location.href})})()""".trimIndent()
     }
 
-    // ---------------- v1.0.8: the editor x_reply types into ----------------
+    // ---------------- v1.0.8/v1.0.9: what the composer selector resolves to (step-log diagnostics) ----------------
 
-    /** Stable attribute on THE contenteditable x_reply types into (set right before the click; independent of [MARK]). */
-    const val EDITOR_ATTR = "data-farrow-editor"
-    const val EDITOR_CSS = "[$EDITOR_ATTR=\"1\"]"
     /** Draft.js editor inside a composer box (X: the tweetTextarea_0 div IS the contenteditable). */
     const val EDITABLE = "[contenteditable=\"true\"],[contenteditable=\"\"],.public-DraftEditor-content,[role=\"textbox\"]"
 
     /**
-     * Resolves and marks the contenteditable to type into. MODAL: always the editor inside the TOP non-Grok dialog that
-     * holds a reply box (never a page composer behind it — on /home the home timeline's own tweetTextarea_0 comes FIRST
-     * in the document); the snapshot mark [box] is only used when it is inside that dialog. INLINE: the marked box.
-     * Scrolls it to the centre and returns JSON {ok, why, testid, cls, rect:[x,y,w,h], inDialog, focused, boxes, chars}.
+     * v1.0.9: what x_post's own selector [box] (document.querySelector = the FIRST match) resolves to, without marking or
+     * moving anything: {ok, testid, cls, rect, inDialog, inConversation, inArticle, focused, boxes, chars, u, ctx} where
+     * ctx is the text of its dialog, else of its composer (nearest ancestor holding a tweetButton*).
      */
-    fun editorTargetJs(box: String, spec: ReplyComposerSpec, modal: Boolean): String {
+    fun composeTargetJs(box: String, dialog: String, conversation: String): String {
         fun q(v: String) = kotlinx.serialization.json.JsonPrimitive(v).toString()
-        return """(()=>{const A='$EDITOR_ATTR',D=${q(spec.dialog)},T=${q(spec.textarea)},E=${q(EDITABLE)},G='[${GrokShield.ATTR}]';
-            document.querySelectorAll('['+A+']').forEach(e=>e.removeAttribute(A));
-            const out=o=>JSON.stringify(o);let base=document.querySelector(${q(box)});
-            if($modal){const ds=[...document.querySelectorAll(D)].filter(d=>!d.closest(G)&&d.querySelector(T));const top=ds[ds.length-1];
-              if(!top)return out({ok:false,why:'no dialog with a reply box is open',boxes:document.querySelectorAll(T).length});
-              if(!base||!top.contains(base))base=top.querySelector(T)}
-            if(!base)return out({ok:false,why:'the reply box is gone',boxes:document.querySelectorAll(T).length});
-            const ed=base.matches(E)?base:base.querySelector(E);
-            if(!ed)return out({ok:false,why:'no contenteditable in the reply box',boxes:document.querySelectorAll(T).length});
-            ed.setAttribute(A,'1');try{ed.scrollIntoView({block:'center',inline:'center'})}catch(x){}
-            const r=ed.getBoundingClientRect(),a=document.activeElement;
-            return out({ok:true,testid:ed.getAttribute('data-testid')||base.getAttribute('data-testid')||'',cls:String(ed.className||'').slice(0,60),
-              rect:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],inDialog:!!ed.closest(D),
-              focused:!!(a&&(a===ed||ed.contains(a))),boxes:document.querySelectorAll(T).length,chars:(ed.textContent||'').length})})()""".trimIndent()
+        return """(()=>{const T=${q(box)},D=${q(dialog)},C=${q(conversation)},E=${q(EDITABLE)};const all=document.querySelectorAll(T).length;
+            const b=document.querySelector(T);if(!b)return JSON.stringify({ok:false,why:'no composer box',boxes:all,u:location.href});
+            const ed=b.matches(E)?b:(b.querySelector(E)||b);const r=ed.getBoundingClientRect(),a=document.activeElement,d=b.closest(D);
+            let c=b;for(let i=0;i<10&&c.parentElement;i++){c=c.parentElement;if(c.querySelector('[data-testid^="tweetButton"]'))break}
+            return JSON.stringify({ok:true,testid:ed.getAttribute('data-testid')||b.getAttribute('data-testid')||'',cls:String(ed.className||'').slice(0,60),
+              rect:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],inDialog:!!d,inConversation:!!b.closest(C),
+              inArticle:!!b.closest('article'),focused:!!(a&&(a===ed||ed.contains(a))),boxes:all,chars:(ed.textContent||'').length,
+              u:location.href,ctx:String((d||c).innerText||'').slice(0,1500)})})()""".trimIndent()
     }
 
-    /** "yes" when document.activeElement is the editor (or inside it). */
-    const val ACTIVE_JS = "(()=>{const e=document.querySelector('$EDITOR_CSS');const a=document.activeElement;return e&&a&&(a===e||e.contains(a))?'yes':'no'})()"
-
-    /** textContent of the marked editor (what X's Draft.js really holds). */
-    const val EDITOR_TEXT_JS = "(()=>{const e=document.querySelector('$EDITOR_CSS');return e?String(e.textContent||''):'__missing__'})()"
-
-    /** Alternative to typing: a synthetic paste (DataTransfer) into the focused editor — Draft.js inserts it. */
-    fun pasteJs(text: String): String {
-        val t = kotlinx.serialization.json.JsonPrimitive(text).toString()
-        return "(()=>{const e=document.querySelector('$EDITOR_CSS');if(!e)return 'missing';e.focus();" +
-            "try{document.execCommand('selectAll',false,null)}catch(x){}" +
-            "try{const dt=new DataTransfer();dt.setData('text/plain',$t);e.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));return 'pasted'}catch(x){return 'failed: '+x}})()"
-    }
-
-    /** Parsed [editorTargetJs] result (logged in the x_reply step log). */
+    /** Parsed [composeTargetJs] result (logged in the step log of x_post and x_reply). */
     data class EditorTarget(val ok: Boolean, val why: String?, val testid: String, val cls: String, val rect: List<Int>,
-                            val inDialog: Boolean, val focused: Boolean, val boxes: Int, val chars: Int) {
+                            val inDialog: Boolean, val focused: Boolean, val boxes: Int, val chars: Int,
+                            /** v1.0.9 [composeTargetJs]: inside the conversation column / inside a post, page URL, composer text. */
+                            val inConversation: Boolean = false, val inArticle: Boolean = false, val url: String? = null, val ctx: String = "") {
         fun describe() = if (!ok) "none (${why ?: "?"}; $boxes reply boxes on the page)" else
             "testid=${testid.ifBlank { "?" }}${if (cls.isNotBlank()) " .${cls.substringBefore(' ')}" else ""} rect=${rect.joinToString(",")} " +
-                "inDialog=$inDialog focused=$focused boxes=$boxes chars=$chars"
+                "inDialog=$inDialog focused=$focused boxes=$boxes chars=$chars" + (if (inConversation) " inConversation=true" else "") +
+                (if (inArticle) " inArticle=true" else "") + (url?.let { " url=$it" } ?: "")
+
+        /** {u, ctx} for [IntentComposer.check]. */
+        fun contextJson() = kotlinx.serialization.json.buildJsonObject {
+            put("u", kotlinx.serialization.json.JsonPrimitive(url)); put("ctx", kotlinx.serialization.json.JsonPrimitive(ctx)) }.toString()
     }
 
     fun parseEditorTarget(raw: String?): EditorTarget {
@@ -210,20 +193,7 @@ object ReplyComposer {
         fun bool(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
         fun int(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 0
         val rect = (o["rect"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() }.orEmpty()
-        return EditorTarget(bool("ok"), str("why"), str("testid").orEmpty(), str("cls").orEmpty(), rect, bool("inDialog"), bool("focused"), int("boxes"), int("chars"))
-    }
-
-    /** Jsoup twin of [editorTargetJs]'s selection (tests): the element the JS would mark, or null. */
-    fun editorFor(doc: org.jsoup.nodes.Document, box: String?, spec: ReplyComposerSpec, modal: Boolean): Element? {
-        var base = box?.let { doc.selectFirst(jsoupCss(it)) }
-        if (modal) {
-            val t = jsoupCss(spec.textarea)
-            val top = doc.select(jsoupCss(spec.dialog)).filter { d -> d.closest("[${GrokShield.ATTR}]") == null && d.selectFirst(t) != null }.lastOrNull()
-                ?: return null
-            if (base == null || base !in top.allElements) base = top.selectFirst(t)
-        }
-        val b = base ?: return null
-        val editable = jsoupCss(EDITABLE)
-        return if (b.`is`(editable)) b else b.selectFirst(editable)
+        return EditorTarget(bool("ok"), str("why"), str("testid").orEmpty(), str("cls").orEmpty(), rect, bool("inDialog"), bool("focused"), int("boxes"), int("chars"),
+            bool("inConversation"), bool("inArticle"), str("u"), str("ctx").orEmpty())
     }
 }

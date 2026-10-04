@@ -557,3 +557,19 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   5. The editor's `textContent` is verified for up to 2 s. If the text is still missing: one retry with refocus + `execCommand('insertText')`, then a synthetic paste (`ClipboardEvent` + `DataTransfer`). After that x_reply fails fast ("typing failed in the modal reply composer: …; nothing was posted") instead of running into the budget.
 - The intent path now waits for `[role=dialog] [data-testid=tweetTextarea_0]` and rejects a non-modal pick (a page box behind the modal).
 - The step log names the target: testid, class, bounding rect, inDialog, focused, number of reply boxes, chars. It also has stage timings (open composer / focus / type / verify / retry / settle / submit, plus a summary on failure or budget timeout).
+
+## v1.0.9
+- **x_reply now uses x_post's implementation** (`SocialAutomation.composeAndSubmit`, shared by both). The separate reply typing path is removed: `replyAttempts`, `openComposer`, `focusAndType`, the snapshot-mark editor, `submitOnce`, `confirmReply` and the stray/post-page retries. Only the opening differs, plus a "Replying to @author" pre-check.
+- **What x_post did differently from x_reply (v1.0.8):**
+  - **URL:** x_post opens `https://x.com/compose/post` with a `goto` step (nav, 40 s). x_reply opened `intent/post?in_reply_to=<id>`, which redirects, with a 10 s nav.
+  - **Editor:** x_post uses x.json's plain `composeText` = `[data-testid="tweetTextarea_0"]` everywhere (TBP click, `editor_type`, settle). TBP resolves it with `document.querySelector`, i.e. the first match in the document. x_reply typed into an element it had resolved and marked itself (`data-farrow-i` from a page snapshot, then `data-farrow-editor` inside `[role=dialog]`).
+  - **Waits:** x_post waits up to 45 s for `composeText` and goes straight to the click. x_reply waited 15 s for the dialog's box, then ran a stray-dialog cleanup, a page snapshot, a context eval and an editor-resolve eval before clicking.
+  - **Click:** both use `sturdyClick`, but x_post allows 30 s for the TBP click and x_reply allowed 10 s.
+  - **Typing:** both use `typeIntoEditor` / bridge `editor_type`, but x_post's budget is 45 s + 400 ms/char and x_reply's was 12 s + 150 ms/char. x_reply also added its own verify/insertText/paste retry.
+  - **Submit and confirmation:** x_post runs `settleSubmit` on `composeText`/`composeSubmit`, clicks `composeSubmit` (ctrl+Return fallback) and waits for the success toast or the box closing (`waitPosted`). x_reply clicked a marked send button once and polled its own toast/emptied-box probe.
+- **x_reply now:**
+  - **Path A:** `/compose/post?in_reply_to=<id>`, then x_post's steps. The new `target` step runs right after `waitFor composeText`. It logs what x_post's selector resolves to (testid, class, rect, inDialog, inConversation, inArticle, focused, number of boxes, chars, URL). For x_reply it also requires that box to be inside the composer dialog with "Replying to @author" (polled for up to 4 s). This happens before anything is clicked or typed.
+  - **Path B** (pre-check failed, e.g. the first `composeText` is the home box behind the modal): the post page, then x_post's steps on the conversation's inline reply box under the post. The reply bubble is clicked only when there is no inline box.
+  - Any other step failure stops x_reply ("…; nothing was posted"), or reports "submitted, not confirmed" after the submit click.
+- **x_post** is unchanged apart from the logging `target` step (8 steps).
+- The x_reply budget is now 90 s (two opens with x_post's own waits). The step log keeps the v1.0.8 diagnostics: the target line and per-path timings with a summary.

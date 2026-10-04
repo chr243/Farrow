@@ -156,40 +156,24 @@ class ReplyComposerTest {
 
     // ---- v1.0.8: typing target in the intent modal over /home ----
 
-    @Test fun `modal over home - the editor is the dialog's contenteditable, never the home composer behind it`() {
-        val (h, doc) = marked(fixture("x_intent_modal_over_home.html"))
-        // Root cause: the first tweetTextarea_0 in the document (what a plain querySelector / the old wait saw) is
-        // the home timeline's composer BEHIND the modal.
-        val first = doc.selectFirst(spec.textarea)!!
+    @Test fun `modal over home - x_post's selector resolves to the home box behind the modal (first in the document)`() {
+        val doc = Jsoup.parse(fixture("x_intent_modal_over_home.html"))
+        val composeText = x.sel("composeText")
+        val first = doc.selectFirst(composeText)!!
         assertTrue(first.parents().none { it.attr("role") == "dialog" })
-        val p = ReplyComposer.locate(h, spec, "https://x.com/compose/post") as ComposerPick.Found
-        assertEquals(ComposerKind.MODAL, p.kind)
-        val ed = ReplyComposer.editorFor(doc, p.box, spec, modal = true)!!
-        assertEquals("true", ed.attr("contenteditable"))
-        assertEquals("tweetTextarea_0", ed.attr("data-testid"))
-        assertTrue(ed.parents().any { it.attr("role") == "dialog" })
-        assertNotSame(first, ed)
-        // Even a stale mark pointing at the composer behind the modal resolves to the dialog's editor.
-        first.attr(ReplyComposer.MARK, "stale")
-        assertSame(ed, ReplyComposer.editorFor(doc, ReplyComposer.sel("stale"), spec, modal = true))
-        assertSame(ed, ReplyComposer.editorFor(doc, null, spec, modal = true))
-        // Inline keeps the marked box.
-        assertSame(first, ReplyComposer.editorFor(doc, ReplyComposer.sel("stale"), spec, modal = false))
-        // The intent wait now requires the box inside the dialog.
-        assertEquals(1, doc.select("${spec.dialog} ${spec.textarea}").size)
-        java.io.File("build/tmp/replytype").apply { mkdirs() }.let { d ->
-            d.resolve("target.js").writeText(ReplyComposer.editorTargetJs(ReplyComposer.sel("stale"), spec, true))
-            d.resolve("active.js").writeText(ReplyComposer.ACTIVE_JS)
-            d.resolve("text.js").writeText(ReplyComposer.EDITOR_TEXT_JS)
-            d.resolve("paste.js").writeText(ReplyComposer.pasteJs("hello world"))
-        }
+        assertTrue(first.parents().any { it.attr("data-testid") == "primaryColumn" })
+        assertEquals(2, doc.select(composeText).size)
+        // The JS twin of this check runs in the `target` step of x_post and x_reply (jsdom-checked from this dump).
+        java.io.File("build/tmp/replytype").apply { mkdirs() }.resolve("compose_target.js")
+            .writeText(ReplyComposer.composeTargetJs(composeText, spec.dialog, spec.conversation))
     }
 
     @Test fun `editor target is parsed and described for the step log`() {
-        val t = ReplyComposer.parseEditorTarget("""{"ok":true,"testid":"tweetTextarea_0","cls":"notranslate public-DraftEditor-content","rect":[12,140.4,336,24],"inDialog":true,"focused":false,"boxes":2,"chars":0}""")
+        val t = ReplyComposer.parseEditorTarget("""{"ok":true,"testid":"tweetTextarea_0","cls":"notranslate public-DraftEditor-content","rect":[12,140.4,336,24],"inDialog":true,"focused":false,"boxes":2,"chars":0,"u":"https://x.com/compose/post","ctx":"Replying to @bob"}""")
+        assertEquals("https://x.com/compose/post", t.url); assertEquals("Replying to @bob", t.ctx)
         assertTrue(t.ok && t.inDialog && !t.focused)
         assertEquals(listOf(12, 140, 336, 24), t.rect)
-        assertEquals("testid=tweetTextarea_0 .notranslate rect=12,140,336,24 inDialog=true focused=false boxes=2 chars=0", t.describe())
+        assertEquals("testid=tweetTextarea_0 .notranslate rect=12,140,336,24 inDialog=true focused=false boxes=2 chars=0 url=https://x.com/compose/post", t.describe())
         val none = ReplyComposer.parseEditorTarget("""{"ok":false,"why":"no dialog with a reply box is open","boxes":1}""")
         assertFalse(none.ok); assertTrue(none.describe().contains("no dialog"))
         assertFalse(ReplyComposer.parseEditorTarget(null).ok)

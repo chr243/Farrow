@@ -164,7 +164,7 @@ class XAutomationTest {
         val e = runCatching { SocialAutomation(xConfig(shrink = true), bridge).post("hi") }.exceptionOrNull()
         assertTrue(e.toString(), e is StepFailedException)
         val m = e!!.message!!
-        assertTrue(m, m.contains("Step 2/7") && m.contains("Step log:") && m.contains("1. goto compose: ok"))
+        assertTrue(m, m.contains("Step 2/8") && m.contains("Step log:") && m.contains("1. goto compose: ok"))
         assertTrue(m, m.contains("2. waitFor composeText: FAILED") && m.contains("last eval error"))
     }
 
