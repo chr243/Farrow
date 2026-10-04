@@ -579,7 +579,7 @@ x_post clicks taking 30 s+ and a wedged browser (the next x_post's navigation st
   idle. Shield evals are capped at 10 s.
 - Bridge 1.15.0.
 
-## x_post_beta (unreleased, after v1.0.14)
+## v1.0.15: x_post_beta (released)
 
 `x_post_beta` is a separate tool and is off by default. On the Tools page its label is "Beta: faster X posting". Its
 code lives in `XPostBeta.kt`, `XPostBetaShield.kt` and `agent/tools/XPostBetaTool.kt`. x_post is unchanged: no x_post
