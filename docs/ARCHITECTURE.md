@@ -614,3 +614,29 @@ The beta does one eval per phase. TBP is only a fallback, used when the JS actio
 
 If the post fails before any text was inserted, the browser is restarted once and the post retried. There is never a
 retry after the insert.
+
+### x_post_beta fixes after the first phone run (unreleased, after v1.0.15)
+
+What happened. The beta's first attempt hung in stray_check: the first probe eval after a browser start, on about:blank,
+didn't answer within 25 s. That failure was before typing, so the tool restarted the browser (36 s) and retried. The
+reported timings were the retry's own. In the retry, insert_text said "ok" because the editor's DOM held the 15 chars.
+X's Draft.js state probably never got them, so the Post button stayed disabled. `clickSubmit` then spent its 5 s
+"disabled" loop, a TBP click (≤ 15 s) and ctrl+Return (≤ 10 s), which ran into the 30 s phase cap. No eval was stuck.
+Nothing was posted, which the user confirmed: the button was disabled and Draft had no text for ctrl+Return.
+There was no retry after the insert (`failedBeforeTyping` is cleared before insert_text).
+
+Probable reason Draft missed the text: every TBP eval runs with the DevTools console window holding the OS focus. The
+JS `focus()` sets `activeElement`, but Draft never gets a real focus event. x_post's path activates the main window
+(TBP click + refocus, and `editor_type`'s windowactivate) before its insertText.
+
+Fixes, beta only:
+- "registered" means the editor holds the text and the Post button is enabled, and every attempt logs both. Before
+  insertText, the bridge `key` End gives the page window real focus. If the text is still not registered: one re-check,
+  then window focus + paste event, then clear + keystrokes (bridge `editor_type`). Otherwise it fails with "post button
+  disabled, text not registered … Nothing was posted."
+- Submit: a disabled button is never clicked; after one re-check it fails cleanly. An enabled one gets
+  `setTimeout(()=>b.click(),0)`, so the eval returns at once and posted is polled in separate short evals.
+- A probe that doesn't answer within 12 s is skipped (cancel + wait for idle) instead of failing and restarting.
+- On any failure after the compose page was opened, the beta cleans up: bridge `cancel`, wait until idle, empty and
+  close the composer, discard a "Save post?" sheet (never Save), shield off, keyboard nav home.
+- On a retry, the result also carries `first_attempt` (its timings and steps), and failures report `text_inserted`.

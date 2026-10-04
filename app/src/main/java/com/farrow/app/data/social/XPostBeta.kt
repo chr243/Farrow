@@ -52,6 +52,7 @@ class XPostBeta(private val config: SiteConfig, private val bridge: BridgeClient
     /** Phase caps (tests shorten them). */
     internal var submitVerifyMs = SUBMIT_VERIFY_MS
     internal var pollMs = POLL_MS
+    internal var probeMaxMs = PROBE_MAX_MS
 
     private val timings = LinkedHashMap<String, Long>()
     private val steps = mutableListOf<String>()
@@ -63,16 +64,28 @@ class XPostBeta(private val config: SiteConfig, private val bridge: BridgeClient
         val box = config.sel("composeText")
         val submit = config.sel("composeSubmit")
         var shieldOn = false
+        var composer = false
         try {
             phase("ready", 45_000) { ready() }
             phase("stray_check", STRAY_MAX_MS) { shieldOn = true; strayCheck() }
+            composer = true
             phase("goto_compose", 50_000) { nav(config.url("compose")) }
             phase("focus_composeText", 45_000) { focus(box) }
             failedBeforeTyping = false
-            phase("insert_text", 40_000) { insert(box, text) }
+            phase("insert_text", 90_000) { insert(box, submit, text) }
             phase("sleep", 5_000) { delay(SLEEP_MS); "${SLEEP_MS} ms" }
-            phase("click_composeSubmit", 30_000) { clickSubmit(box, submit) }
+            phase("click_composeSubmit", 20_000) { clickSubmit(box, submit) }
             phase("waitPosted", 30_000) { waitPosted(box, submit, text).also { shieldOn = false } }
+        } catch (e: Throwable) {
+            // Never leave a broken composer behind for the next x_post / x_post_beta (see [cleanupAfterFailure]).
+            if (composer) withContext(NonCancellable) {
+                val c0 = System.currentTimeMillis()
+                val r = withTimeoutOrNull(CLEANUP_MAX_MS) { runCatching { cleanupAfterFailure(box) }.getOrElse { "failed: ${it.message}" } }
+                timings["cleanup"] = System.currentTimeMillis() - c0
+                steps += "cleanup: ${r ?: "stopped after ${CLEANUP_MAX_MS / 1000} s"}"
+                shieldOn = false
+            }
+            throw e
         } finally {
             if (shieldOn) withContext(NonCancellable) { withTimeoutOrNull(10_000) { runCatching { bridge.eval(XPostBetaShield.GROK_OFF, 10) } } }
             timings["total"] = System.currentTimeMillis() - t0
@@ -81,6 +94,35 @@ class XPostBeta(private val config: SiteConfig, private val bridge: BridgeClient
     }
 
     // ---- phases ---------------------------------------------------------------------------------------------------
+
+    /**
+     * After a failure once the compose page was opened: stop anything still running in the bridge, empty and close
+     * our composer, discard a "Save post?" sheet (never Save), switch the shield off and go home with a full keyboard
+     * navigation. That way the next run (x_post or the beta) starts from a fresh page with no draft. Bounded; never throws.
+     */
+    private suspend fun cleanupAfterFailure(box: String): String {
+        val notes = mutableListOf<String>()
+        val c = runCatching { withTimeoutOrNull(10_000) { bridge.cancel() } }.getOrNull()
+        val killed = (c?.data as? JsonObject)?.get("killed")?.let { runCatching { it.jsonArray.size }.getOrNull() }
+        val idle = runCatching { withTimeoutOrNull(25_000) { bridge.ready(20) } }.getOrNull()
+        notes += "cancel ${if (c?.ok == true) "killed ${killed ?: 0}" else "n/a"}, browser ${if (idle?.ok == true) "idle" else "not idle"}"
+        val st = config.stray ?: StraySpec()
+        val v = runCatching { withTimeoutOrNull(15_000) { evalStr(XPostBetaJs.closeComposer(box, st)) } }.getOrNull()
+        notes += "composer: ${v ?: "no answer"}"
+        // A "Save post?" sheet → Discard (the probe's own rule: Discard first, never Save).
+        var last: String? = null
+        for (k in 0 until 2) {
+            delay(pollMs)
+            val o = runCatching { withTimeoutOrNull(12_000) { evalJson(XPostBetaJs.probe(st, last, k)) } }.getOrNull() ?: break
+            if ((o["n"]?.jsonPrimitive?.intOrNull ?: 0) == 0) break
+            last = o.str("s"); notes += "dialog '${last.orEmpty().take(40)}' → ${o.str("what") ?: "none"}"
+            if (o.str("what") == "none") key("Escape")
+        }
+        runCatching { withTimeoutOrNull(10_000) { bridge.eval(XPostBetaShield.GROK_OFF, 10) } }
+        val home = runCatching { withTimeoutOrNull(45_000) { nav(config.url("home")) } }.getOrNull()
+        notes += "home: ${home ?: "not confirmed"}"
+        return notes.joinToString("; ")
+    }
 
     private suspend fun ready(): String {
         val r = bridge.ready(30)
@@ -102,7 +144,15 @@ class XPostBeta(private val config: SiteConfig, private val bridge: BridgeClient
         var lastS: String? = null
         for (round in 0 until STRAY_ROUNDS) {
             val k = lastS?.let { tried.getOrDefault(it, 0) } ?: 0
-            val o = evalJson(XPostBetaJs.probe(st, lastS, k)) ?: throw AutomationException("the page did not answer the first check")
+            // v1.0.15 phone run: the first probe after a browser start (about:blank) hung 25 s and cost a restart.
+            // A probe that doesn't answer within PROBE_MAX_MS is skipped: the compose navigation reloads the page anyway.
+            val o = withTimeoutOrNull(probeMaxMs) { runCatching { evalJson(XPostBetaJs.probe(st, lastS, k)) }.getOrNull() }
+            if (o == null) {
+                val c = runCatching { withTimeoutOrNull(10_000) { bridge.cancel() } }.getOrNull()
+                val idle = runCatching { withTimeoutOrNull(25_000) { bridge.ready(20) } }.getOrNull()
+                return (notes + "probe did not answer in ${probeMaxMs / 1000} s → skipped (cancel ${if (c?.ok == true) "ok" else "n/a"}, " +
+                    "browser ${if (idle?.ok == true) "idle" else "still busy"})").joinToString("; ")
+            }
             val u = o.str("u")
             if (u != null && config.sessionExpiredUrlPatterns.any { u.contains(it) })
                 throw SessionExpiredException(config.site, "${config.displayName} redirected to the login page ($u)")
@@ -150,32 +200,80 @@ class XPostBeta(private val config: SiteConfig, private val bridge: BridgeClient
         }
     }
 
-    /** One eval: focus + select all + insertText (paste event as a last resort) + verify. A 'pending' editor gets one more look. */
-    private suspend fun insert(box: String, text: String): String {
-        val v = evalStr(XPostBetaJs.insert(box, text)).orEmpty()
-        if (v.startsWith("ok")) return "insertText ok (${v.substringAfter(':')} chars, 1 eval)"
-        if (v == "missing") throw AutomationException("the compose box disappeared before typing")
-        delay(pollMs)
-        val v2 = evalStr(XPostBetaJs.hasText(box, text)).orEmpty()
-        if (v2.startsWith("ok")) return "insertText ok after a re-check (${v2.substringAfter(':')} chars)"
-        val v3 = evalStr(XPostBetaJs.paste(box, text)).orEmpty()
-        if (v3.startsWith("ok")) return "insertText $v → paste ok (${v3.substringAfter(':')} chars)"
-        throw AutomationException("the text did not appear in the editor (insertText: $v; re-check: $v2; paste: $v3)")
+    /** Editor/Post-button state from one of the beta's evals: {len, match, enabled, btn}. */
+    private data class EdState(val len: Int, val match: Boolean, val enabled: Boolean, val btn: Boolean, val raw: String?) {
+        /** X registered the text: it is in the editor AND the Post button is enabled (Draft.js state, not just the DOM). */
+        val registered get() = match && enabled
+        override fun toString() = "editor $len chars, text ${if (match) "matches" else "missing"}, Post button " +
+            (if (!btn) "not found" else if (enabled) "enabled" else "disabled")
     }
 
-    /** One eval clicks the Post button next to our editor (waits while X still shows it disabled, ≤ 5 s). */
+    private suspend fun edState(expr: String): EdState {
+        val raw = evalStr(expr)
+        val o = raw?.let { runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull() }
+            ?: return EdState(0, false, false, false, raw)
+        return EdState(o["len"]?.jsonPrimitive?.intOrNull ?: 0, o["match"]?.jsonPrimitive?.booleanOrNull == true,
+            o["enabled"]?.jsonPrimitive?.booleanOrNull == true, o["btn"]?.jsonPrimitive?.booleanOrNull == true, raw)
+    }
+
+    /**
+     * Text in, and REGISTERED by X: the editor holds the text and the Post button is enabled. (v1.0.15 phone run:
+     * insertText reported ok from the DOM, yet the Post button stayed disabled, so X's Draft.js state probably never
+     * got the text.) Order: insertText (1 eval) → one re-check → real window focus + paste event → keystrokes (bridge
+     * `editor_type`: xdotool typing into the activated main window, then its own insertText) after clearing the box.
+     * Every attempt logs the editor length and the button state.
+     */
+    private suspend fun insert(box: String, submit: String, text: String): String {
+        val notes = mutableListOf<String>()
+        // Give the page window the real OS focus first (each eval runs with the DevTools console window active, so
+        // the JS focus alone may never fire the focus event Draft.js needs): bridge `key` = windowactivate + End.
+        key("End")
+        var st = edState(XPostBetaJs.insert(box, submit, text))
+        notes += "insertText: $st"
+        if (st.registered) return notes.joinToString("; ")
+        if (st.raw == "\"missing\"" || st.raw == "missing") throw AutomationException("the compose box disappeared before typing")
+        delay(pollMs * 2)   // Draft.js may enable the button a moment later
+        st = edState(XPostBetaJs.state(box, submit, text))
+        notes += "re-check: $st"
+        if (st.registered) return notes.joinToString("; ")
+        if (st.match) notes += "post button disabled, text not registered"
+        // Paste with the page window really focused (the eval console had the OS focus during insertText).
+        key("End")
+        st = edState(XPostBetaJs.paste(box, submit, text))
+        notes += "paste: $st"
+        if (st.registered) return notes.joinToString("; ")
+        delay(pollMs * 2)
+        st = edState(XPostBetaJs.state(box, submit, text))
+        if (st.registered) return (notes + "re-check: $st").joinToString("; ")
+        // Keystrokes as the last resort: clear the box, then the bridge's editor_type (as x_post types).
+        st = edState(XPostBetaJs.clear(box, submit, text))
+        notes += "cleared: $st"
+        val r = runCatching { withTimeoutOrNull(text.length * 400L + 30_000) { bridge.editorType(XPostBetaJs.ED, text) } }.getOrNull()
+        notes += "keystrokes (editor_type): " + when { r == null -> "no answer"; r.ok -> "ok"; else -> r.errorMessage.take(120) }
+        st = edState(XPostBetaJs.state(box, submit, text))
+        notes += "after keystrokes: $st"
+        if (st.registered) return notes.joinToString("; ")
+        throw AutomationException("post button disabled, text not registered by X (${notes.joinToString("; ")}). Nothing was posted.")
+    }
+
+    /**
+     * One eval checks the Post button next to our editor and, only if it is enabled, schedules a JS click with
+     * setTimeout(0) and returns at once. The eval never waits for X's click handler, which may navigate or re-render.
+     * A disabled button gets one re-check, then fails ("post button disabled, text not registered") without clicking:
+     * nothing is posted. A missing button → TBP click on the submit selector (bounded).
+     */
     private suspend fun clickSubmit(box: String, submit: String): String {
-        val until = System.currentTimeMillis() + 5_000
-        var last: String?
-        do {
-            last = evalStr(XPostBetaJs.clickSubmit(box, submit))
-            if (last == "clicked") return "JS click"
-            delay(pollMs)
-        } while (System.currentTimeMillis() < until)
-        // Button never clickable by JS → TBP click as the fallback, then ctrl+Return.
-        if (tbpClick(submit)) return "JS click: $last → TBP click"
-        key("ctrl+Return")
-        return "JS click: $last → TBP click failed → ctrl+Return"
+        var v = evalStr(XPostBetaJs.clickSubmit(box, submit)).orEmpty()
+        if (v.startsWith("disabled")) {
+            delay(pollMs * 2)
+            v = evalStr(XPostBetaJs.clickSubmit(box, submit)).orEmpty()
+        }
+        return when {
+            v.startsWith("clicked") -> "JS click scheduled (${v.substringAfter(':', "")})"
+            v.startsWith("disabled") -> throw AutomationException("post button disabled, text not registered (${v.substringAfter(':', "")}). Not clicked; nothing was posted.")
+            else -> if (tbpClick(submit)) "Post button not found by JS ($v) → TBP click" else
+                throw AutomationException("Post button not found ($v) and the TBP click failed; nothing was clicked")
+        }
     }
 
     /**
@@ -272,6 +370,8 @@ class XPostBeta(private val config: SiteConfig, private val bridge: BridgeClient
         const val STRAY_MAX_MS = 25_000L
         const val SUBMIT_VERIFY_MS = 6_000L
         const val TBP_CLICK_MAX_MS = 15_000L
+        const val PROBE_MAX_MS = 12_000L
+        const val CLEANUP_MAX_MS = 90_000L
     }
 }
 
@@ -336,28 +436,49 @@ object XPostBetaJs {
       var s=getSelection();s.removeAllRanges();s.addRange(r)}catch(x){}
       var a=document.activeElement;return (a===ed||ed.contains(a)||(a&&a.contains&&a.contains(ed)&&a.isContentEditable))?'focused':'nofocus'})()"""
 
-    /** 'ok:<chars>' | 'pending:<chars>' | 'failed' | 'missing'. */
-    fun insert(box: String, text: String) = """(()=>{${lib(box)}var ed=find();if(!ed)return 'missing';ed.focus();
-      try{document.execCommand('selectAll',false,null)}catch(x){}var ok=false;try{ok=document.execCommand('insertText',false,${q(text)})}catch(x){}
-      var got=norm(ed.innerText||ed.value);if(got.indexOf(norm(${q(text)}))>=0)return 'ok:'+got.length;
-      return (ok?'pending:':'failed:')+got.length})()"""
+    private fun closeCss(st: StraySpec) = st.closeButtons.joinToString(", ").ifBlank { "[aria-label=\"Close\"]" }
 
-    /** 'ok:<chars>' | 'no:<chars>' | 'missing'. */
-    fun hasText(box: String, text: String) = """(()=>{${lib(box)}var ed=find();if(!ed)return 'missing';
-      var got=norm(ed.innerText||ed.value);return (got.indexOf(norm(${q(text)}))>=0?'ok:':'no:')+got.length})()"""
+    /** Empties our editor (select all + delete) and schedules a click on the compose dialog's close button → 'emptied:<chars>[,close]'. */
+    fun closeComposer(box: String, st: StraySpec) = """(()=>{${lib(box)}var ed=find();var n=-1;
+      if(ed){try{ed.focus();document.execCommand('selectAll',false,null);document.execCommand('delete',false,null)}catch(x){}n=norm(ed.innerText||ed.value).length}
+      var dlg=ed?ed.closest('[role="dialog"]'):document.querySelector('[role="dialog"]');
+      var c=dlg?dlg.querySelector(${q(closeCss(st))}):null;
+      if(c)setTimeout(function(){try{c.click()}catch(x){}},0);return (ed?'emptied:'+n:'no editor')+(c?',close':'')})()"""
 
-    /** Select all + a synthetic paste (Draft.js handles it) + verify. */
-    fun paste(box: String, text: String) = """(()=>{${lib(box)}var ed=find();if(!ed)return 'missing';ed.focus();
+    /** Editor + Post-button state as JSON {len, match, enabled, btn} (the button in our editor's dialog, else the first visible). */
+    private fun stateJs(submit: String, text: String) = """var btnOf=function(ed){var dlg=ed&&ed.closest('[role="dialog"]');
+        var all=[].slice.call((dlg||document).querySelectorAll(${q(submit)})).filter(vis);
+        if(!all.length&&dlg)all=[].slice.call(document.querySelectorAll(${q(submit)})).filter(vis);return all[0]||null};
+      var state=function(ed){var got=norm(ed?(ed.innerText||ed.value):'');var b=btnOf(ed);
+        return JSON.stringify({len:got.length,match:got.indexOf(norm(${q(text)}))>=0,btn:!!b,
+          enabled:!!b&&!b.disabled&&b.getAttribute('aria-disabled')!=='true'})};"""
+
+    /** focus + select all + insertText → state JSON (or 'missing'). */
+    fun insert(box: String, submit: String, text: String) = """(()=>{${lib(box)}${stateJs(submit, text)}var ed=find();if(!ed)return 'missing';ed.focus();
+      try{document.execCommand('selectAll',false,null)}catch(x){}try{document.execCommand('insertText',false,${q(text)})}catch(x){}
+      return state(ed)})()"""
+
+    /** State JSON only. */
+    fun state(box: String, submit: String, text: String) = """(()=>{${lib(box)}${stateJs(submit, text)}return state(find())})()"""
+
+    /** Select all + a synthetic paste (Draft.js handles onPaste) → state JSON. */
+    fun paste(box: String, submit: String, text: String) = """(()=>{${lib(box)}${stateJs(submit, text)}var ed=find();if(!ed)return 'missing';ed.focus();
       try{document.execCommand('selectAll',false,null)}catch(x){}
-      try{var dt=new DataTransfer();dt.setData('text/plain',${q(text)});ed.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))}catch(x){return 'failed'}
-      var got=norm(ed.innerText||ed.value);return (got.indexOf(norm(${q(text)}))>=0?'ok:':'no:')+got.length})()"""
+      try{var dt=new DataTransfer();dt.setData('text/plain',${q(text)});ed.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))}catch(x){}
+      return state(ed)})()"""
 
-    /** 'clicked' | 'disabled' | 'missing': the Post button in our editor's dialog (else the first visible one). */
-    fun clickSubmit(box: String, submit: String) = """(()=>{${lib(box)}var ed=find();var dlg=ed&&ed.closest('[role="dialog"]');
-      var all=[].slice.call((dlg||document).querySelectorAll(${q(submit)})).filter(vis);if(!all.length&&dlg)all=[].slice.call(document.querySelectorAll(${q(submit)})).filter(vis);
-      var b=all[0];if(!b)return 'missing';document.querySelectorAll(${q(BTN)}).forEach(function(x){x.removeAttribute(${q(MARK)})});
-      b.setAttribute(${q(MARK)},'btn');if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'disabled';
-      b.scrollIntoView({block:'center'});b.click();return 'clicked'})()"""
+    /** Select all + delete (before typing keystrokes, so nothing is doubled) → state JSON. */
+    fun clear(box: String, submit: String, text: String) = """(()=>{${lib(box)}${stateJs(submit, text)}var ed=find();if(!ed)return 'missing';ed.focus();
+      try{document.execCommand('selectAll',false,null);document.execCommand('delete',false,null)}catch(x){}return state(ed)})()"""
+
+    /**
+     * 'clicked:<state>' (click scheduled with setTimeout(0), returns at once) | 'disabled:<state>' (not clicked) | 'missing'.
+     */
+    fun clickSubmit(box: String, submit: String) = """(()=>{${lib(box)}${stateJs(submit, "")}var ed=find();var b=btnOf(ed);if(!b)return 'missing';
+      document.querySelectorAll(${q(BTN)}).forEach(function(x){x.removeAttribute(${q(MARK)})});b.setAttribute(${q(MARK)},'btn');
+      var len=norm(ed?(ed.innerText||ed.value):'').length;
+      if(b.disabled||b.getAttribute('aria-disabled')==='true')return 'disabled:editor '+len+' chars, Post button disabled';
+      setTimeout(function(){try{b.click()}catch(x){}},0);return 'clicked:editor '+len+' chars, Post button enabled'})()"""
 
     /**
      * 'toast' | 'cleared' (no visible compose box holds the text) | 'sending' (Post button disabled) | 'open'.
