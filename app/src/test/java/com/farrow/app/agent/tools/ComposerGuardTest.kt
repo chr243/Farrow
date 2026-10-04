@@ -27,7 +27,8 @@ class ComposerGuardTest {
         assertNull(ComposerGuard.decide("button[aria-label=\"Reply\"]", "mail.example.com|composer:Reply button")) // other sites
         assertEquals(msg, ComposerGuard.decide("[data-testid=\"tweetTextarea_0\"]", null))       // page didn't answer: fail closed
         assertNull(ComposerGuard.decide("input[name=q]", null))
-        assertTrue(msg.contains("x_reply") && msg.contains("x_post") && msg.contains("blocked"))
+        assertTrue(msg.contains("x_post") && msg.contains("blocked"))
+        assertFalse(msg.contains("reply", ignoreCase = true) || msg.contains("comment", ignoreCase = true))
     }
 
     @Test fun dumpsProbeForTheJsdomCheck() {

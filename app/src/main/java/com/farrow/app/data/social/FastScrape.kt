@@ -36,7 +36,7 @@ object FastScrape {
      */
     val MEDIA_ON: String get() = mediaOnJs(MEDIA_TTL_MS)
 
-    /** [MEDIA_ON] with a custom lifetime (web tools / x_reply pages keep it longer; never shortens a longer one). */
+    /** [MEDIA_ON] with a custom lifetime (web tools / x_post pages keep it longer; never shortens a longer one). */
     fun mediaOnJs(ttlMs: Long): String = """var w=window;if(w.__fwMB){w.__fwMB.until=Math.max(w.__fwMB.until,Date.now()+$ttlMs);}else{(function(){
       var st={until:Date.now()+$ttlMs,saved:[],held:[]};var on=function(){return Date.now()<st.until};
       var E=Element.prototype,M=HTMLMediaElement.prototype;
@@ -66,7 +66,7 @@ object FastScrape {
     /** Restore eval (only needed when the last poll didn't already release the filter). */
     /** Releases held media (web_screenshot load_images=true) and the Grok shield. */
     const val MEDIA_OFF = "(()=>{if(window.__fwGrokOff)window.__fwGrokOff();return String(window.__fwMBoff?window.__fwMBoff():0)})()"
-    /** Page filter lifetime for scrapes, x_reply/x_post and web tools. */
+    /** Page filter lifetime for scrapes, x_post and web tools. */
     const val PAGE_MEDIA_TTL_MS = 10 * 60_000L
 
     /** JS regex source matching the target page's path (+ the search query, if any). */
@@ -137,7 +137,7 @@ ${if (statusUrl) PERMALINK else ""}
     private const val PERMALINK = """{const l=[...it.querySelectorAll('a[href*="/status/"]')].find(a=>a.querySelector('time')&&!(a.parentElement&&a.parentElement.closest('[role="link"]')&&it.contains(a.parentElement.closest('[role="link"]'))));
               o.status_url=l?l.href:null;}"""
 
-    /** Adds the canonical `https://x.com/<user>/status/<id>` (x_reply's url) as `status_url`, from the permalink or `url`. */
+    /** Adds the canonical `https://x.com/<user>/status/<id>` as `status_url`, from the permalink or `url`. */
     fun withStatusUrl(o: JsonObject): JsonObject {
         val raw = o["status_url"]?.jsonPrimitive?.contentOrNull ?: o["url"]?.jsonPrimitive?.contentOrNull
         val c = StatusUrl.canonical(raw)

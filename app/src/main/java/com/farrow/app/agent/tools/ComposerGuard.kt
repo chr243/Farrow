@@ -4,13 +4,12 @@ import com.farrow.app.data.browser.BridgeClient
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * v1.0.6: generic web_click / web_type must not drive X's composers. A phone run typed with web_type and clicked
- * button[aria-label="Reply"] at once: X never registered the submit, blurred, showed "Save post?" and truncated the text.
- * Blocked on x.com / twitter.com: tweetTextarea_*, tweetButton*, Reply/Post buttons, the compose dialog, the reply
- * bubble, the "Save post?" sheet, and any editor inside a compose dialog.
+ * v1.0.6: generic web_click / web_type must not drive X's composers (generic typing + clicking made X blur the editor,
+ * show "Save post?" and truncate the text). Blocked on x.com / twitter.com: tweetTextarea_*, tweetButton*, compose
+ * buttons, the compose dialog, the "Save post?" sheet, and any editor inside a compose dialog. New posts go through x_post.
  */
 object ComposerGuard {
-    const val MESSAGE = "Use x_reply (comments/replies) or x_post (new posts); generic clicks and typing on X composers are blocked. " +
+    const val MESSAGE = "Use x_post for new posts; generic clicks and typing on X composers are blocked. " +
         "Do not retry with web_click/web_type."
 
     private val SELECTOR_PATTERNS = listOf(

@@ -14,9 +14,9 @@ class StrayDialogsTest {
         val f = listOf("src/main/assets/selectors/x.json", "app/src/main/assets/selectors/x.json").map(::File).first { it.exists() }
         json.decodeFromString(SiteConfig.serializer(), f.readText())
     }
-    private val spec get() = x.reply!!.stray
+    private val spec get() = x.stray!!
     private fun fixture(name: String) = javaClass.getResource("/fixtures/$name")!!.readText()
-    private fun c(s: String) = ReplyComposer.jsoupCss(s)
+    private fun c(s: String) = StrayDialogs.jsoupCss(s)
 
     /** Same selection as [StrayDialogs.snapshotJs] in the browser. */
     private fun snapshot(html: String): Pair<String, Document> {
@@ -36,11 +36,9 @@ class StrayDialogsTest {
         return sb.toString() to doc
     }
 
-    @Test fun `x json v8 has the stray spec and the unsent and drafts wrong-state markers`() {
-        assertTrue(x.version >= 8)
-        val r = x.reply!!
-        assertTrue(r.wrongDialog.contains("[data-testid=\"unsentButton\"]"))
-        assertTrue(r.wrongUrlPatterns.contains("/drafts") && r.wrongUrlPatterns.contains("/unsent"))
+    @Test fun `x json has the stray spec with the unsent marker`() {
+        assertTrue(x.version >= 13)
+        assertTrue(spec.markers.contains("[data-testid=\"unsentButton\"]"))
         assertTrue(spec.overlays.contains("div[data-testid=\"sheetDialog\"]") && spec.overlays.contains("[aria-modal=\"true\"]"))
         assertEquals("#layers", spec.layers)
     }
@@ -53,8 +51,6 @@ class StrayDialogsTest {
         assertFalse(s[0].isSaveSheet)
         assertNull(s[0].discard)
         assertEquals("app-bar-close", doc.selectFirst(s[0].close!!)!!.attr("data-testid"))
-        // And ReplyComposer sees the unsent marker as a wrong state if it were a dialog.
-        assertTrue(x.reply!!.wrongDialog.any { doc.selectFirst(c(it)) != null })
     }
 
     @Test fun `Save post sheet - Discard is picked, never Save`() {
@@ -82,20 +78,12 @@ class StrayDialogsTest {
         assertTrue(s2.close == null || doc2.selectFirst(s2.close!!)!!.text() != "Save")
     }
 
-    @Test fun `our own reply composer is not stray, a clean page has none`() {
+    @Test fun `our own composer is not stray, a clean page has none`() {
         val (h, doc) = snapshot(fixture("x_save_discard_sheet.html").replace(Regex("""<div><div data-testid="sheetDialog"[\s\S]*?</div></div>"""), ""))
         val box = doc.selectFirst("[role=dialog] [data-testid=tweetTextarea_0]")!!.attr(StrayDialogs.MARK)
         assertTrue(StrayDialogs.analyze(h, spec, ours = "[${StrayDialogs.MARK}=\"$box\"]").isEmpty())
-        val (h2, _) = snapshot(fixture("x_reply_inline.html"))
+        val (h2, _) = snapshot(fixture("x_home_feed.html"))
         assertTrue(StrayDialogs.analyze(h2, spec).isEmpty())
-    }
-
-    @Test fun `not-a-post URLs`() {
-        listOf("https://x.com/compose/post", "https://x.com/compose/post/unsent/drafts", "https://x.com/i/flow/login").forEach {
-            assertNotNull(it, StrayDialogs.notOnPost(it, spec))
-        }
-        assertNull(StrayDialogs.notOnPost("https://x.com/alice/status/100", spec))
-        assertTrue(ReplyComposer.locate("<div ${ReplyComposer.ROOT}=\"conversation\"></div>", x.reply!!, "https://x.com/compose/post/unsent/drafts") is ComposerPick.Wrong)
     }
 
     @Test fun `snapshot JS covers dialogs, sheets, layers and markers`() {
@@ -103,9 +91,9 @@ class StrayDialogsTest {
         listOf("sheetDialog", "aria-modal", "#layers", "unsentButton", "scheduledConfirmationPrimaryAction", "app-bar-close").forEach { assertTrue(it, js.contains(it)) }
     }
 
-    @Test fun `v1_0_7 - a Grok drawer over the intent composer is not a stray dialog`() {
-        val (h, _) = snapshot(fixture("x_intent_reply_grok.html"))
-        val s = StrayDialogs.analyze(h, spec, ours = x.reply!!.textarea)
+    @Test fun `v1_0_7 - a Grok drawer over the compose dialog is not a stray dialog`() {
+        val (h, _) = snapshot(fixture("x_compose_grok.html"))
+        val s = StrayDialogs.analyze(h, spec, ours = x.sel("composeText"))
         assertTrue(s.toString(), s.none { it.summary.contains("Grok", ignoreCase = true) })
         assertTrue(s.toString(), s.isEmpty())
     }

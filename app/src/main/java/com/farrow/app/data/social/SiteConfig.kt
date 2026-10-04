@@ -84,8 +84,8 @@ data class SiteConfig(
     val replies: RepliesSpec? = null,
     /** web_scrape on this site without a selector returns only this part of the page (no nav/sidebar/account banner). */
     val textScope: TextScope? = null,
-    /** Deterministic replies (x_reply); see [ReplyComposerSpec]. */
-    val reply: ReplyComposerSpec? = null,
+    /** Leftover dialogs closed before x_post starts; see [StraySpec]. */
+    val stray: StraySpec? = null,
     val postSteps: List<AutomationStep> = emptyList(),
     val loginSteps: List<AutomationStep> = emptyList(),
 ) {

@@ -15,18 +15,14 @@ class SocialToolFactory(
     private val store: SelectorStore,
     private val bridge: BridgeClient,
     private val guard: SessionGuard,
-    /** Where failure screenshots of x_reply are saved (shown as a thumbnail in the tool card). */
-    private val shotDir: java.io.File? = null,
 ) {
     private val automation: SocialAutomation get() = SocialAutomation(store.get(site), bridge)
-    /** The instance of the current/last guarded call (its step log for error results). */
-    @Volatile private var lastAutomation: SocialAutomation? = null
     private val displayName: String get() = runCatching { store.get(site).displayName }.getOrDefault(site)
 
     private suspend fun guarded(ctx: ToolContext, block: suspend (SocialAutomation) -> String): String {
         if (!bridge.isAvailable()) return errorJson("Browser bridge is not running. Open Settings > Internal browser setup.")
         return try {
-            val a = automation.also { lastAutomation = it }
+            val a = automation
             a.ensureBrowserReady(30)
             block(a)
         } catch (e: SessionExpiredException) {
@@ -38,8 +34,6 @@ class SocialToolFactory(
             errorJson(e.message ?: "automation step failed")
         } catch (e: LoginFailedException) {
             errorJson(e.message ?: "login failed")
-        } catch (e: ReplyFailedException) {
-            replyError(e)
         } catch (e: IOException) {
             errorJson("bridge error: ${e.message}")
         }
@@ -52,90 +46,7 @@ class SocialToolFactory(
         put("steps", JsonArray(t.steps.map { JsonPrimitive(it) }))
     }
 
-    fun tools(postMaxChars: Int): List<AgentTool> =
-        // x_reply is always registered on X (v1.0.5 dropped it when a selectors override lacked the reply spec).
-        listOf(status(), post(postMaxChars), scrape()) + if (site == SelectorStore.X || store.get(site).reply != null) listOf(reply(postMaxChars)) else emptyList()
-
-    /** Every x_reply error (validation, browser, session, automation) carries the step log and the no-fallback hint. */
-    private fun withReplyHint(out: String, steps: List<String> = emptyList()): String {
-        val o = runCatching { Json.parseToJsonElement(out).jsonObject }.getOrNull() ?: return out
-        if (o["error"] == null || o["note"] != null) return out
-        return JsonObject(o.toMutableMap().apply {
-            if (steps.isNotEmpty() && "steps" !in this) put("steps", JsonArray(steps.map { JsonPrimitive(it) }))
-            put("note", JsonPrimitive(REPLY_HINT))
-        }).toString()
-    }
-
-    private fun replyError(e: ReplyFailedException): String {
-        val png = e.diagnostics?.screenshotPng
-        val path = if (png != null && shotDir != null) runCatching {
-            java.io.File(shotDir!!.apply { mkdirs() }, "reply-fail-${System.currentTimeMillis()}.png").apply { writeBytes(png) }.absolutePath
-        }.getOrNull() else null
-        return buildJsonObject {
-            put("error", e.message ?: "reply failed"); put("ok", false)
-            e.diagnostics?.url?.let { put("page_url", it) }
-            e.diagnostics?.pageText?.let { put("page_text", it.take(600)) }
-            path?.let { put(WebScreenshotTool.IMAGE_PATH, it) }
-            e.diagnostics?.screenshotError?.let { put("screenshot_error", it) }
-            if (e.steps.isNotEmpty()) put("steps", JsonArray(e.steps.map { JsonPrimitive(it) }))
-            put("note", REPLY_HINT)
-        }.toString()
-    }
-
-    /** Deterministic reply / quote (never generic click/type): see [SocialAutomation.reply]. */
-    private fun reply(maxChars: Int) = object : AgentTool {
-        override val name = "${prefix}_reply"
-        override val description = "ALWAYS use this to reply to / comment on a $displayName post (never web_click/web_type): " +
-            "opens the post, uses ITS reply composer, types the text, verifies it and submits with the composer's own Reply button " +
-            "(never schedule/GIF/poll/emoji/media). Returns reply_url when found. mode=quote instead publishes a new post quoting it."
-        override val parameters = schema(listOf("url", "text"),
-            "url" to prop("string", "url = the post's status URL from ${prefix}_scrape (https://x.com/<user>/status/<id>; a bare id also works). x_reply always opens that post itself, never replies from the feed"),
-            "text" to prop("string", "Reply text (max $maxChars characters)"),
-            "mode" to prop("string", "reply (default) | quote"))
-        override suspend fun execute(args: JsonObject) = execute(args, ToolContext(0))
-        override suspend fun execute(args: JsonObject, ctx: ToolContext): String {
-            val cfg = store.get(site)
-            val raw = args.str("url")?.trim()?.takeIf { it.isNotEmpty() } ?: return withReplyHint(errorJson("url is required: the post's status URL from ${prefix}_scrape"))
-            val url = (if (site == SelectorStore.X) StatusUrl.canonical(raw)?.url
-                else raw.takeIf { u -> SiteScopes.matches(u, cfg) && Regex("/status/\\d+").containsMatchIn(u) })
-                ?: return withReplyHint(errorJson("url must be a $displayName post's status URL (https://x.com/<user>/status/<id>) or a bare post id; got: ${raw.take(200)}. Get it from ${prefix}_scrape (status_url)"))
-            val text = args.str("text")?.trim().orEmpty()
-            if (text.isEmpty()) return errorJson("text is required")
-            val mode = args.str("mode")?.lowercase() ?: "reply"
-            return when (mode) {
-                "reply" -> {
-                    if (text.length > maxChars) return errorJson("text is ${text.length} chars; max is $maxChars")
-                    lastAutomation = null
-                    val out = guarded(ctx) { a ->
-                        val r = a.reply(url, text)
-                        buildJsonObject {
-                            put("ok", true); put("site", site); put("mode", "reply"); put("in_reply_to", url)
-                            put("reply_url", r.replyUrl); put("confirmed_by", r.confirmedBy)
-                            put("verified", r.replyUrl != null || r.confirmedBy == "toast")
-                            if (r.confirmedBy.startsWith("submitted")) put("note", "Submitted but not confirmed in time. Check with " +
-                                "${prefix}_scrape kind=replies before anything else; do NOT reply again and do NOT use web_click/web_type.")
-                            put("composer", r.composer.name.lowercase()); put("attempts", r.attempts)
-                            put("path", r.steps.lastOrNull { it.startsWith("path:") }?.removePrefix("path: "))
-                            put("steps", JsonArray(r.steps.map { JsonPrimitive(it) }))
-                        }.toString()
-                    }
-                    withReplyHint(out, lastAutomation?.lastReplySteps.orEmpty())
-                }
-                "quote" -> {
-                    // X turns a post URL at the end of a post into a quote of that post.
-                    val clean = url.substringBefore('?')
-                    val full = "$text $clean"
-                    if (full.length > maxChars + clean.length) return errorJson("text is ${text.length} chars; max is $maxChars")
-                    guarded(ctx) { a ->
-                        a.post(full)
-                        buildJsonObject { put("ok", true); put("site", site); put("mode", "quote"); put("quoted", clean)
-                            put("steps", JsonArray(a.lastStepLog.map { JsonPrimitive(it) })) }.toString()
-                    }
-                }
-                else -> errorJson("mode must be reply or quote")
-            }
-        }
-    }
+    fun tools(postMaxChars: Int): List<AgentTool> = listOf(status(), post(postMaxChars), scrape())
 
     private fun status() = object : AgentTool {
         override val name = "${prefix}_status"
@@ -173,7 +84,7 @@ class SocialToolFactory(
     private fun scrape() = object : AgentTool {
         override val name = "${prefix}_scrape"
         override val description = "Scrape posts from $displayName: kind=timeline (home feed), profile (needs handle), search (needs query)" +
-            (if (site == SelectorStore.X) ". Each post has status_url (https://x.com/<user>/status/<id>): pass it as url to ${prefix}_reply" else "") +
+            (if (site == SelectorStore.X) ". Each post has status_url (https://x.com/<user>/status/<id>)" else "") +
             (if (store.get(site).replies != null) " or replies (needs url of the post: only real reply posts below it, never the logged-in account's sidebar banner or the post itself; is_self marks your own replies)." else ".")
         override val parameters = schema(listOf("kind"),
             "kind" to prop("string", "timeline | profile | search" + if (store.get(site).replies != null) " | replies" else ""),
@@ -219,10 +130,6 @@ class SocialToolFactory(
         }
     }
 }
-
-/** Appended to every x_reply error. */
-internal const val REPLY_HINT = "x_reply failed: do NOT retry with web_click/web_type/web_scrape clicks (X composers are blocked for them) " +
-    "and do not call x_reply for this post again more than once; report the error and the steps to the user."
 
 /** Which site config (if any) a URL belongs to, for scoped page text in web_scrape. */
 object SiteScopes {

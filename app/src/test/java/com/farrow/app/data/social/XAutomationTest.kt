@@ -66,9 +66,6 @@ class XAutomationTest {
                 "eval" -> {
                     val e = args["expression"]!!.jsonPrimitive.content
                     when {
-                        // v1.0.6 pre-submit settle probe: editor text + submit enabled + no "Save post?" sheet.
-                        e.contains("JSON.stringify({t:ed") -> reply(true, buildJsonObject {
-                            put("result", buildJsonObject { put("t", editor); put("en", true); put("send", true); put("save", false) }.toString()) })
                         e.contains("B.first(") -> reply(true, buildJsonObject { put("result", if (posted) "0" else "1") })
                         e.contains("B.exists(") -> {
                             val n = composeChecks.incrementAndGet()
@@ -164,7 +161,7 @@ class XAutomationTest {
         val e = runCatching { SocialAutomation(xConfig(shrink = true), bridge).post("hi") }.exceptionOrNull()
         assertTrue(e.toString(), e is StepFailedException)
         val m = e!!.message!!
-        assertTrue(m, m.contains("Step 2/8") && m.contains("Step log:") && m.contains("1. goto compose: ok"))
+        assertTrue(m, m.contains("Step 2/7") && m.contains("Step log:") && m.contains("1. goto compose: ok"))
         assertTrue(m, m.contains("2. waitFor composeText: FAILED") && m.contains("last eval error"))
     }
 

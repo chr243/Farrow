@@ -117,7 +117,7 @@ class FastScrapeTest {
     }
 }
 
-/** v1.0.5: x_reply always works on the canonical post URL and navigates unless already exactly on it. */
+/** v1.0.5: x_scrape items carry the canonical post URL (status_url). */
 class StatusUrlTest {
     private fun c(s: String?) = StatusUrl.canonical(s)
 
@@ -137,24 +137,6 @@ class StatusUrlTest {
         listOf(null, "", "https://x.com/home", "https://x.com/alice", "https://x.com/search?q=status/1234567",
             "https://example.com/alice/status/1234567", "https://x.com.evil.com/alice/status/1234567", "ftp://x.com/a/status/1234567",
             "javascript:alert(1)", "12ab", "https://x.com/alice/status/").forEach { assertNull(it, c(it)) }
-    }
-
-    @Test fun navigationDecision() {
-        val p = c("https://twitter.com/Alice/status/1234567/photo/1?s=20")!!
-        // The phone report: the browser was on /home → must navigate (v1.0.4 counted feed articles as "the post").
-        assertTrue(StatusUrl.needsNavigation("https://x.com/home", p))
-        assertTrue(StatusUrl.needsNavigation("https://x.com/alice", p))
-        assertTrue(StatusUrl.needsNavigation("https://x.com/search?q=alice&f=live", p))
-        assertTrue(StatusUrl.needsNavigation("https://x.com/alice/status/1234567/photo/1", p))
-        assertTrue(StatusUrl.needsNavigation("https://x.com/alice/status/12345678", p))
-        assertTrue(StatusUrl.needsNavigation("https://x.com/bob/status/1234567", p))
-        assertTrue(StatusUrl.needsNavigation("https://x.com/compose/post", p))
-        assertTrue(StatusUrl.needsNavigation(null, p))
-        assertFalse(StatusUrl.needsNavigation("https://x.com/alice/status/1234567", p))
-        assertFalse(StatusUrl.needsNavigation("https://x.com/ALICE/status/1234567/?s=20", p))
-        val byId = c("1234567")!!
-        assertFalse(StatusUrl.needsNavigation("https://x.com/carol/status/1234567", byId)) // /i/status redirected
-        assertTrue(StatusUrl.needsNavigation("https://x.com/home", byId))
     }
 
     @Test fun scrapeItemsCarryTheCanonicalStatusUrl() {

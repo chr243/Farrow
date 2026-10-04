@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -18,9 +18,7 @@
     "compose": "https://x.com/compose/post",
     "timeline": "https://x.com/home",
     "profile": "https://x.com/{handle}",
-    "search": "https://x.com/search?q={query}&src=typed_query&f=live",
-    "status": "https://x.com/i/status/{id}",
-    "replyIntent": "https://x.com/intent/post?in_reply_to={id}"
+    "search": "https://x.com/search?q={query}&src=typed_query&f=live"
   },
   "sessionExpiredUrlPatterns": [
     "/i/flow/login",
@@ -106,92 +104,40 @@
       "[role=\"progressbar\"]"
     ]
   },
-  "reply": {
-    "conversation": "[data-testid=\"primaryColumn\"]",
-    "focal": "[data-testid=\"primaryColumn\"] article[data-testid=\"tweet\"][tabindex=\"-1\"]",
-    "replyButton": "[data-testid=\"reply\"]",
-    "article": "article[data-testid=\"tweet\"]",
-    "bubbleWaitMs": 5000,
-    "dialog": "[role=\"dialog\"]",
-    "textarea": "[data-testid=\"tweetTextarea_0\"]",
-    "submit": [
-      "[data-testid=\"tweetButton\"]",
-      "[data-testid=\"tweetButtonInline\"]"
+  "stray": {
+    "overlays": [
+      "[role=\"dialog\"]",
+      "[aria-modal=\"true\"]",
+      "div[data-testid=\"sheetDialog\"]"
     ],
-    "forbidden": [
-      "[data-testid=\"scheduleOption\"]",
-      "[data-testid=\"gifSearchButton\"]",
-      "[data-testid=\"createPollButton\"]",
-      "[data-testid=\"geoButton\"]",
-      "[data-testid=\"fileInput\"]",
-      "[data-testid=\"grokImgGen\"]",
-      "[aria-label*=\"emoji\" i]",
-      "[aria-label*=\"Schedule\" i]",
-      "[aria-label*=\"location\" i]",
-      "[aria-label*=\"media\" i]",
-      "[aria-label*=\"GIF\" i]",
-      "[aria-label*=\"poll\" i]"
-    ],
-    "wrongUrlPatterns": [
-      "/compose/post/schedule",
-      "/compose/post/unsent",
-      "/schedule",
-      "/i/flow/",
-      "/compose/post/media",
-      "/gif",
-      "/unsent",
-      "/drafts"
-    ],
-    "wrongDialog": [
-      "[data-testid=\"scheduledConfirmationPrimaryAction\"]",
+    "layers": "#layers",
+    "markers": [
       "[data-testid=\"unsentButton\"]",
-      "select"
+      "[data-testid=\"scheduledConfirmationPrimaryAction\"]",
+      "[data-testid=\"app-bar-close\"]",
+      "[data-testid=\"confirmationSheetConfirm\"]",
+      "[data-testid=\"confirmationSheetCancel\"]"
     ],
-    "toast": "[data-testid=\"toast\"]",
-    "errorToast": "(went wrong|try again|whoops|already said that|not allowed|daily limit|rate limit|could not|couldn.t)",
-    "maxAttempts": 2,
-    "stray": {
-      "overlays": [
-        "[role=\"dialog\"]",
-        "[aria-modal=\"true\"]",
-        "div[data-testid=\"sheetDialog\"]"
-      ],
-      "layers": "#layers",
-      "markers": [
-        "[data-testid=\"unsentButton\"]",
-        "[data-testid=\"scheduledConfirmationPrimaryAction\"]",
-        "[data-testid=\"app-bar-close\"]",
-        "[data-testid=\"confirmationSheetConfirm\"]",
-        "[data-testid=\"confirmationSheetCancel\"]"
-      ],
-      "ignore": [
-        "[data-testid=\"toast\"]",
-        "[data-testid=\"HoverCard\"]",
-        "[role=\"status\"]",
-        "[role=\"alert\"]"
-      ],
-      "closeButtons": [
-        "[data-testid=\"app-bar-close\"]",
-        "[aria-label=\"Close\"]",
-        "[aria-label=\"Fermer\"]",
-        "[data-testid=\"app-bar-back\"]"
-      ],
-      "discardButtons": [
-        "[data-testid=\"confirmationSheetCancel\"]",
-        "[data-testid=\"confirmationSheetConfirm\"]"
-      ],
-      "discardText": "^(discard|supprimer|ignorer|abandonner|ne pas enregistrer)$",
-      "saveText": "^(save|enregistrer|sauvegarder)\\b",
-      "mask": "[data-testid=\"mask\"]",
-      "notPostUrlPatterns": [
-        "/compose/",
-        "/schedule",
-        "/unsent",
-        "/drafts",
-        "/i/flow/"
-      ],
-      "maxRounds": 6
-    }
+    "ignore": [
+      "[data-testid=\"toast\"]",
+      "[data-testid=\"HoverCard\"]",
+      "[role=\"status\"]",
+      "[role=\"alert\"]"
+    ],
+    "closeButtons": [
+      "[data-testid=\"app-bar-close\"]",
+      "[aria-label=\"Close\"]",
+      "[aria-label=\"Fermer\"]",
+      "[data-testid=\"app-bar-back\"]"
+    ],
+    "discardButtons": [
+      "[data-testid=\"confirmationSheetCancel\"]",
+      "[data-testid=\"confirmationSheetConfirm\"]"
+    ],
+    "discardText": "^(discard|supprimer|ignorer|abandonner|ne pas enregistrer)$",
+    "saveText": "^(save|enregistrer|sauvegarder)\\b",
+    "mask": "[data-testid=\"mask\"]",
+    "maxRounds": 6
   },
   "postSteps": [
     {
@@ -217,14 +163,8 @@
       "timeoutMs": 45000
     },
     {
-      "action": "settleSubmit",
-      "selector": "composeText",
-      "selectors": [
-        "composeSubmit"
-      ],
-      "text": "{text}",
-      "timeoutMs": 9000,
-      "label": "wait until the text is exactly the post and the Post button is enabled"
+      "action": "sleep",
+      "ms": 800
     },
     {
       "action": "click",

@@ -3,8 +3,8 @@ package com.farrow.app.data.social
 import org.jsoup.nodes.Element
 
 /**
- * v1.0.7: X's Grok drawer / floating Grok button kept covering the post page (phone report: x_reply ran out of its
- * 60 s on a post page with a Grok drawer). While an X tool runs, a page-scope shield hides them:
+ * v1.0.7: X's Grok drawer / floating Grok button kept covering the page (phone report: a tool ran out of its
+ * time budget on a page with a Grok drawer). While an X tool runs, a page-scope shield hides them:
  *  - a persistent style rule for the known roots (`[data-testid="GrokDrawer"]`…) and for every root it marked;
  *  - a MutationObserver that marks new Grok overlays: an element whose data-testid contains "grok" or whose
  *    aria-label contains "Grok", or a dialog/fixed panel whose header reads "Grok", climbed up to its outermost
@@ -28,7 +28,7 @@ object GrokShield {
     /** For snapshots (Jsoup): is this overlay root Grok's (marked by the shield, or Grok-looking without a composer)? */
     fun isGrokOverlay(root: Element): Boolean {
         if (root.hasAttr(ATTR)) return true
-        if (root.selectFirst(ReplyComposer.jsoupCss(PROTECT)) != null) return false
+        if (root.selectFirst(StrayDialogs.jsoupCss(PROTECT)) != null) return false
         if (root.selectFirst("[$ATTR]") != null) return true
         val tid = root.select("[data-testid]").any { e -> e.attr("data-testid").let { GROK_TESTID.containsMatchIn(it) && it.lowercase() !in NOT_OVERLAY } }
         val label = root.select("[aria-label]").any { GROK_LABEL.containsMatchIn(it.attr("aria-label")) }

@@ -18,7 +18,7 @@ data class RepliesSpec(
     val scope: String,
     /** A real reply/post article, e.g. `article[data-testid="tweet"]`. */
     val item: String,
-    /** Subtrees that are never replies (nav, header, account switcher, inline reply composer, sidebar…). */
+    /** Subtrees that are never replies (nav, header, account switcher, inline compose box, sidebar…). */
     val exclude: List<String> = emptyList(),
     /** Fallback focal-post selector when no article links to the status id (X: `article[tabindex="-1"]`). */
     val focal: String? = null,

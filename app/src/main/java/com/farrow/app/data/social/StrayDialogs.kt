@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
-/** Leftover dialogs (unsent posts/drafts view, schedule picker, a composer, "Save post?" sheet) that block x_reply / x_post. */
+/** Leftover dialogs (unsent posts/drafts view, schedule picker, a composer, "Save post?" sheet) that block x_post. */
 @Serializable
 data class StraySpec(
     val overlays: List<String> = listOf("[role=\"dialog\"]", "[aria-modal=\"true\"]"),
@@ -22,8 +22,6 @@ data class StraySpec(
     /** Regex of Save-like texts: such a button is NEVER clicked. */
     val saveText: String = "^(save)\\b",
     val mask: String? = null,
-    /** The browser is not on a clean post page when its path contains one of these. */
-    val notPostUrlPatterns: List<String> = emptyList(),
     val maxRounds: Int = 6,
 )
 
@@ -34,10 +32,13 @@ object StrayDialogs {
     const val MARK = "data-farrow-s"
     const val ROOT = "data-farrow-overlay"
 
-    private fun css(s: String) = ReplyComposer.jsoupCss(s)
+    /** Page CSS → Jsoup CSS (Jsoup has no `[attr*="x" i]` flag). */
+    internal fun jsoupCss(css: String) = css.replace(Regex("\"\\s+i\\]"), "\"]")
+
+    private fun css(s: String) = jsoupCss(s)
 
     /**
-     * Overlays in the marked snapshot ([snapshotJs]) that are not [ours] (the CSS of our own reply box, if we
+     * Overlays in the marked snapshot ([snapshotJs]) that are not [ours] (the CSS of our own compose box, if we
      * opened one). Top-most last.
      */
     fun analyze(html: String, spec: StraySpec, ours: String? = null): List<Stray> {
@@ -68,9 +69,6 @@ object StrayDialogs {
         }
         return out
     }
-
-    fun notOnPost(url: String?, spec: StraySpec): String? =
-        url?.let { u -> val p = runCatching { java.net.URI(u).path }.getOrNull() ?: u; spec.notPostUrlPatterns.firstOrNull { p.contains(it) } }
 
     /** Marks overlays (dialogs, aria-modal, sheets, #layers children, anything around a marker) → {h, u, mask}. */
     fun snapshotJs(spec: StraySpec): String {

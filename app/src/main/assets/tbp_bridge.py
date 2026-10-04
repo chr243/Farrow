@@ -42,7 +42,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 HOME = os.path.expanduser("~")
 STATE_DIR = os.path.join(HOME, ".farrow")
 SESSIONS_DIR = os.path.join(STATE_DIR, "sessions")
@@ -1293,169 +1293,44 @@ def cmd_key(a):
     return {"ok": code == 0, "code": code, "stdout": "", "stderr": err, "data": {"keys": keys}}
 
 
-# bridge 1.12.0 — proven on a local Firefox + TBP + real draft-js fixture (home inline composer + reply modal, both
-# [data-testid=tweetTextarea_0]): with the generic testid, querySelector picks the FIRST match = the home composer behind
-# the modal, so the old editor_type focused it, typed (into it, or into the modal when X's focus trap pulled focus back)
-# and verified the home box. Now: callers pass a unique marker selector (or active=true: type into
-# document.activeElement); the bridge types a short probe, verifies THAT element, falls back to a real clipboard paste
-# (xclip + ctrl+v, a trusted paste Draft.js handles), and fails fast with where the text went. Console-side
-# execCommand('insertText') is no longer used: from the DevTools console it crashed the Draft.js modal in the fixture.
-TYPE_ATTR = "data-farrow-typing"
-PREP_JS = r"""(function(sel,active,attr){var E='[contenteditable=true],[contenteditable=""],[role=textbox],input,textarea';
-document.querySelectorAll('['+attr+']').forEach(function(x){x.removeAttribute(attr)});
-function d(x){if(!x)return 'none';var t=x.getAttribute&&(x.getAttribute('data-testid')||'');return (x.tagName||'?').toLowerCase()+(t?'[testid='+t+']':'')+(x.closest&&x.closest('[role=dialog]')?' inDialog':'')}
-var n=sel?document.querySelectorAll(sel).length:0,ed=null,how='';
-if(active){var a=document.activeElement;ed=a&&a.matches&&a.matches(E)?a:(a&&a.closest?a.closest('[contenteditable=true],[contenteditable=""]'):null);
- if(!ed)return JSON.stringify({ok:false,why:'activeElement is not editable: '+d(a),n:n});how='active'}
-else{var e=sel?document.querySelector(sel):null;if(!e)return JSON.stringify({ok:false,why:'missing',n:n});
- ed=e.matches(E)?e:(e.querySelector('[contenteditable=true],[role=textbox]')||null);if(!ed)return JSON.stringify({ok:false,why:'no editable element in '+d(e),n:n});
- ed.scrollIntoView({block:'center'});ed.focus();try{var r=document.createRange();r.selectNodeContents(ed);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r)}catch(x){}how='focused'}
-ed.setAttribute(attr,'1');return JSON.stringify({ok:true,how:how,n:n,target:d(ed),active:d(document.activeElement)})})(%s,%s,%s)"""
-CHECK_JS = r"""(function(attr,refocus,head){var ed=document.querySelector('['+attr+']');
-function tx(x){return x?((x.value!==undefined&&x.value!==null&&x.tagName!=='DIV'?x.value:x.innerText)||''):''}
-function d(x){if(!x)return 'none';var t=x.getAttribute&&(x.getAttribute('data-testid')||'');return (x.tagName||'?').toLowerCase()+(t?'[testid='+t+']':'')+(x.closest&&x.closest('[role=dialog]')?' inDialog':'')}
-var where=[];document.querySelectorAll('[contenteditable=true],[contenteditable=""],textarea,input[type=text],input:not([type])').forEach(function(x){var v=tx(x).replace(/\u200b/g,'').trim();if(v&&x!==ed)where.push(d(x)+': '+JSON.stringify(v.slice(0,40)))});
-var out={present:!!ed,text:tx(ed),active:d(document.activeElement),where:where.slice(0,6)};
-var norm=function(v){return v.replace(/[\s\u200b]+/g,' ').trim()};
-if(refocus&&ed&&!(head&&norm(tx(ed)).indexOf(norm(head))===0)){out.refocused=true;ed.focus();try{var r=document.createRange();r.selectNodeContents(ed);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r)}catch(x){}}
-return JSON.stringify(out)})(%s,%s,%s)"""
-PROBE_CHARS = 3
-
-
-def _xtype(text, delays, offset=0):
-    for i, ch in enumerate(text):
-        if ch == "\n":
-            xdotool("key", "shift+Return")
-        else:
-            xdotool("type", "--delay", "0", "--", ch)
-        j = offset + i
-        time.sleep(max(0, min(int(delays[j] if j < len(delays) else 40), 600)) / 1000.0)
-
-
-def clipboard_paste(text):
-    """A real (trusted) paste: xclip owns the clipboard, xdotool ctrl+v into the focused page element."""
-    if not shutil.which("xclip"):
-        return "xclip missing"
-    env = dict(os.environ, DISPLAY=DISPLAY)
-    try:
-        proc = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, env=env)
-        proc.stdin.write(text.encode("utf-8"))
-        proc.stdin.close()
-        time.sleep(0.3)
-        xdotool("key", "--clearmodifiers", "ctrl+v")
-        time.sleep(0.5)
-        try:
-            proc.terminate()
-            proc.wait(timeout=2)
-        except Exception:
-            proc.kill()
-        return "pasted"
-    except Exception as e:
-        return "paste failed: %r" % e
-
-
-def _check(refocus=False, head=""):
-    """Target text + where else text is; refocus=True puts the focus/caret back at the end of the target, but only when
-    the text does not already start with [head] (moving the DOM caret under a working Draft.js editor desyncs it: the
-    fixture then inserted the rest at position 0)."""
-    r = tbp("eval", CHECK_JS % (json.dumps(TYPE_ATTR), "true" if refocus else "false", json.dumps(head)), timeout=20)
-    try:
-        return json.loads(js_value(r)) or {}
-    except ValueError:
-        return {"present": False, "text": "", "error": (r.get("stderr") or js_value(r))[:160]}
-
-
+# bridge 1.13.0 (Farrow v1.0.11): editor_type is again exactly v1.0.0's (bridge 1.9.0) — focus by eval → xdotool
+# typing into the main window → verify → insertText. The 1.12.0 probe/paste/marker variant typed nothing on the phone.
 def cmd_editor_type(a):
-    """Type into ONE (Draft.js) editor: `selector` must be unique (e.g. a marker attribute), or `active`: true types into
-    document.activeElement. Probe-type a few characters, verify that same element, then the rest; if the probe did not land
-    → real clipboard paste; verify again; fail fast with diagnostics (where the text went, activeElement)."""
+    """Type into a (Draft.js) editor: focus by eval → xdotool typing into the main window → verify → insertText."""
     sel, text = a.get("selector") or "", a.get("text") or ""
-    active = bool(a.get("active"))
     delays = a.get("delays_ms") or []
-    t0 = time.time()
     steps = []
-
-    def done(ok, method, why="", chk=None):
-        chk = chk or {}
-        got = norm_text(chk.get("text", ""))
-        log("editor_type %s: %s" % ("activeElement" if active else sel, "; ".join(steps)))
-        return {"ok": ok, "code": 0 if ok else 1, "stdout": "", "stderr": "" if ok else why,
-                "data": {"method": method, "chars": len(got), "steps": steps, "seconds": round(time.time() - t0, 1),
-                         "active": chk.get("active"), "where": chk.get("where", [])}}
-
-    r = tbp("eval", PREP_JS % (json.dumps(sel), "true" if active else "false", json.dumps(TYPE_ATTR)), timeout=30)
-    try:
-        prep = json.loads(js_value(r)) or {}
-    except ValueError:
-        prep = {"ok": False, "why": (r.get("stderr") or js_value(r) or "no answer")[:160]}
-    steps.append("target: %s" % (("%s via %s, %d match(es) for the selector, activeElement %s" % (prep.get("target"), prep.get("how"),
-                 prep.get("n", 0), prep.get("active"))) if prep.get("ok") else prep.get("why")))
-    if not prep.get("ok"):
-        return done(False, None, "could not target the editor (%s): %s" % ("activeElement" if active else sel, prep.get("why")))
-    if sel and not active and prep.get("n", 0) > 1:
-        steps.append("warning: selector is not unique (%s matches), typing into the first" % prep.get("n", 0))
+    f = cmd_focus({"selector": sel})
+    steps.append("focus: %s" % (f["stdout"] or f["stderr"])[:120])
+    if not f["ok"]:
+        return {"ok": False, "code": 1, "stdout": "", "stderr": "could not focus %s: %s" % (sel, f["stderr"]), "data": {"steps": steps}}
+    method = None
+    if shutil.which("xdotool"):
+        wid, _t = main_window()
+        if wid:
+            xdotool("windowactivate", "--sync", wid)   # page keeps document.activeElement
+            time.sleep(0.2)
+            for i, ch in enumerate(text):
+                if ch == "\n":
+                    xdotool("key", "shift+Return")
+                else:
+                    xdotool("type", "--delay", "0", "--", ch)
+                time.sleep(max(0, min(int(delays[i] if i < len(delays) else 40), 600)) / 1000.0)
+            method = "xdotool"
+            steps.append("typed %d chars with xdotool" % len(text))
     want = norm_text(text)
-    wid = main_window()[0] if shutil.which("xdotool") else None
-    if not wid:
-        return done(False, None, "no Firefox window / xdotool for typing")
-
-    def to_page():   # evals run in the DevTools window; the page restores focus to the targeted element on activation
-        xdotool("windowactivate", "--sync", wid)
-        time.sleep(0.4)
-
-    def check_until(pred, refocus=False, tries=3, head=""):
-        c = {}
-        for i in range(tries):
-            time.sleep(0.4)
-            c = _check(refocus=refocus and i == tries - 1, head=head)
-            if pred(norm_text(c.get("text", ""))):
-                break
-        return c
-
-    def elsewhere(c):
-        return ("; text elsewhere: " + " | ".join(c.get("where"))) if c.get("where") else ""
-
-    # On the fixture xdotool `type` dropped non-ASCII characters (é, ✓) and lost characters after shift+Return line
-    # breaks, so only single-line ASCII is typed key by key; everything else is pasted (a real paste keeps it exact).
-    keys_ok = all(32 <= ord(ch) < 127 for ch in text)
-    method = "xdotool" if keys_ok else "paste"
-    to_page()
-    if keys_ok:
-        head = text[:PROBE_CHARS]
-        _xtype(head, delays)
-        chk = check_until(lambda g: g.startswith(norm_text(head)), refocus=True, tries=1, head=head)
-        landed = norm_text(chk.get("text", "")).startswith(norm_text(head))
-        steps.append("probe %r: %s (activeElement %s%s)" % (head, "in the editor" if landed else "NOT in the editor",
-                     chk.get("active"), elsewhere(chk)))
-        if landed:
-            to_page()
-            _xtype(text[PROBE_CHARS:], delays, PROBE_CHARS)
-            chk = check_until(lambda g: g == want)
-            got = norm_text(chk.get("text", ""))
-            steps.append("after typing: %d of %d chars" % (len(got), len(want)))
-            if got == want:
-                return done(True, method, chk=chk)
-            return done(False, method, "typed text incomplete in the target editor (%d of %d chars: %r)" % (len(got), len(want), got[:60]), chk)
-        if norm_text(chk.get("text", "")):
-            # Something else is in the editor; a paste would append (selection-based replace did not work on Draft.js).
-            return done(False, method, "the probe did not land and the editor holds other text (%r)%s" % (
-                norm_text(chk.get("text", ""))[:60], elsewhere(chk)), chk)
-        method = "paste"
-        to_page()
-        steps.append("probe not in the editor → clipboard paste: %s" % clipboard_paste(text))
-    else:
-        steps.append("non-ASCII/multi-line text → clipboard paste: %s" % clipboard_paste(text))
-    # fail fast: one more look only when the paste changed something (a slow render), none when the editor stayed empty
-    chk = check_until(lambda g: g == want, tries=1)
-    if norm_text(chk.get("text", "")) not in ("", want):
-        chk = check_until(lambda g: g == want, tries=1)
-    got = norm_text(chk.get("text", ""))
-    steps.append("after paste: %d of %d chars%s" % (len(got), len(want), elsewhere(chk)))
-    if got == want:
-        return done(True, method, chk=chk)
-    return done(False, method, "the text is not in the target editor (editor has %d of %d chars, activeElement %s%s)" % (
-        len(got), len(want), chk.get("active"), elsewhere(chk)), chk)
+    got = norm_text(js_value(tbp("eval", TEXT_JS % json.dumps(sel), timeout=30)))
+    steps.append("editor text after typing: %d chars" % len(got))
+    if want not in got:
+        r = tbp("eval", INSERT_JS % (json.dumps(sel), json.dumps(text)), timeout=30)
+        steps.append("insertText: %s" % (js_value(r) or r.get("stderr", ""))[:120])
+        got = norm_text(js_value(tbp("eval", TEXT_JS % json.dumps(sel), timeout=30)))
+        method = "insertText"
+    ok = want in got
+    log("editor_type %s: %s" % (sel, "; ".join(steps)))
+    return {"ok": ok, "code": 0 if ok else 1, "stdout": "", "stderr": "" if ok else
+            "text not in the editor after typing and insertText (editor has %d chars)" % len(got),
+            "data": {"method": method, "chars": len(got), "steps": steps}}
 
 
 # ---------------- cookie import ----------------

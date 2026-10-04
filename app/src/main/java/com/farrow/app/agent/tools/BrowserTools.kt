@@ -66,7 +66,7 @@ class WebScrapeTool(
                     if (text != null) return buildJsonObject {
                         put("ok", true); put("url", url); put("engine", "tbp-firefox"); put("text", text.take(MAX_TEXT))
                         put("scope", scope.scope)
-                        put("note", "Main column only (navigation, sidebar, account switcher and reply composer removed). For replies under a post use x_scrape kind=replies.")
+                        put("note", "Main column only (navigation, sidebar, account switcher and compose box removed). To read the replies under a post use x_scrape kind=replies.")
                     }.toString()
                 }
                 val content = if (args.bool("html") == true) bridge.html(selector) else bridge.text(selector)
@@ -88,7 +88,7 @@ class WebScrapeTool(
 class WebClickTool(private val bridge: BridgeClient, private val blockMedia: () -> Boolean = { true }) : AgentTool {
     override val name = "web_click"
     override val description = "Click an element on the current web page (human-like Bézier mouse movement). Internal browser (Firefox in Termux) — no accessibility permission needed. " +
-        "NOT for X composers: replying/commenting on X = x_reply, posting = x_post (clicks on X reply/post boxes and buttons are refused)."
+        "NOT for X composers: new posts = x_post (clicks on X compose boxes and Post buttons are refused)."
     override val parameters = schema(listOf("selector"),
         "selector" to prop("string", "CSS selector of the element to click"),
         "human" to prop("boolean", "Human-like mouse path (default true)"))
@@ -106,7 +106,7 @@ class WebClickTool(private val bridge: BridgeClient, private val blockMedia: () 
 class WebTypeTool(private val bridge: BridgeClient, private val blockMedia: () -> Boolean = { true }) : AgentTool {
     override val name = "web_type"
     override val description = "Type text into an element on the current web page with human typing delays. Internal browser (Firefox in Termux) — no accessibility permission needed. " +
-        "NOT for X: replies/comments = x_reply, posts = x_post (typing into X composers is refused)."
+        "NOT for X composers: new posts = x_post (typing into X composers is refused)."
     override val parameters = schema(listOf("selector", "text"),
         "selector" to prop("string", "CSS selector of the input"),
         "text" to prop("string", "Text to type"),

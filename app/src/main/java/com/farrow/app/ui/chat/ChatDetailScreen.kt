@@ -324,7 +324,7 @@ internal fun ToolCallCard(call: ToolCallRecord) {
 
 /** web_screenshot result → saved image path (if the file still exists). */
 internal fun screenshotPath(call: ToolCallRecord): String? {
-    if (call.name != com.farrow.app.agent.tools.WebScreenshotTool.NAME && !call.name.endsWith("_reply")) return null
+    if (call.name != com.farrow.app.agent.tools.WebScreenshotTool.NAME) return null
     val o = call.resultJson?.let { runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
     val p = (o?.get(com.farrow.app.agent.tools.WebScreenshotTool.IMAGE_PATH) as? kotlinx.serialization.json.JsonPrimitive)?.content
     return p?.takeIf { java.io.File(it).exists() }

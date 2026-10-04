@@ -437,31 +437,21 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 ## v1.0.1
 - **Account jobs are app-scoped:** the X/Facebook cookie import (WebView login), Check, credential login, pasted-cookie import and Start browser run in `SocialSessionManager` (`@Singleton`, own `SupervisorJob` scope; lifecycle logic in the unit-tested `SocialJobRunner`). `ReloginViewModel` only observes its `StateFlow`, so leaving the screen or backgrounding the app no longer cancels them; only the Cancel button does. While a job runs, `SocialSessionService` (specialUse foreground service) shows a silent "Importing X login…" notification with the step and a Cancel action. The last result (message, error, cookie report, diagnostics, timings, screenshot path) is persisted (`social_session` prefs) and shown when the screen is reopened.
 - **Atomic cookie import (bridge 1.10.0):** `job_start {"cmd": "cookies_import"}` runs stop Firefox → write cookies.sqlite → always restart the daemon in a bridge thread and returns a job id at once; the app polls `job_status`. Cancelling or losing the app only stops the waiting; the bridge always finishes the write and restart. Results persist in `~/.farrow/jobs/<id>.json`; a reopened screen waits for an import still pending from before the app was killed.
-- **X replies scrape:** `x_scrape kind=replies url=<post>` returns only `article[data-testid="tweet"]` posts inside `[data-testid="primaryColumn"]` after the focal post, stopping at "Discover more". The side nav/account switcher, inline reply composer, focal post and entries without a status permalink are dropped. The logged-in handle (from `AppTabBar_Profile_Link`) is reported as `logged_in_as`, and your own real replies get `is_self: true`. Parsing is done in Kotlin with Jsoup (`ThreadReplies`, tested with fixture HTML); the spec lives in `selectors/x.json` v6 (`replies`, `textScope`).
+- **Thread scrape (`x_scrape kind=replies url=<post>`, read-only):** returns only `article[data-testid="tweet"]` posts inside `[data-testid="primaryColumn"]` after the focal post, stopping at "Discover more". The side nav/account switcher, the inline compose box, the focal post and entries without a status permalink are dropped. The logged-in handle (from `AppTabBar_Profile_Link`) is reported as `logged_in_as`, and posts by that account get `is_self: true`. Parsing is done in Kotlin with Jsoup (`ThreadReplies`, tested with fixture HTML); the spec lives in `selectors/x.json` (`replies`, `textScope`).
 - **web_scrape on x.com/twitter.com** (no selector) returns only the main column text, without header, nav, sidebar, account banner or composer.
 
 ## v1.0.2
-- **`x_reply` (deterministic replies):** `x_reply(url, text, mode=reply|quote)`. Opens the post, waits for the focal post (`primaryColumn article[tabindex=-1]`) and clicks ITS reply button (modal composer). If no modal opens, it falls back to the conversation's inline reply box. Composer choice is made in Kotlin (`ReplyComposer`, Jsoup, fixture-tested) over a marked snapshot of the conversation column and dialogs: the top dialog's `tweetTextarea_0`, else the inline one (never one inside a post). Submit is only the `tweetButton`/`tweetButtonInline` in the same container. `scheduleOption`, GIF, poll, emoji, location and media controls are never clicked. Typing uses the x_post editor method, and the text is verified before submit. A schedule dialog, a dialog without a reply box or a wrong URL (`/compose/post/schedule`, unsent…) is closed with Escape plus the dialog's close button, and it retries once via `https://x.com/intent/post?in_reply_to=<id>`. There is no retry after the submit click. Success means a toast (its View link), or the composer closing/clearing, plus the new reply from the logged-in account found via the replies scrape (`reply_url`, `verified`). On failure it returns the error, the step log, the page URL/text and a screenshot (`image_path`, shown in the tool card). `mode=quote` posts `text + post URL` with the x_post steps (X shows it as a quote). Spec: `selectors/x.json` v7 `reply` + `urls.replyIntent`.
-- The system prompt says replies/comments on X must ALWAYS use x_reply, never web_click/web_type.
+- An experimental feature, removed again in v1.0.11.
 
 ## v1.0.3
-- **Stray-dialog cleanup for x_reply / x_post** (`StrayDialogs`, Jsoup, fixture-tested; spec `selectors/x.json` v8 `reply.stray`).
-  - **Detection:** an overlay is any `[role=dialog]`, `[aria-modal=true]`, `div[data-testid=sheetDialog]`, any `#layers` child with interactive content (toasts and hover cards are ignored), or anything around `unsentButton`, `scheduledConfirmationPrimaryAction` or `app-bar-close`. An overlay that isn't our own reply composer is stray.
+- **Stray-dialog cleanup before x_post** (`StrayDialogs`, Jsoup, fixture-tested; spec `selectors/x.json` `stray`).
+  - **Detection:** an overlay is any `[role=dialog]`, `[aria-modal=true]`, `div[data-testid=sheetDialog]`, any `#layers` child with interactive content (toasts and hover cards are ignored), or anything around `unsentButton`, `scheduledConfirmationPrimaryAction` or `app-bar-close`. An overlay that isn't our own composer is stray.
   - **Closing:** one action per round, re-checking after each: Discard on a Save/Discard sheet (never Save or Enregistrer), then the close button, then Escape, then the mask.
-  - **Fallback:** if a stray stays open, or the URL isn't the post (`/compose/`, `/schedule`, `/unsent`, `/drafts`, `/i/flow/`), it hard-navigates with `location.replace` to the clean post URL and waits for the focal post. If that fails, it goes to x.com/home and back.
-  - **When:** at the start of x_reply and x_post, and before every retry.
-  - **Wrong-state markers:** `unsentButton` and the `/unsent` and `/drafts` URLs were added.
+  - **Fallback:** if a stray stays open, it hard-navigates with `location.replace` to x.com/home and cleans up once more.
+  - **When:** before x_post's steps start (never during typing or the submit).
 
 ## v1.0.4
-- **x_reply: the reply bubble is now the primary path.**
-  1. Clean up stray dialogs.
-  2. Find the target post (`ReplyComposer.target`): the conversation article whose own permalink has the URL's status id, so a URL pointing at a reply targets that reply. Otherwise use the focal article.
-  3. Scroll its `[data-testid=reply]` bubble (from its own action bar, never inside a quoted post) to the centre and click it with a TBP human click, the same trusted click x_post uses. A second TBP click is tried after the browser is idle; there is no synthetic `el.click()`.
-  4. Wait ≤ 5 s (`reply.bubbleWaitMs`) for the dialog's `tweetTextarea_0` and check that `document.activeElement` is inside it (focus it otherwise).
-  5. Type with the x_post method, verify the text, and submit with the dialog's `tweetButton`.
-  6. Fallbacks: the inline box, then the intent URL on the retry.
-  The step log and the tool result (`path`) say which path was used.
-- **Why v1.0.2/1.0.3 could skip or miss the bubble:** the bubble was only looked for under `article[tabindex="-1"]`, so a missing tabindex or a URL pointing at a reply silently fell through to the inline box. A failed TBP click fell back to a synthetic JS click, which X can ignore. The bubble wasn't scrolled into view before the mouse path was replayed. The page-loaded check (`ensureCleanPost`) also depended on the focal selector. All four are fixed; selectors are in `x.json` v9.
+- Changes to the experimental feature removed in v1.0.11.
 
 ## v1.0.5
 - **Fast x_scrape (timeline / profile / search / replies), `FastScrape.kt`.** The v1.0.4 path was slow for these reasons:
@@ -477,16 +467,13 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - It scrolls (`scrollBy` inside the same eval) only when the count has stopped growing for 0.7 s. The stop rules are the same as v1.0.4.
   - No screenshots or diagnostics on success.
   - Results gain `timings_ms` (ready, locate, nav, wait_first_posts, polls, parse, restore_media, total) and `steps`.
-- **Media blocked during X scrapes (`blockMedia` in x.json v10).** TBP drives Firefox without Marionette or WebDriver. There is no runtime privileged context, and prefs would need a restart. So a page-scope request filter does the job, in the same eval:
+- **Media blocked during X scrapes (`blockMedia` in x.json).** TBP drives Firefox without Marionette or WebDriver. There is no runtime privileged context, and prefs would need a restart. So a page-scope request filter does the job, in the same eval:
   - `src`/`srcset`/`poster` on img/source/video (property and `setAttribute`) are held back.
   - CSS background images are suppressed.
   - `play()` is refused like an autoplay block (NotAllowedError).
   - The last poll releases it once the page holds `limit` posts, otherwise one restore eval does. Held media then loads normally, so web_screenshot and x_post media are unaffected. It also lapses by itself after 45 s.
   - Images that started before the first poll after a fresh navigation still load.
-- **x_reply always on the post itself (`StatusUrl.kt`).**
-  - The URL is normalized to `https://x.com/<user>/status/<id>`: twitter.com and mobile.x.com are accepted, query and fragment stripped, /photo/, /video/ and /analytics suffixes dropped, and a bare id becomes /i/status/<id>. Anything else is an error.
-  - x_reply hard-navigates unless `location` is exactly that status path. It then waits until the location is the post AND the article whose own permalink is the id is present. v1.0.4 accepted any `primaryColumn article`, so on /home the feed counted as "the post" and it never navigated.
-  - x_scrape items carry `status_url`. The x_reply url description says: url = the post's status URL from x_scrape.
+- **Canonical post URLs (`StatusUrl.kt`).** x_scrape items carry `status_url`, normalized to `https://x.com/<user>/status/<id>`: twitter.com and mobile.x.com are accepted, query and fragment stripped, /photo/, /video/ and /analytics suffixes dropped, and a bare id becomes /i/status/<id>.
 - **In-app updater (`data/update/`).** Settings > App > App update shows the installed version and a "Check for updates" button.
   - It reads the public GitHub API `releases/latest` (no token) and compares versions numerically (`UpdateLogic.compare`, pre-releases rank below their release). It then shows "Up to date" or "vX.Y.Z available" with the release notes and an Update button.
   - Update downloads `Farrow-*-<buildType>.apk` (`pickAsset`) with OkHttp into `cacheDir/updates`, with a progress bar, and checks that the size matches the asset.
@@ -494,38 +481,17 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - The same debug key means it installs over the app. A silent check runs on app start at most every 6 h, and a dot on the gear and the row marks an available update.
 
 ## v1.0.6
-- **Why the agent bypassed x_reply** (phone run: web_type 'testing.. testing...' + web_click `button[aria-label="Reply"]` → "Save post?", text truncated, screen locked):
-  - web_click and web_type had no X guard, and their descriptions didn't steer away from X composers.
-  - Most x_reply errors were bare `{"error": …}` with no step log and no "don't fall back" hint. Only ReplyFailed had that hint, and those results started with `"ok":false`, so the registry logged them as success.
-  - x_reply was only registered when the loaded selectors had a reply spec.
-  - The prompt rule was soft. A weak model improvised after the first error.
-- **Generic tools are guarded (`ComposerGuard`).** On x.com/twitter.com, web_click and web_type refuse compose surfaces with "Use x_reply (comments/replies) or x_post (new posts); generic clicks and typing on X composers are blocked":
+- **Generic tools are guarded (`ComposerGuard`).** A phone run typed into an X composer with web_type and clicked its button with web_click: X showed "Save post?" and truncated the text. On x.com/twitter.com, web_click and web_type now refuse compose surfaces with "Use x_post for new posts; generic clicks and typing on X composers are blocked":
   - tweetTextarea_* and tweetButton*
-  - the reply bubble
-  - Reply/Post/Répondre/Poster buttons
-  - an inline reply box or a compose dialog
+  - Post/Poster buttons
+  - a compose box or a compose dialog
   - the "Save post?" sheet
 
-  The check is one eval (`closest()` on the resolved element) plus a selector check, which fails closed when the page doesn't answer. There is no web_key tool.
-- **x_reply is always registered on X.** Every error carries the step log and a note: no web_click/web_type, at most once more. The prompt rules are strict.
-- **Before the submit (x_reply and x_post `settleSubmit`):**
-  - The composer text must EQUAL the intended text, unchanged for 500 ms (`SubmitGuard.Settle`), and the button must not have aria-disabled="true".
-  - Then exactly ONE trusted click. If TBP reports a failure, the app first checks whether the click went through before trying a JS click, so it never submits twice.
-- **After the submit:** a "Save post?" sheet means the text was not sent.
-  - x_reply discards it and retries the submit at most once.
-  - x_post reports the failure.
-
-  v1.0.5 counted a truncated box ("testing...") as "composer cleared". Now only an empty or closed composer that stays that way for about 1 s counts as success.
-- **Loop protection:**
-  - x_reply and x_post have a 60 s budget each. A reply timeout after the submit returns "submitted, not confirmed" with "do NOT reply again".
-  - At most 2 composer attempts.
-  - AgentLoop stops the task when x_reply targets the same post (by id: /i/status, twitter.com and the canonical URL count as one) more than twice since the user's last message.
-  - The intent URL and the /i/status reload no longer wait 30 s for a history match that can't come, because they redirect.
-  - The bubble is clicked only on the article identified by its own permalink. A focal-only match uses the inline box instead.
+  The check is one eval (`closest()` on the resolved element) plus a selector check, which fails closed when the page doesn't answer. There is no web_key tool. The prompt rules for X are strict.
+- A pre-submit settle step and a whole-x_post time budget were added to x_post (both reverted in v1.0.11).
 
 ## v1.0.7
-- **x_reply goes through the intent composer first.** Attempt 1 opens `x.com/intent/post?in_reply_to=<id>` (the `/compose/post` dialog). Before typing, `IntentComposer.check` requires X's "Replying to @author" line (several languages), so a lost `in_reply_to` can't turn into a standalone post. Attempt 2 is the bubble path on the canonical post URL. The intent path has no stray-dialog URL and confirms through the toast link.
-- **Grok shield (`GrokShield`).** On the v1.0.6 phone run, X's Grok drawer covered the post. `ReplyComposer.locate` took it for the top dialog ("a dialog without a reply box"), and x_reply spent its 60 s on it. While x_reply, x_post and the scrapes run, a page-scope MutationObserver marks Grok drawers, panels and buttons with `data-farrow-grok`, clicks their close button and hides them. It never touches a root that contains a composer, a post or the main column, and it lapses after 90 s. Snapshots (`StrayDialogs`, `ReplyComposer.locate`) ignore Grok overlays.
+- **Grok shield (`GrokShield`).** X's Grok drawer could cover the page. While x_post and the scrapes run, a page-scope MutationObserver marks Grok drawers, panels and buttons with `data-farrow-grok`, clicks their close button and hides them. It never touches a root that contains a composer, a post or the main column, and it lapses after 90 s. Snapshots (`StrayDialogs`) ignore Grok overlays.
 - **Images and video blocked in the internal browser.**
   - Bridge 1.11.0 adds `set_media {load_images}`. It writes `~/.farrow/load_images` and Firefox's `user.js` prefs. Images blocked: `permissions.default.image=2`, `media.autoplay.default=5`, `media.autoplay.blocking_policy=2`. Images on: 1/1/0.
   - The prefs are written again before every daemon start. Firefox reads them only at startup, so they apply the next time the internal browser starts. **A restart is never forced.**
@@ -541,50 +507,19 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - The app update check and download moved from the Settings composable scope to `AppUpdater`'s app scope. The installer opens by itself only while the row is visible; otherwise tap Install.
   - Termux `pkg install` (up to 15 min) moved from the Tools ViewModel to `TermuxPackageJobs`.
   - MCP reconnect already runs in `McpManager`. Memory edits and key/model edits are short DB/DataStore writes and stay in the screen scope.
-- x.json v12.
 
 ## v1.0.8
-- **Root cause of the v1.0.7 phone failure (intent composer opened, text never typed, 60 s timeout):**
-  - The intent composer opens as a modal over /home. The home timeline's own composer (also `tweetTextarea_0`) stays behind it and comes first in the document.
-  - The intent wait (`waitFor(tweetTextarea_0)`) was satisfied at once by that hidden composer, so the composer was read before the modal's editor had settled.
-  - Typing then went to `[data-farrow-i=N]`, a transient snapshot mark that X's re-render can drop. It used only a programmatic focus, without x_post's trusted click.
-  - Its 30 s + 400 ms/char budget, plus the settle wait and the second attempt, used up the 60 s budget without a clear error.
-- **Fix: x_reply types with x_post's exact routine, scoped to the dialog.**
-  1. `ReplyComposer.editorTargetJs` finds the contenteditable inside the top non-Grok dialog that holds a reply box. The snapshot mark is used only if it is inside that dialog. It marks the editor `data-farrow-editor="1"` and scrolls it to the centre.
-  2. x_post's trusted click (`sturdyClick`) on that editor.
-  3. A check that `document.activeElement` is inside it (else a JS focus).
-  4. x_post's `typeIntoEditor`: bridge `editor_type` (focus → xdotool → verify → insertText).
-  5. The editor's `textContent` is verified for up to 2 s. If the text is still missing: one retry with refocus + `execCommand('insertText')`, then a synthetic paste (`ClipboardEvent` + `DataTransfer`). After that x_reply fails fast ("typing failed in the modal reply composer: …; nothing was posted") instead of running into the budget.
-- The intent path now waits for `[role=dialog] [data-testid=tweetTextarea_0]` and rejects a non-modal pick (a page box behind the modal).
-- The step log names the target: testid, class, bounding rect, inDialog, focused, number of reply boxes, chars. It also has stage timings (open composer / focus / type / verify / retry / settle / submit, plus a summary on failure or budget timeout).
+- Changes to the experimental feature removed in v1.0.11.
 
 ## v1.0.9
-- **x_reply now uses x_post's implementation** (`SocialAutomation.composeAndSubmit`, shared by both). The separate reply typing path is removed: `replyAttempts`, `openComposer`, `focusAndType`, the snapshot-mark editor, `submitOnce`, `confirmReply` and the stray/post-page retries. Only the opening differs, plus a "Replying to @author" pre-check.
-- **What x_post did differently from x_reply (v1.0.8):**
-  - **URL:** x_post opens `https://x.com/compose/post` with a `goto` step (nav, 40 s). x_reply opened `intent/post?in_reply_to=<id>`, which redirects, with a 10 s nav.
-  - **Editor:** x_post uses x.json's plain `composeText` = `[data-testid="tweetTextarea_0"]` everywhere (TBP click, `editor_type`, settle). TBP resolves it with `document.querySelector`, i.e. the first match in the document. x_reply typed into an element it had resolved and marked itself (`data-farrow-i` from a page snapshot, then `data-farrow-editor` inside `[role=dialog]`).
-  - **Waits:** x_post waits up to 45 s for `composeText` and goes straight to the click. x_reply waited 15 s for the dialog's box, then ran a stray-dialog cleanup, a page snapshot, a context eval and an editor-resolve eval before clicking.
-  - **Click:** both use `sturdyClick`, but x_post allows 30 s for the TBP click and x_reply allowed 10 s.
-  - **Typing:** both use `typeIntoEditor` / bridge `editor_type`, but x_post's budget is 45 s + 400 ms/char and x_reply's was 12 s + 150 ms/char. x_reply also added its own verify/insertText/paste retry.
-  - **Submit and confirmation:** x_post runs `settleSubmit` on `composeText`/`composeSubmit`, clicks `composeSubmit` (ctrl+Return fallback) and waits for the success toast or the box closing (`waitPosted`). x_reply clicked a marked send button once and polled its own toast/emptied-box probe.
-- **x_reply now:**
-  - **Path A:** `/compose/post?in_reply_to=<id>`, then x_post's steps. The new `target` step runs right after `waitFor composeText`. It logs what x_post's selector resolves to (testid, class, rect, inDialog, inConversation, inArticle, focused, number of boxes, chars, URL). For x_reply it also requires that box to be inside the composer dialog with "Replying to @author" (polled for up to 4 s). This happens before anything is clicked or typed.
-  - **Path B** (pre-check failed, e.g. the first `composeText` is the home box behind the modal): the post page, then x_post's steps on the conversation's inline reply box under the post. The reply bubble is clicked only when there is no inline box.
-  - Any other step failure stops x_reply ("…; nothing was posted"), or reports "submitted, not confirmed" after the submit click.
-- **x_post** is unchanged apart from the logging `target` step (8 steps).
-- The x_reply budget is now 90 s (two opens with x_post's own waits). The step log keeps the v1.0.8 diagnostics: the target line and per-path timings with a summary.
+- x_post gained a logging `target` step (reverted in v1.0.11).
 
 ## v1.0.10
-- **Root cause, reproduced on the box** with the phone's stack: Firefox ESR, TBP (xdotool plus DevTools-console evals) and this `tbp_bridge.py`, against `tools/draftjs-repro/`. That page is X-like and uses the real draft-js 0.11.7: a home inline composer, plus a reply modal with "Replying to @…", autofocus and a focus trap. Both editors carry `data-testid="tweetTextarea_0"`.
-  - The steps passed X's generic `composeText` selector to the bridge. `document.querySelector` returns the FIRST match, which is the home composer behind the modal, so `editor_type` focused that box. TBP evals run in the DevTools window, so the focus was only applied when Firefox's window was re-activated.
-  - With X-like focus-trap behaviour, the keys went into the modal (the caret blinked there), but the bridge verified the home box and saw 0 chars. Its console `execCommand('insertText')` fallback then knocked the Draft.js modal out of the page in the fixture.
-  - Without a focus trap, the keys went into the hidden home box and the bridge reported success, while the modal stayed empty.
-  - **x_post** has the same latent bug whenever /compose/post shows the home timeline behind the modal. Its `composeSubmit` (`tweetButton, tweetButtonInline`) also resolves to the first match.
-- **Fix, app side:** the `target` step (after `waitFor composeText`, before any click or typing) now picks THE composer: the box in the topmost open dialog, else the first box. It marks the editor `data-farrow-compose="1"` and that composer's own submit button `data-farrow-submit="1"`. The following click, editor_type, settleSubmit, submit and waitPosted steps use these unique marks. The step log shows when the first match was another box. This applies to both x_post and x_reply, because both use the same implementation.
-- **Bridge 1.12.0 `editor_type`:**
-  - It takes a unique `selector` (it warns when the selector is not unique), or `active: true`, which types into `document.activeElement`.
-  - For single-line ASCII it types a 3-character probe with xdotool, verifies THAT element, then types the rest and verifies again.
-  - If the probe did not land, and for non-ASCII or multi-line text, it does a real clipboard paste (xclip + ctrl+v), which Draft.js handles. These choices are proven on the fixture: xdotool drops é/✓ and loses characters after shift+Return, and a synthetic `ClipboardEvent` from the console is ignored by Draft.js.
-  - It fails fast (about 9 s on the box) with diagnostics: the target, the number of matches, activeElement, and where the text went.
-  - Console insertText is no longer used.
-- **App verification:** the app reads the marked editor's text back after the bridge reports success. On a bridge-1.12 failure it fails at once with the bridge's diagnostics.
+- x_post's steps were re-pointed at a composer marked by the `target` step, and bridge 1.12.0 replaced `editor_type` with a probe-type / clipboard-paste / marker-selector variant. On the phone this typed no text into X's composer (reverted in v1.0.11).
+
+## v1.0.11
+- **The experimental feature from v1.0.2–v1.0.10 is removed** (its tool, code, selectors, prompt rules, loop guard, tests and fixtures, and `tools/draftjs-repro/`).
+- **x_post is v1.0.0's flow again.** `selectors/x.json` (v13) `postSteps` are exactly v1.0.0's: `goto compose` → `waitFor composeText` → `click composeText` → `typeEditor composeText` → `sleep 800` → `click composeSubmit` (ctrl+Return fallback) → `waitPosted`. The step engine in `SocialAutomation` (`runSteps`, `click`/`sturdyClick`, `typeIntoEditor`, `waitPosted`) is v1.0.0's code; there is no `target`/`settleSubmit` step, no marker selectors and no whole-x_post time budget.
+- **Bridge 1.13.0:** `editor_type` is v1.0.0's (bridge 1.9.0) again: focus by eval → xdotool typing into the main Firefox window → verify → `execCommand('insertText')` fallback. The version bump makes the app update the bridge on the phone.
+- Kept around x_post, without touching focus, typing or submit: the stray-dialog cleanup before the steps start, and the Grok shield + image filter after navigation.
+- Regression test `XPostV100Test`: x_post's steps equal v1.0.0's, and the bridge calls of a post run (`nav`, `click`, `editor_type`, `click`) match v1.0.0's sequence and arguments.
