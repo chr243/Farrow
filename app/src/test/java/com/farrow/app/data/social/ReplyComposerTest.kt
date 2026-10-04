@@ -165,7 +165,7 @@ class ReplyComposerTest {
         assertEquals(2, doc.select(composeText).size)
         // The JS twin of this check runs in the `target` step of x_post and x_reply (jsdom-checked from this dump).
         java.io.File("build/tmp/replytype").apply { mkdirs() }.resolve("compose_target.js")
-            .writeText(ReplyComposer.composeTargetJs(composeText, spec.dialog, spec.conversation))
+            .writeText(ReplyComposer.composeTargetJs(composeText, spec.dialog, spec.conversation, x.sel("composeSubmit")))
     }
 
     @Test fun `editor target is parsed and described for the step log`() {
@@ -177,6 +177,18 @@ class ReplyComposerTest {
         val none = ReplyComposer.parseEditorTarget("""{"ok":false,"why":"no dialog with a reply box is open","boxes":1}""")
         assertFalse(none.ok); assertTrue(none.describe().contains("no dialog"))
         assertFalse(ReplyComposer.parseEditorTarget(null).ok)
+        // v1.0.10: the picked composer vs the first match, and the marked submit button
+        val m = ReplyComposer.parseEditorTarget("""{"ok":true,"testid":"tweetTextarea_0","inDialog":true,"boxes":2,"firstIsTarget":false,"firstInDialog":false,"submit":"tweetButton"}""")
+        assertFalse(m.firstIsTarget); assertEquals("tweetButton", m.submit)
+        assertTrue(m.describe(), m.describe().contains("first composeText in the document is another box outside the dialog") && m.describe().endsWith("submit=tweetButton"))
+        assertTrue(ReplyComposer.parseEditorTarget("""{"ok":true}""").firstIsTarget)
+    }
+
+    @Test fun `composer marks are unique attributes the steps can address`() {
+        val js = ReplyComposer.composeTargetJs("[data-testid=\"tweetTextarea_0\"]", "[role=\"dialog\"]", "main", "[data-testid=\"tweetButton\"]")
+        assertTrue(js.contains(ReplyComposer.COMPOSE_ATTR) && js.contains(ReplyComposer.SUBMIT_ATTR) && js.contains("removeAttribute"))
+        assertEquals("[data-farrow-compose=\"1\"]", ReplyComposer.COMPOSE_CSS)
+        assertEquals("[data-farrow-submit=\"1\"]", ReplyComposer.SUBMIT_CSS)
     }
 
     @Test fun `stage timings`() {

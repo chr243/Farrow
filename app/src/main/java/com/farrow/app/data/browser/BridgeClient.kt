@@ -355,8 +355,15 @@ class BridgeClient(private val config: BridgeEndpoint) {
     suspend fun key(keys: String) = command("key", buildJsonObject { put("keys", keys) })
 
     /** Bridge ≥ 1.8.0: focus by eval → xdotool typing → verify → execCommand('insertText') fallback (Draft.js editors). */
-    suspend fun editorType(selector: String, text: String, human: Boolean = true) = command("editor_type", buildJsonObject {
+    /**
+     * Bridge `editor_type`. v1.0.10 / bridge 1.12.0: [selector] must address ONE editor (the app passes the composer mark
+     * `[data-farrow-compose="1"]`, not X's generic testid whose first match is the home box behind a modal); [active] =
+     * type into document.activeElement instead. The bridge probe-types, verifies that element, pastes via the clipboard
+     * when the probe didn't land (or for non-ASCII / multi-line text) and fails fast with where the text went.
+     */
+    suspend fun editorType(selector: String, text: String, human: Boolean = true, active: Boolean = false) = command("editor_type", buildJsonObject {
         put("selector", selector); put("text", text)
+        if (active) put("active", true)
         if (human) put("delays_ms", JsonArray(HumanInput.typingDelays(text).map { JsonPrimitive(it) }))
     })
 

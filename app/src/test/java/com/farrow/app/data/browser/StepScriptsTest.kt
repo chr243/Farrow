@@ -433,19 +433,54 @@ class StepScriptsTest {
             |assert "ready" in b.NO_DAEMON_CMDS and "eval" not in b.NO_DAEMON_CMDS and {"nav", "ready", "site_status"} <= set(b.COMMANDS)
             |assert {"editor_type", "key", "focus"} <= set(b.COMMANDS) and tuple(map(int, b.VERSION.split("."))) >= tuple(map(int, "1.8.0".split(".")))
             |assert b.norm_text(" hi\u200b \n there ") == "hi there"
-            |ed = {"t": ""}
+            |# bridge 1.12.0 editor_type against a model of the fixture page (home Draft.js box + reply modal box, both
+            |# [data-testid=tweetTextarea_0]); keys/paste land in the FOCUSED box (the modal when its focus trap is on).
+            |import re as _re
+            |pg = {"home": "", "modal": "", "target": None, "trap": False, "eat": False, "evals": [], "keys": 0}
+            |def focused(): return "modal" if pg["trap"] else pg["target"]
+            |def land(t):
+            |    f = focused()
+            |    if f and not (pg["eat"] and f == "modal"): pg[f] += t
             |def ftbp(*a, timeout=90):
-            |    e = a[1] if len(a) > 1 else ""
-            |    if "execCommand('insertText'" in e: ed["t"] = "hello world"; return {"ok": True, "data": {"result": "inserted"}}
-            |    if "innerText" in e and "focus()" not in e: return {"ok": True, "data": {"result": ed["t"]}}
-            |    return {"ok": True, "data": {"result": "focused"}}
-            |real_tbp, real_which = b.tbp, b.shutil.which
-            |b.tbp = ftbp; b.shutil.which = lambda n: None
-            |r = b.cmd_editor_type({"selector": "[data-testid=tweetTextarea_0]", "text": "hello world"})
-            |assert r["ok"] and r["data"]["method"] == "insertText", r
+            |    e = a[1] if len(a) > 1 else ""; pg["evals"].append(e)
+            |    if "activeElement is not editable" in e:
+            |        m = _re.search(r'\}\)\((".*?"),(true|false),', e, _re.S); sel = b.json.loads(m.group(1)); act = m.group(2) == "true"
+            |        if act: pg["target"] = "modal"; return {"ok": True, "data": {"result": b.json.dumps({"ok": True, "how": "active", "n": 0, "target": "div inDialog", "active": "div inDialog"})}}
+            |        if sel == "#x": return {"ok": True, "data": {"result": b.json.dumps({"ok": False, "why": "missing", "n": 0})}}
+            |        pg["target"] = "modal" if "farrow-compose" in sel else "home"
+            |        return {"ok": True, "data": {"result": b.json.dumps({"ok": True, "how": "focused", "n": 1 if pg["target"] == "modal" else 2, "target": pg["target"], "active": pg["target"]})}}
+            |    if "where.push" in e:
+            |        t = pg["target"]; o = "modal" if t == "home" else "home"
+            |        return {"ok": True, "data": {"result": b.json.dumps({"present": True, "text": pg[t], "active": focused(), "where": ([o + ": " + pg[o]] if pg[o] else [])})}}
+            |    return {"ok": True, "data": {"result": "focused" if "focus()" in e else "missing"}}
+            |def fxdo(*a):
+            |    if a[0] == "type": pg["keys"] += 1; land(a[-1])
+            |    return 0, "", ""
+            |real = (b.tbp, b.shutil.which, b.xdotool, b.main_window, b.clipboard_paste, b.time.sleep)
+            |b.tbp = ftbp; b.shutil.which = lambda n: "/usr/bin/" + n; b.xdotool = fxdo; b.main_window = lambda: ("7", "Mozilla Firefox")
+            |b.clipboard_paste = lambda t: (land(t), "pasted")[1]; b.time.sleep = lambda s: None
+            |def reset(**kw): pg.update({"home": "", "modal": "", "target": None, "trap": False, "eat": False, "evals": [], "keys": 0}); pg.update(kw)
+            |MARK = '[data-farrow-compose="1"]'; GEN = '[data-testid="tweetTextarea_0"]'
+            |reset(); r = b.cmd_editor_type({"selector": MARK, "text": "Great point"})
+            |assert r["ok"] and r["data"]["method"] == "xdotool" and pg["modal"] == "Great point" and pg["home"] == "", (r, pg)
+            |reset(); r = b.cmd_editor_type({"selector": GEN, "text": "Great point"})
+            |assert r["ok"] and pg["home"] == "Great point" and pg["modal"] == "" and any("not unique (2 matches)" in x for x in r["data"]["steps"]), (r, pg)
+            |reset(trap=True); r = b.cmd_editor_type({"selector": GEN, "text": "Great point"})
+            |assert not r["ok"] and "text elsewhere: modal" in r["stderr"] and pg["home"] == "", (r, pg)
+            |assert not any("insertText" in e for e in pg["evals"]), "console insertText must not be used"
+            |reset(); r = b.cmd_editor_type({"selector": MARK, "text": "Bien vu ✓ 🚀"})
+            |assert r["ok"] and r["data"]["method"] == "paste" and pg["keys"] == 0 and pg["modal"] == "Bien vu ✓ 🚀", (r, pg)
+            |reset(); r = b.cmd_editor_type({"selector": MARK, "text": "line one\nline two"})
+            |assert r["ok"] and r["data"]["method"] == "paste" and pg["keys"] == 0, (r, pg)
+            |reset(eat=True); r = b.cmd_editor_type({"selector": MARK, "text": "Great point"})
+            |assert not r["ok"] and pg["keys"] == 3 and any("NOT in the editor" in x for x in r["data"]["steps"]) and len(pg["evals"]) <= 3, (r, pg)
+            |reset(); r = b.cmd_editor_type({"active": True, "text": "abc def"})
+            |assert r["ok"] and pg["modal"] == "abc def", (r, pg)
+            |reset(); assert not b.cmd_editor_type({"selector": "#x", "text": "a"})["ok"]
+            |b.tbp, b.shutil.which, b.xdotool, b.main_window, b.clipboard_paste, b.time.sleep = real
             |b.tbp = lambda *a, timeout=90: {"ok": True, "data": {"result": "missing"}}
-            |assert not b.cmd_editor_type({"selector": "#x", "text": "a"})["ok"] and not b.cmd_focus({"selector": "#x"})["ok"]
-            |b.tbp, b.shutil.which = real_tbp, real_which
+            |assert not b.cmd_focus({"selector": "#x"})["ok"]
+            |b.tbp, b.shutil.which = real[0], real[1]
             |r = b.cmd_set_language({"lang": "fr"}); assert r["ok"] and b.browser_lang() == "fr" and "fr-FR" in open(ujs).read()
             |assert not b.cmd_set_language({"lang": "xx"})["ok"]
             |print("ALL OK")

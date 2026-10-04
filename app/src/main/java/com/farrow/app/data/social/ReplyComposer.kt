@@ -154,32 +154,50 @@ object ReplyComposer {
     /** Draft.js editor inside a composer box (X: the tweetTextarea_0 div IS the contenteditable). */
     const val EDITABLE = "[contenteditable=\"true\"],[contenteditable=\"\"],.public-DraftEditor-content,[role=\"textbox\"]"
 
+    /** v1.0.10: unique marks on THE composer being used (editor + its own submit button); steps then use these. */
+    const val COMPOSE_ATTR = "data-farrow-compose"
+    const val SUBMIT_ATTR = "data-farrow-submit"
+    const val COMPOSE_CSS = "[$COMPOSE_ATTR=\"1\"]"
+    const val SUBMIT_CSS = "[$SUBMIT_ATTR=\"1\"]"
+
     /**
-     * v1.0.9: what x_post's own selector [box] (document.querySelector = the FIRST match) resolves to, without marking or
-     * moving anything: {ok, testid, cls, rect, inDialog, inConversation, inArticle, focused, boxes, chars, u, ctx} where
-     * ctx is the text of its dialog, else of its composer (nearest ancestor holding a tweetButton*).
+     * v1.0.10 (v1.0.9 logged the FIRST match only): picks the composer the user sees — the [box] inside the topmost open
+     * [dialog] when one holds a box, else the first [box] — marks its editor [COMPOSE_ATTR] and, when [submit] is given, the
+     * submit button of the same composer (nearest ancestor holding one) [SUBMIT_ATTR]. Old marks are removed first.
+     * Returns {ok, testid, cls, rect, inDialog, inConversation, inArticle, focused, boxes, chars, u, ctx, firstInDialog,
+     * firstIsTarget, submit} — firstIsTarget=false is the v1.0.9 bug: document.querySelector(box) is another box (X's home
+     * composer behind the reply modal), which the bridge used to focus, type into and verify.
      */
-    fun composeTargetJs(box: String, dialog: String, conversation: String): String {
-        fun q(v: String) = kotlinx.serialization.json.JsonPrimitive(v).toString()
-        return """(()=>{const T=${q(box)},D=${q(dialog)},C=${q(conversation)},E=${q(EDITABLE)};const all=document.querySelectorAll(T).length;
-            const b=document.querySelector(T);if(!b)return JSON.stringify({ok:false,why:'no composer box',boxes:all,u:location.href});
+    fun composeTargetJs(box: String, dialog: String, conversation: String, submit: String? = null): String {
+        fun q(v: String?) = if (v == null) "null" else kotlinx.serialization.json.JsonPrimitive(v).toString()
+        return """(()=>{const T=${q(box)},D=${q(dialog)},C=${q(conversation)},E=${q(EDITABLE)},S=${q(submit)},A=${q(COMPOSE_ATTR)},B=${q(SUBMIT_ATTR)};
+            document.querySelectorAll('['+A+'],['+B+']').forEach(x=>{x.removeAttribute(A);x.removeAttribute(B)});
+            const boxes=[...document.querySelectorAll(T)],all=boxes.length,first=boxes[0];
+            if(!first)return JSON.stringify({ok:false,why:'no composer box',boxes:all,u:location.href});
+            const inDlg=boxes.filter(x=>x.closest(D)),b=inDlg.length?inDlg[inDlg.length-1]:first;
             const ed=b.matches(E)?b:(b.querySelector(E)||b);const r=ed.getBoundingClientRect(),a=document.activeElement,d=b.closest(D);
-            let c=b;for(let i=0;i<10&&c.parentElement;i++){c=c.parentElement;if(c.querySelector('[data-testid^="tweetButton"]'))break}
+            let c=b;for(let i=0;i<12&&c.parentElement;i++){c=c.parentElement;if(c.querySelector(S||'[data-testid^="tweetButton"]'))break}
+            ed.setAttribute(A,'1');let sb=null;if(S){sb=c.querySelector(S);if(sb)sb.setAttribute(B,'1')}
             return JSON.stringify({ok:true,testid:ed.getAttribute('data-testid')||b.getAttribute('data-testid')||'',cls:String(ed.className||'').slice(0,60),
               rect:[Math.round(r.x),Math.round(r.y),Math.round(r.width),Math.round(r.height)],inDialog:!!d,inConversation:!!b.closest(C),
               inArticle:!!b.closest('article'),focused:!!(a&&(a===ed||ed.contains(a))),boxes:all,chars:(ed.textContent||'').length,
-              u:location.href,ctx:String((d||c).innerText||'').slice(0,1500)})})()""".trimIndent()
+              u:location.href,ctx:String((d||c).innerText||'').slice(0,1500),firstInDialog:!!first.closest(D),firstIsTarget:first===b,
+              submit:sb?(sb.getAttribute('data-testid')||sb.tagName.toLowerCase()):''})})()""".trimIndent()
     }
 
     /** Parsed [composeTargetJs] result (logged in the step log of x_post and x_reply). */
     data class EditorTarget(val ok: Boolean, val why: String?, val testid: String, val cls: String, val rect: List<Int>,
                             val inDialog: Boolean, val focused: Boolean, val boxes: Int, val chars: Int,
                             /** v1.0.9 [composeTargetJs]: inside the conversation column / inside a post, page URL, composer text. */
-                            val inConversation: Boolean = false, val inArticle: Boolean = false, val url: String? = null, val ctx: String = "") {
+                            val inConversation: Boolean = false, val inArticle: Boolean = false, val url: String? = null, val ctx: String = "",
+                            /** v1.0.10: the first box in the document (what the generic selector hit) is/isn't the target; marked submit. */
+                            val firstIsTarget: Boolean = true, val firstInDialog: Boolean = false, val submit: String = "") {
         fun describe() = if (!ok) "none (${why ?: "?"}; $boxes reply boxes on the page)" else
             "testid=${testid.ifBlank { "?" }}${if (cls.isNotBlank()) " .${cls.substringBefore(' ')}" else ""} rect=${rect.joinToString(",")} " +
                 "inDialog=$inDialog focused=$focused boxes=$boxes chars=$chars" + (if (inConversation) " inConversation=true" else "") +
-                (if (inArticle) " inArticle=true" else "") + (url?.let { " url=$it" } ?: "")
+                (if (inArticle) " inArticle=true" else "") + (url?.let { " url=$it" } ?: "") +
+                (if (!firstIsTarget) " (first composeText in the document is another box${if (firstInDialog) " in a dialog" else " outside the dialog"})" else "") +
+                (if (submit.isNotBlank()) " submit=$submit" else "")
 
         /** {u, ctx} for [IntentComposer.check]. */
         fun contextJson() = kotlinx.serialization.json.buildJsonObject {
@@ -194,6 +212,8 @@ object ReplyComposer {
         fun int(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() ?: 0
         val rect = (o["rect"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() }.orEmpty()
         return EditorTarget(bool("ok"), str("why"), str("testid").orEmpty(), str("cls").orEmpty(), rect, bool("inDialog"), bool("focused"), int("boxes"), int("chars"),
-            bool("inConversation"), bool("inArticle"), str("u"), str("ctx").orEmpty())
+            bool("inConversation"), bool("inArticle"), str("u"), str("ctx").orEmpty(),
+            firstIsTarget = (o["firstIsTarget"] as? kotlinx.serialization.json.JsonPrimitive)?.content != "false", firstInDialog = bool("firstInDialog"),
+            submit = str("submit").orEmpty())
     }
 }

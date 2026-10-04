@@ -115,7 +115,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     }
 
     /** Presence check that also looks inside open shadow roots and same-origin iframes. */
-    suspend fun exists(selectorKey: String): Boolean = evalString(DomFinder.exists(config.sel(selectorKey))) == "true"
+    suspend fun exists(selectorKey: String): Boolean = evalString(DomFinder.exists(selCss(selectorKey))) == "true"
 
     /** Polls until present (or gone); a failed/slow eval is retried until the deadline instead of failing the step. */
     suspend fun waitFor(selectorKey: String, timeoutMs: Long, gone: Boolean = false): Boolean {
@@ -225,7 +225,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         val probe = """(()=>{const q=s=>{try{return !!document.querySelector(s)}catch(e){return false}};
             return JSON.stringify({url:location.href,
               cookies:document.cookie.split(';').map(c=>c.split('=')[0].trim()).filter(Boolean),
-              loggedIn:q(${js(config.sel("loggedIn"))}),loginForm:q(${js(config.sel("loginForm"))})})})()""".trimIndent()
+              loggedIn:q(${js(selCss("loggedIn"))}),loginForm:q(${js(selCss("loginForm"))})})})()""".trimIndent()
         val raw = evalString(probe) ?: return LoginStatus(LoginState.UNKNOWN, null, emptyList(), "no probe result")
         val o = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull()
             ?: return LoginStatus(LoginState.UNKNOWN, null, emptyList(), "unparseable probe: ${raw.take(120)}")
@@ -252,7 +252,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
 
     /** 0-based index of the first selector key present, or -1. One eval per poll. */
     suspend fun firstPresent(keys: List<String>): Int {
-        val r = evalString(DomFinder.firstPresent(keys.map { config.sel(it) }))
+        val r = evalString(DomFinder.firstPresent(keys.map { selCss(it) }))
         return r?.trim()?.toIntOrNull() ?: -1
     }
 
@@ -329,7 +329,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
 
     private fun selectorDetail(s: AutomationStep): String {
         val keys = (listOfNotNull(s.selector) + s.selectors)
-        return if (keys.isEmpty()) "" else " — selector: " + keys.joinToString(" | ") { "$it = ${config.sel(it)}" }
+        return if (keys.isEmpty()) "" else " — selector: " + keys.joinToString(" | ") { "$it = ${selCss(it)}" }
     }
 
     /**
@@ -384,6 +384,9 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     }
 
     @Volatile private var stepNote: String? = null
+    /** v1.0.10: selector keys re-pointed at the marked composer by the `target` step (composeText/composeSubmit). */
+    private val selOverride = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private fun selCss(keyOrCss: String): String = selOverride[keyOrCss] ?: config.sel(keyOrCss)
     /** v1.0.9: x_reply's pre-check for the `target` step (null = x_post: log only). Returns null when OK, else why not. */
     @Volatile private var targetCheck: ((ReplyComposer.EditorTarget) -> String?)? = null
     @Volatile private var lastTarget: ReplyComposer.EditorTarget? = null
@@ -405,22 +408,32 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             "target" -> {
                 // v1.0.9: what x_post's own selector (first composeText in the document) is about to type into; x_reply
                 // also runs its "Replying to @author" pre-check here (before anything is clicked or typed).
+                // v1.0.10: picks THE composer (the box in the open dialog, else the first), marks its editor and its own
+                // submit button; the following steps use those unique marks, not the generic selectors.
+                selOverride.clear()
                 val box = config.sel(s.selector ?: "composeText")
+                val submit = config.selectors["composeSubmit"]
                 val deadline = System.currentTimeMillis() + s.timeoutMs
                 while (true) {
                     val t = ReplyComposer.parseEditorTarget(runCatching { evalString(ReplyComposer.composeTargetJs(box, config.reply?.dialog ?: "[role=\"dialog\"]",
-                        config.reply?.conversation ?: "main")) }.getOrNull())
+                        config.reply?.conversation ?: "main", submit)) }.getOrNull())
                     lastTarget = t
                     val why = targetCheck?.invoke(t)
                     stepNote = "target: ${t.describe()}" + (why?.let { "; pre-check: $it" } ?: if (targetCheck != null) "; pre-check ok" else "")
-                    if (why == null) break
+                    if (why == null && t.ok) {
+                        selOverride["composeText"] = ReplyComposer.COMPOSE_CSS
+                        if (t.submit.isNotBlank()) selOverride["composeSubmit"] = ReplyComposer.SUBMIT_CSS
+                        stepNote += "; marked → ${ReplyComposer.COMPOSE_CSS}" + if (t.submit.isNotBlank()) " + ${ReplyComposer.SUBMIT_CSS}" else ""
+                        break
+                    }
+                    if (why == null) break // no box: the next steps fail on their own (x_post)
                     if (System.currentTimeMillis() >= deadline) return StepOutcome.Failed("pre-check: $why (target ${t.describe()})")
                     delay(POLL_MS)
                 }
             }
             "waitPosted" -> if (s.text != null) {
                 // Posted = the compose dialog closed, or the text shows in a feed item outside the dialog.
-                val box = config.sel(s.selectors.firstOrNull() ?: "composeText")
+                val box = selCss(s.selectors.firstOrNull() ?: "composeText")
                 val item = config.scrape?.item ?: "[role=\"article\"]"
                 val text = fill(s.text).take(80)
                 val deadline = System.currentTimeMillis() + s.timeoutMs
@@ -447,7 +460,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 val sel = s.selector ?: return StepOutcome.Skipped
                 val ok = if (s.dismiss != null && s.action == "waitFor") {
                     val notes = mutableListOf<String>()
-                    (pollDismissing(DomFinder.exists(config.sel(sel)), s.dismiss, s.timeoutMs, notes, found = "true") != "no")
+                    (pollDismissing(DomFinder.exists(selCss(sel)), s.dismiss, s.timeoutMs, notes, found = "true") != "no")
                         .also { if (notes.isNotEmpty()) stepNote = notes.joinToString("; ") }
                 } else waitFor(sel, s.timeoutMs, gone = s.action == "waitGone")
                 if (!ok) {
@@ -471,13 +484,13 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                         return StepOutcome.Failed("element not found")
                     }
                 }
-                return sturdyClick(s, config.sel(sel))
+                return sturdyClick(s, selCss(sel))
             }
             "clickText" -> {
                 // Visible-text / aria-label match (regex, case-insensitive) across shadow roots/iframes, clicking away
                 // popups ([AutomationStep.dismiss]) while waiting and trying [AutomationStep.fallbackUrls] when nothing matches.
                 val re = textRegex(s, fill)
-                val scope = (s.scope ?: s.selector)?.let { config.sel(it) }
+                val scope = (s.scope ?: s.selector)?.let { selCss(it) }
                 val expr = DomFinder.findText(re, s.exclude, scope)
                 val notes = mutableListOf<String>()
                 val urls = listOf<String?>(null) + s.fallbackUrls
@@ -511,7 +524,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 val text = fill(s.text)
                 if (s.match != null || s.dialogFallback) {
                     if (s.optional && text.isBlank()) return StepOutcome.Skipped
-                    val css = s.selector?.let { config.sel(it) }
+                    val css = s.selector?.let { selCss(it) }
                     val where = pollMark(DomFinder.findInput(s.match, css, s.dialogFallback), s.timeoutMs)
                     if (where == "no") return if (s.optional) StepOutcome.Skipped
                         else StepOutcome.Failed("no input labelled /${s.match}/" + (css?.let { " or matching $it" } ?: ""))
@@ -526,7 +539,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 val sel = s.selector ?: return StepOutcome.Skipped
                 if (s.optional && (text.isBlank() || !exists(sel))) return StepOutcome.Skipped
                 if (!exists(sel) && !waitFor(sel, s.timeoutMs)) return StepOutcome.Failed("input not found")
-                val r = bridge.type(config.sel(sel), text, submit = s.submit)
+                val r = bridge.type(selCss(sel), text, submit = s.submit)
                 if (!r.ok) return StepOutcome.Failed("typing failed: ${r.errorMessage}")
             }
             "typeEditor" -> {
@@ -534,12 +547,12 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
                 val text = fill(s.text)
                 if (s.optional && text.isBlank()) return StepOutcome.Skipped
                 if (!exists(sel) && !waitFor(sel, s.timeoutMs)) return StepOutcome.Failed("editor not found")
-                return typeIntoEditor(config.sel(sel), text, s.timeoutMs)
+                return typeIntoEditor(selCss(sel), text, s.timeoutMs)
             }
             "settleSubmit" -> {
                 // v1.0.6: the editor text EQUALS the intended text, stable for 500 ms, and the submit button is enabled.
-                val box = config.sel(s.selector ?: "composeText")
-                val send = config.sel(s.selectors.firstOrNull() ?: "composeSubmit")
+                val box = selCss(s.selector ?: "composeText")
+                val send = selCss(s.selectors.firstOrNull() ?: "composeSubmit")
                 val why = settleBeforeSubmit(box, send, fill(s.text), config.reply?.stray ?: StraySpec(), { stepNote = it })
                 if (why != null) return StepOutcome.Failed(why)
             }
@@ -624,9 +637,21 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
     private suspend fun typeIntoEditor(css: String, text: String, timeoutMs: Long): StepOutcome {
         val budget = timeoutMs + text.length * 400L
         val r = try { withTimeoutOrNull(budget) { bridge.editorType(css, text) } } catch (e: java.io.IOException) { null }
+        val data = r?.data as? JsonObject
+        fun bridgeSteps() = (data?.get("steps") as? kotlinx.serialization.json.JsonArray)?.joinToString(" → ") { it.jsonPrimitive.contentOrNull ?: "" }.orEmpty()
         if (r != null && r.ok) {
-            stepNote = "editor_type via ${(r.data as? JsonObject)?.get("method")?.jsonPrimitive?.contentOrNull ?: "?"}"
+            // v1.0.10: read the target editor back from here too (the marked composer, not the first match); bridge ≥ 1.12.0.
+            val got = if (data?.containsKey("where") == true) editorText(css) else null
+            if (got != null && !DomFinder.containsText(got, text))
+                return StepOutcome.Failed("bridge reported the text typed but the target editor has ${got.length} chars (${bridgeSteps().take(400)})")
+            stepNote = "editor_type via ${data?.get("method")?.jsonPrimitive?.contentOrNull ?: "?"}" +
+                (data?.get("seconds")?.jsonPrimitive?.contentOrNull?.let { " in $it s" } ?: "") + bridgeSteps().takeIf { it.isNotBlank() }?.let { ": ${it.take(400)}" }.orEmpty()
             return StepOutcome.Ok
+        }
+        if (r != null && data?.containsKey("where") == true) {
+            // Bridge ≥ 1.12.0 already probed, pasted and verified THIS element: fail fast with its diagnostics. No
+            // console insertText here — from the DevTools console it broke the Draft.js editor in the fixture.
+            return StepOutcome.Failed("the text did not reach the composer: ${r.errorMessage.take(300)} (${bridgeSteps().take(500)})")
         }
         val notes = mutableListOf<String>()
         when {
@@ -892,11 +917,11 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         } else log("open: no inline box and no reply bubble for ${canon.id} (${target?.how ?: "post not found"})")
     }
 
-    /** x_reply's pre-check on what x_post's selector resolved to. Null = OK to type there. */
+    /** x_reply's pre-check on the composer the `target` step picked (v1.0.10: the dialog's box, not the first match). Null = OK. */
     internal fun replyPreCheck(t: ReplyComposer.EditorTarget, canon: StatusUrl.Canon, spec: ReplyComposerSpec, modal: Boolean): String? {
         if (!t.ok) return "no composer box (${t.why})"
         if (t.inDialog) return IntentComposer.check(t.contextJson(), spec.replyingTo, canon.user)
-        if (modal) return "x_post's selector hits a page box outside the composer dialog (a post there would not be a reply)"
+        if (modal) return "no reply box inside a composer dialog (only a page box, where a post would not be a reply)"
         val onPost = t.url?.let { StatusUrl.canonical(it)?.id } == canon.id
         return when {
             !onPost -> "the page is ${t.url ?: "?"}, not the post ${canon.id}"
@@ -1034,7 +1059,8 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         submitClicked = false
         lastTarget = null
         targetCheck = check
-        try { runSteps(composerSteps(open), mapOf("text" to text), onLog = onLog) } finally { targetCheck = null }
+        selOverride.clear()
+        try { runSteps(composerSteps(open), mapOf("text" to text), onLog = onLog) } finally { targetCheck = null; selOverride.clear() }
     }
 
     /** [open] + x_post's steps after their goto, with the `target` step right after `waitFor composeText`. */

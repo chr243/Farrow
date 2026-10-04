@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>xfix</title><link rel="stylesheet" href="Draft.css">
+<style>body{font:16px sans-serif;margin:0}#react-root{padding:20px}[role=dialog]{position:fixed;top:60px;left:25%;width:50%;background:#fff;border:2px solid #333;padding:16px;z-index:10}
+#mask{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9}.box{border:1px solid #999;min-height:60px;padding:8px;margin:8px 0}</style>
+<script src="react.production.min.js"></script><script src="react-dom.production.min.js"></script><script src="immutable.min.js"></script><script src="Draft.min.js"></script>
+</head><body>
+<div id="react-root"><main><div data-testid="primaryColumn"><h2>Home</h2><div class="box" id="homebox"></div><button data-testid="tweetButtonInline" onclick="(window.__posted=window.__posted||[]).push('home:'+__state.home())">Post</button><div style="height:1500px">timeline…</div></div></main></div>
+<div id="layers"></div>
+<script>
+var e=React.createElement, D=Draft;
+window.__state={};
+function Ed(p){var s=React.useState(function(){return D.EditorState.createEmpty()});var st=s[0],set=s[1];
+ var ref=React.useRef(null); React.useEffect(function(){ if(p.autoFocus&&ref.current) ref.current.focus(); },[]);
+ window.__state[p.name]=function(){return st.getCurrentContent().getPlainText()};
+ return e(D.Editor,{ref:ref,editorState:st,onChange:set,placeholder:p.ph,webDriverTestID:'tweetTextarea_0',ariaLabel:p.aria,role:'textbox'});}
+ReactDOM.render(e(Ed,{name:'home',ph:"What's happening?",aria:'Post text'}),document.getElementById('homebox'));
+function Modal(){return e(React.Fragment,null,e('div',{id:'mask'}),e('div',{role:'dialog','aria-modal':'true','aria-labelledby':'m'},
+ e('div',{id:'m'},'Replying to ',e('a',{href:'#'},'@MetamateDaz')),e('div',{className:'box'},e(Ed,{name:'modal',ph:'Post your reply',aria:'Post text',autoFocus:true})),
+ e('button',{'data-testid':'tweetButton',onClick:function(){(window.__posted=window.__posted||[]).push('modal:'+__state.modal())}},'Reply')));}
+var params=new URLSearchParams(location.search);
+if(params.get('modal')!=='0'){ReactDOM.render(e(Modal),document.getElementById('layers'));
+ // focus trap like X's modal: focus leaving the dialog is pulled back to the last focused element inside it
+ var last=null;document.addEventListener('focusin',function(ev){var d=document.querySelector('[role=dialog]');if(!d)return;
+  if(d.contains(ev.target)){last=ev.target;return}
+  if(params.get('trap')!=='0'){(last||d.querySelector('[contenteditable=true]')).focus();}},true);}
+if(params.get('eat')==='1'){['keydown','keypress','beforeinput','paste','input'].forEach(function(t){document.addEventListener(t,function(ev){if(ev.target.closest&&ev.target.closest('[role=dialog]')){ev.preventDefault();ev.stopImmediatePropagation()}},true)})}
+window.texts=function(){return JSON.stringify({home:__state.home&&__state.home(),modal:__state.modal&&__state.modal(),active:(document.activeElement&&document.activeElement.closest('[role=dialog]'))?'modal':(document.activeElement||{}).tagName+'.'+(document.activeElement||{}).className})};
+</script></body></html>

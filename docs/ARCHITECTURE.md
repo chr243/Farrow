@@ -573,3 +573,18 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - Any other step failure stops x_reply ("…; nothing was posted"), or reports "submitted, not confirmed" after the submit click.
 - **x_post** is unchanged apart from the logging `target` step (8 steps).
 - The x_reply budget is now 90 s (two opens with x_post's own waits). The step log keeps the v1.0.8 diagnostics: the target line and per-path timings with a summary.
+
+## v1.0.10
+- **Root cause, reproduced on the box** with the phone's stack: Firefox ESR, TBP (xdotool plus DevTools-console evals) and this `tbp_bridge.py`, against `tools/draftjs-repro/`. That page is X-like and uses the real draft-js 0.11.7: a home inline composer, plus a reply modal with "Replying to @…", autofocus and a focus trap. Both editors carry `data-testid="tweetTextarea_0"`.
+  - The steps passed X's generic `composeText` selector to the bridge. `document.querySelector` returns the FIRST match, which is the home composer behind the modal, so `editor_type` focused that box. TBP evals run in the DevTools window, so the focus was only applied when Firefox's window was re-activated.
+  - With X-like focus-trap behaviour, the keys went into the modal (the caret blinked there), but the bridge verified the home box and saw 0 chars. Its console `execCommand('insertText')` fallback then knocked the Draft.js modal out of the page in the fixture.
+  - Without a focus trap, the keys went into the hidden home box and the bridge reported success, while the modal stayed empty.
+  - **x_post** has the same latent bug whenever /compose/post shows the home timeline behind the modal. Its `composeSubmit` (`tweetButton, tweetButtonInline`) also resolves to the first match.
+- **Fix, app side:** the `target` step (after `waitFor composeText`, before any click or typing) now picks THE composer: the box in the topmost open dialog, else the first box. It marks the editor `data-farrow-compose="1"` and that composer's own submit button `data-farrow-submit="1"`. The following click, editor_type, settleSubmit, submit and waitPosted steps use these unique marks. The step log shows when the first match was another box. This applies to both x_post and x_reply, because both use the same implementation.
+- **Bridge 1.12.0 `editor_type`:**
+  - It takes a unique `selector` (it warns when the selector is not unique), or `active: true`, which types into `document.activeElement`.
+  - For single-line ASCII it types a 3-character probe with xdotool, verifies THAT element, then types the rest and verifies again.
+  - If the probe did not land, and for non-ASCII or multi-line text, it does a real clipboard paste (xclip + ctrl+v), which Draft.js handles. These choices are proven on the fixture: xdotool drops é/✓ and loses characters after shift+Return, and a synthetic `ClipboardEvent` from the console is ignored by Draft.js.
+  - It fails fast (about 9 s on the box) with diagnostics: the target, the number of matches, activeElement, and where the text went.
+  - Console insertText is no longer used.
+- **App verification:** the app reads the marked editor's text back after the bridge reports success. On a bridge-1.12 failure it fails at once with the bridge's diagnostics.

@@ -1,0 +1,6 @@
+{
+  "name": "farrow-draftjs-repro",
+  "private": true,
+  "description": "X-like page: home inline Draft.js composer + reply modal composer, both [data-testid=tweetTextarea_0]",
+  "dependencies": { "draft-js": "0.11.7", "react": "16.14.0", "react-dom": "16.14.0", "immutable": "3.7.6" }
+}
