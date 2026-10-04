@@ -37,7 +37,7 @@ fun ChatHeadAvatar(task: Task?, unread: Int) {
                     // No task attached yet: show the Farrow mark instead of a generic chat avatar.
                     Image(painterResource(R.drawable.ic_farrow_logo), contentDescription = "Farrow", modifier = Modifier.size(54.dp))
                 } else {
-                    TaskAvatar(task.type, task.status, size = 54.dp)
+                    TaskAvatar(task, size = 54.dp)
                 }
             }
         }

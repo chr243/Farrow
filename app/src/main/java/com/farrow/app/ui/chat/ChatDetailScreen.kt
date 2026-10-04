@@ -130,7 +130,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onRelogin: (String) -> Unit = {}, onCha
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val t = task
-                        TaskAvatar(t?.type ?: TaskType.CHAT, t?.status, size = 36.dp)
+                        t?.let { TaskAvatar(it, size = 36.dp) } ?: TaskAvatar(TaskType.CHAT, null, size = 36.dp)
                         Spacer(Modifier.width(10.dp))
                         Column {
                             Text(t?.title ?: "New conversation", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)

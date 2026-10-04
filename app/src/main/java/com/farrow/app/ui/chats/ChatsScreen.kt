@@ -164,7 +164,7 @@ private fun SearchBar(query: String, onChange: (String) -> Unit) {
 private fun Story(c: Conversation, now: Long, onClick: () -> Unit) {
     Column(Modifier.width(72.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
-            TaskAvatar(c.task.type, c.task.status, size = 64.dp, ring = true)
+            TaskAvatar(c.task, size = 64.dp, ring = true)
             storyBadge(c.task, now)?.let { badge ->
                 Box(Modifier.align(Alignment.TopEnd)) { SmallBadge(badge) }
             }
@@ -210,7 +210,7 @@ fun ConversationRow(c: Conversation, onLongClick: (() -> Unit)? = null, onClick:
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TaskAvatar(c.task.type, c.task.status)
+        TaskAvatar(c.task)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(c.task.title, maxLines = 1, overflow = TextOverflow.Ellipsis,

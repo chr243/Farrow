@@ -93,7 +93,7 @@ fun CompactChatPanel(
                 Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TaskAvatar(task?.type ?: TaskType.CHAT, task?.status, size = 32.dp)
+                task?.let { TaskAvatar(it, size = 32.dp) } ?: TaskAvatar(TaskType.CHAT, null, size = 32.dp)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(task?.title ?: "Farrow", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)

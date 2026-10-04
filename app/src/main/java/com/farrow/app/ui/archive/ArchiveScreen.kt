@@ -64,7 +64,7 @@ fun ArchiveScreen(onBack: () -> Unit, onOpenChat: (Long) -> Unit, vm: ArchiveVie
             }
             itemsIndexed(chats, key = { _, t -> t.id }) { i, t ->
                 ListItem(
-                    leadingContent = { TaskAvatar(t.type, t.status) },
+                    leadingContent = { TaskAvatar(t) },
                     headlineContent = { Text(t.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     supportingContent = {
                         Text("Archived ${formatFull(t.archivedAt ?: t.updatedAt)} · last activity ${formatFull(t.updatedAt)}",
