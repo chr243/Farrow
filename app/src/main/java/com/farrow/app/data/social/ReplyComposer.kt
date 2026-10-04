@@ -15,8 +15,12 @@ data class ReplyComposerSpec(
     val conversation: String,
     /** The focal post (the one being replied to). */
     val focal: String,
-    /** Reply button inside the focal post. */
+    /** Reply button (speech bubble) in a post's action bar. */
     val replyButton: String,
+    /** A post in the conversation column. */
+    val article: String = "article[data-testid=\"tweet\"]",
+    /** How long the bubble click may take to open the composer before falling back (ms). */
+    val bubbleWaitMs: Long = 5_000,
     val dialog: String = "[role=\"dialog\"]",
     val textarea: String,
     val submit: List<String>,
@@ -34,6 +38,9 @@ data class ReplyComposerSpec(
 )
 
 enum class ComposerKind { MODAL, INLINE }
+
+/** The post to reply to and its own reply bubble (live CSS via data-farrow-i marks). [how]: "status id" or "focal". */
+data class TargetPost(val article: String, val replyButton: String?, val how: String)
 
 sealed interface ComposerPick {
     /** [box]/[send]: CSS for the live elements (data-farrow-i marks). */
@@ -78,6 +85,29 @@ object ReplyComposer {
         val inline = conversation?.select(textarea)?.firstOrNull { b -> b.parents().none { it.tagName() == "article" } }
             ?: return ComposerPick.Missing(if (conversation == null) "the conversation column is not on the page" else "no reply box in the conversation")
         return pick(ComposerKind.INLINE, inline, conversation, spec)
+    }
+
+    /**
+     * The post to reply to: the conversation article whose OWN permalink (the status link around its time) has [id]
+     * (so a URL pointing at a reply targets that reply), else the focal article. Its reply bubble must be in its own
+     * action bar, not inside a quoted post.
+     */
+    fun target(html: String, spec: ReplyComposerSpec, id: String): TargetPost? {
+        val doc = Jsoup.parse(html)
+        val conv = doc.selectFirst("[$ROOT=conversation]") ?: return null
+        val art = jsoupCss(spec.article)
+        val articles = conv.select(art).filter { a -> a.parents().none { it.`is`(art) } }
+        val idRe = Regex("/status/(\\d+)")
+        fun ownId(a: Element): String? {
+            val links = a.select("a[href]").filter { idRe.containsMatchIn(it.attr("href")) && it.parents().none { p -> p.attr("role") == "link" } }
+            val l = links.firstOrNull { it.selectFirst("time") != null } ?: return null
+            return idRe.find(l.attr("href"))?.groupValues?.get(1)
+        }
+        val byId = articles.firstOrNull { ownId(it) == id }
+        val focalCss = jsoupCss(spec.focal.substringAfterLast(' ').let { last -> if (last.startsWith("article")) last else spec.focal })
+        val a = byId ?: articles.firstOrNull { it.`is`(focalCss) } ?: return null
+        val btn = a.select(jsoupCss(spec.replyButton)).firstOrNull { b -> b.parents().takeWhile { it !== a }.none { it.attr("role") == "link" } }
+        return TargetPost(sel(a.attr(MARK)), btn?.attr(MARK)?.takeIf { it.isNotBlank() }?.let(::sel), if (byId != null) "status id" else "focal")
     }
 
     private fun pick(kind: ComposerKind, box: Element, root: Element, spec: ReplyComposerSpec): ComposerPick {

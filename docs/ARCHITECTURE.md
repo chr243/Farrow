@@ -451,3 +451,14 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - **Fallback:** if a stray stays open, or the URL isn't the post (`/compose/`, `/schedule`, `/unsent`, `/drafts`, `/i/flow/`), it hard-navigates with `location.replace` to the clean post URL and waits for the focal post. If that fails, it goes to x.com/home and back.
   - **When:** at the start of x_reply and x_post, and before every retry.
   - **Wrong-state markers:** `unsentButton` and the `/unsent` and `/drafts` URLs were added.
+
+## v1.0.4
+- **x_reply: the reply bubble is now the primary path.**
+  1. Clean up stray dialogs.
+  2. Find the target post (`ReplyComposer.target`): the conversation article whose own permalink has the URL's status id, so a URL pointing at a reply targets that reply. Otherwise use the focal article.
+  3. Scroll its `[data-testid=reply]` bubble (from its own action bar, never inside a quoted post) to the centre and click it with a TBP human click, the same trusted click x_post uses. A second TBP click is tried after the browser is idle; there is no synthetic `el.click()`.
+  4. Wait ≤ 5 s (`reply.bubbleWaitMs`) for the dialog's `tweetTextarea_0` and check that `document.activeElement` is inside it (focus it otherwise).
+  5. Type with the x_post method, verify the text, and submit with the dialog's `tweetButton`.
+  6. Fallbacks: the inline box, then the intent URL on the retry.
+  The step log and the tool result (`path`) say which path was used.
+- **Why v1.0.2/1.0.3 could skip or miss the bubble:** the bubble was only looked for under `article[tabindex="-1"]`, so a missing tabindex or a URL pointing at a reply silently fell through to the inline box. A failed TBP click fell back to a synthetic JS click, which X can ignore. The bubble wasn't scrolled into view before the mouse path was replayed. The page-loaded check (`ensureCleanPost`) also depended on the focal selector. All four are fixed; selectors are in `x.json` v9.

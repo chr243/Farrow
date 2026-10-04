@@ -739,7 +739,7 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
             }
             log("attempt $attempt: ${pick.kind.name.lowercase()} composer")
             // Type exactly like x_post (focus by eval → xdotool → verify → insertText), into OUR box only.
-            jsFocusOrClick(pick.box)
+            if (pick.kind == ComposerKind.INLINE) jsFocusOrClick(pick.box)
             val typed = typeIntoEditor(pick.box, text, 45_000)
             log("typing: ${if (typed == StepOutcome.Ok) "ok" else (typed as? StepOutcome.Failed)?.why} ${stepNote.orEmpty()}".trim())
             // Re-locate: the page must still be the reply composer, with our text, and its button enabled.
@@ -776,27 +776,60 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         if (viaIntent) {
             val u = config.url("replyIntent", mapOf("id" to id))
             cleanStray(spec, log)
-            log("open " + navigateTo(u, 30_000))
+            log("path: intent URL; open " + navigateTo(u, 30_000))
             if (!waitFor(spec.textarea, 20_000)) { ensureLoggedIn(navigate = false); return ComposerPick.Missing("the reply intent page shows no reply box") }
             return locateComposer(spec)
         }
         if (!ensureCleanPost(spec, postUrl, log)) return ComposerPick.Wrong("a stray dialog stays open or the post does not load")
-        if (!waitFor(spec.focal, 25_000)) {
+        if (!waitFor(postArticle(spec), 25_000)) {
             ensureLoggedIn(navigate = false)
-            return ComposerPick.Missing("the post did not load (no focal post)")
+            return ComposerPick.Missing("the post did not load (no post in the conversation)")
         }
         locateComposer(spec).let { if (it is ComposerPick.Wrong) return it }
-        // Primary: the focal post's own reply button → modal composer.
-        val btn = "${spec.focal} ${spec.replyButton}"
-        if (exists(btn)) {
-            val r = try { withTimeoutOrNull(clickTryMs(AutomationStep("click"))) { bridge.click(btn) } } catch (e: java.io.IOException) { null }
-            if (r?.ok != true) { waitIdle(); jsFocusOrClick(btn) }
-            if (waitFor("${spec.dialog} ${spec.textarea}", 8_000)) { log("focal reply button → modal"); return locateComposer(spec) }
-            log("reply button opened no modal")
-            locateComposer(spec).let { if (it is ComposerPick.Wrong) return it }
+        // Primary path: the target post's own speech-bubble reply button → composer dialog with the box focused.
+        val target = findTarget(spec, id)
+        if (target?.replyButton == null) {
+            log(if (target == null) "path: no target post found → inline box" else "path: target post has no reply button → inline box")
+        } else {
+            log("target post by ${target.how}")
+            if (clickBubble(target.replyButton, log) && waitFor("${spec.dialog} ${spec.textarea}", spec.bubbleWaitMs)) {
+                val pick = locateComposer(spec)
+                if (pick is ComposerPick.Found && pick.kind == ComposerKind.MODAL) {
+                    val focused = runCatching { evalString("(()=>{const b=document.querySelector(${js(pick.box)});return b&&b.contains(document.activeElement)?'yes':'no'})()") }.getOrNull()
+                    if (focused != "yes") { jsFocusOrClick(pick.box); log("path: reply bubble → dialog (box focused by the app)") }
+                    else log("path: reply bubble → dialog (box already focused)")
+                    return pick
+                }
+                log("bubble opened something else: ${(pick as? ComposerPick.Wrong)?.why ?: (pick as? ComposerPick.Missing)?.why ?: "inline"}")
+                if (pick is ComposerPick.Wrong) return pick
+            } else log("reply bubble opened no composer within ${spec.bubbleWaitMs / 1000} s")
         }
-        // Fallback: the inline reply box of the conversation.
-        return locateComposer(spec, preferInline = true)
+        // Fallback: the inline reply box of the conversation (the intent URL is the next attempt).
+        return locateComposer(spec, preferInline = true).also { if (it is ComposerPick.Found) log("path: inline reply box") }
+    }
+
+    private fun postArticle(spec: ReplyComposerSpec) = "${spec.conversation} ${spec.article}"
+
+    private suspend fun findTarget(spec: ReplyComposerSpec, id: String): TargetPost? {
+        val raw = runCatching { evalString(ReplyComposer.markJs(spec)) }.getOrNull() ?: return null
+        val o = runCatching { Json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return null
+        return ReplyComposer.target(o["h"]?.jsonPrimitive?.contentOrNull.orEmpty(), spec, id)
+    }
+
+    /**
+     * Trusted click on the bubble like x_post's buttons: scroll it to the centre first (the mouse path is replayed to
+     * on-screen coordinates), TBP human click, one more TBP click after waiting for idle. No synthetic el.click().
+     */
+    private suspend fun clickBubble(css: String, log: (String) -> Unit): Boolean {
+        runCatching { evalString("(()=>{const e=document.querySelector(${js(css)});if(!e)return 'none';e.scrollIntoView({block:'center',inline:'center'});return 'ok'})()") }
+        delay(700)
+        repeat(2) { i ->
+            val r = try { withTimeoutOrNull(clickTryMs(AutomationStep("click"))) { bridge.click(css) } } catch (e: java.io.IOException) { null }
+            if (r?.ok == true) { log("reply bubble: trusted click" + if (i > 0) " (2nd try)" else ""); return true }
+            log("reply bubble click ${if (r == null) "timed out" else "failed: ${r.errorMessage.take(80)}"}")
+            waitIdle()
+        }
+        return false
     }
 
     private suspend fun locateComposer(spec: ReplyComposerSpec, preferInline: Boolean = false): ComposerPick {
@@ -851,16 +884,16 @@ class SocialAutomation(val config: SiteConfig, private val bridge: BridgeClient)
         val url = runCatching { evalString("location.href") }.getOrNull()?.trim('"')
         val wrong = StrayDialogs.notOnPost(url, spec.stray)
         val onPost = url != null && url.substringBefore('?').trimEnd('/') == clean.trimEnd('/')
-        if (left.isEmpty() && onPost && wrong == null && exists(spec.focal)) return true
+        if (left.isEmpty() && onPost && wrong == null && exists(postArticle(spec))) return true
         log("hard navigation to the post (" + (if (left.isNotEmpty()) "stray dialog open" else wrong?.let { "on $url" } ?: "not on the post") + ")")
         runCatching { bridge.eval("location.replace(${js(clean)})") }
         delay(1_500)
-        if (waitFor(spec.focal, 25_000) && cleanStray(spec, log).isEmpty()) return true
+        if (waitFor(postArticle(spec), 25_000) && cleanStray(spec, log).isEmpty()) return true
         log("still not clean → x.com home, then back to the post")
         runCatching { navigateTo(config.url("home"), 30_000) }
         cleanStray(spec, log)
         runCatching { navigateTo(clean, 30_000) }
-        return waitFor(spec.focal, 25_000) && cleanStray(spec, log).isEmpty()
+        return waitFor(postArticle(spec), 25_000) && cleanStray(spec, log).isEmpty()
     }
 
     /** Before a retry: strays closed, else back to a clean post page. */

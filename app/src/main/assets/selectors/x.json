@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "site": "x",
   "displayName": "X.com",
   "domain": ".x.com",
@@ -108,6 +108,8 @@
     "conversation": "[data-testid=\"primaryColumn\"]",
     "focal": "[data-testid=\"primaryColumn\"] article[data-testid=\"tweet\"][tabindex=\"-1\"]",
     "replyButton": "[data-testid=\"reply\"]",
+    "article": "article[data-testid=\"tweet\"]",
+    "bubbleWaitMs": 5000,
     "dialog": "[role=\"dialog\"]",
     "textarea": "[data-testid=\"tweetTextarea_0\"]",
     "submit": [

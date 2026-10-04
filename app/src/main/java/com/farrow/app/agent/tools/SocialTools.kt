@@ -90,6 +90,7 @@ class SocialToolFactory(
                             put("reply_url", r.replyUrl); put("confirmed_by", r.confirmedBy)
                             put("verified", r.replyUrl != null || r.confirmedBy == "toast")
                             put("composer", r.composer.name.lowercase()); put("attempts", r.attempts)
+                            put("path", r.steps.lastOrNull { it.startsWith("path:") }?.removePrefix("path: "))
                             put("steps", JsonArray(r.steps.map { JsonPrimitive(it) }))
                         }.toString()
                     }
