@@ -8,7 +8,7 @@ private inline fun <reified T : Enum<T>> enumOr(name: String, default: T): T =
 
 fun TaskEntity.toDomain() = Task(
     id, title, prompt, enumOr(type, TaskType.CHAT), enumOr(status, TaskStatus.IDLE), subtitle, currentStep,
-    checkpointJson, model, createdAt, updatedAt, startedAt, lastOpenedAt, resumeAt, errorMessage, attempt, pauseReason,
+    checkpointJson, model, createdAt, updatedAt, startedAt, lastOpenedAt, resumeAt, errorMessage, attempt, pauseReason, archivedAt,
 )
 
 fun MessageEntity.toDomain() = ChatMessage(

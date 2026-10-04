@@ -48,6 +48,7 @@ object Routes {
     const val KEEP_ALIVE = "settings/keepalive"
     const val TOOLS = "settings/tools"
     const val THEME = "settings/theme"
+    const val ARCHIVE = "settings/archive"
     const val MEMORY = "settings/memory?chat={chat}"
     fun memory(chatId: Long? = null) = "settings/memory?chat=${chatId ?: -1}"
     fun relogin(site: String, web: Boolean = false) = "relogin/$site?web=$web"
@@ -121,6 +122,9 @@ fun FarrowRoot(
             composable(Routes.TOOLS) { com.farrow.app.ui.tools.ToolsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MEMORY, arguments = listOf(navArgument("chat") { type = NavType.LongType; defaultValue = -1L })) {
                 com.farrow.app.ui.memory.MemoryScreen(onBack = { nav.popBackStack() })
+            }
+            composable(Routes.ARCHIVE) {
+                com.farrow.app.ui.archive.ArchiveScreen(onBack = { nav.popBackStack() }, onOpenChat = { nav.navigate(Routes.chat(it)) })
             }
             composable(Routes.THEME) { com.farrow.app.ui.theme.ThemeScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.CHAT_HEADS) { ChatHeadSettingsScreen(onBack = { nav.popBackStack() }) }

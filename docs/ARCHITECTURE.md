@@ -532,3 +532,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   (`ChartCard`, shared `ChartPainter`), tap = fullscreen with Share; PNG exported to `filesDir/charts/`
   (FileProvider path `charts`).
 - System prompt: lists of items → Markdown tables, numeric comparisons → `chart`.
+- Chat archive: deleting a chat on the home list (swipe either way, or long-press > Delete) sets `tasks.archivedAt`
+  (Room v5, `MIGRATION_4_5` + index) with an Undo snackbar. Archived chats are hidden from every conversation list,
+  skipped by restart recovery, and open read-only (banner with Restore). Settings > Archive lists them newest first
+  with Restore / Delete permanently / Empty archive (both confirmed). Permanent delete removes messages and tool
+  calls (FK cascade), the chat's short-term memory and its chart PNGs (only files inside `filesDir/charts`).
+  Running work: archiving **stops** it (like the Stop button: generation cancelled, scheduled resumes dropped);
+  after Restore, send a message to continue.
+- Tests: Robolectric (JVM) DAO + migration tests that build v1/v4 databases from the exported schema JSON and let
+  Room migrate and validate.

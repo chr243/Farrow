@@ -6,7 +6,7 @@ import androidx.room.*
  * Schema designed for Phase 3 durable pause/resume: tasks carry status, current step,
  * a checkpoint JSON blob and resumeAt; messages and tool calls are persisted individually.
  */
-@Entity(tableName = "tasks", indices = [Index("status"), Index("updatedAt")])
+@Entity(tableName = "tasks", indices = [Index("status"), Index("updatedAt"), Index("archivedAt")])
 data class TaskEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
@@ -25,6 +25,8 @@ data class TaskEntity(
     val errorMessage: String? = null,
     @ColumnInfo(defaultValue = "0") val attempt: Int = 0,
     val pauseReason: String? = null,
+    /** v5 (v1.0.12): when the chat was moved to the archive; null = on the home list. */
+    val archivedAt: Long? = null,
 )
 
 @Entity(

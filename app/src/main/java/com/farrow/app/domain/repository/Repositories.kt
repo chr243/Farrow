@@ -21,7 +21,13 @@ interface TaskRepository {
     suspend fun markSummarized(ids: List<Long>)
     suspend fun addToolCall(record: ToolCallRecord): Long
     suspend fun finishToolCall(id: Long, resultJson: String, status: ToolCallStatus)
+    /** Permanent delete: messages, tool calls, the chat's short-term memory and its chart PNGs. */
     suspend fun deleteTask(taskId: Long)
+    /** v1.0.12 archive: archived chats are hidden from [observeConversations] and never auto-resume. */
+    fun observeArchived(): Flow<List<Task>>
+    suspend fun archive(taskId: Long)
+    suspend fun restore(taskId: Long)
+    suspend fun archivedIds(): List<Long>
     /** Pause with a resume time (null = manual resume only), reason and backoff attempt counter. */
     suspend fun pause(taskId: Long, status: TaskStatus, subtitle: String, resumeAt: Long?, reason: PauseReason, attempt: Int)
     suspend fun setAttempt(taskId: Long, attempt: Int)

@@ -185,7 +185,16 @@ fun ChatDetailScreen(onBack: () -> Unit, onRelogin: (String) -> Unit = {}, onCha
                 }
             }
             val status = task?.status
-            if (generating) {
+            if (task?.archived == true) {
+                // v1.0.12: archived chats are read-only; restore to continue.
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Archived chat (read-only)", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        FilledTonalButton(onClick = vm::restore) { Text("Restore") }
+                    }
+                }
+            } else if (generating) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     OutlinedButton(onClick = vm::stop, modifier = Modifier.padding(4.dp)) {
                         Box(Modifier.size(12.dp).background(MaterialTheme.colorScheme.error, RoundedCornerShape(2.dp)))
@@ -214,7 +223,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onRelogin: (String) -> Unit = {}, onCha
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (task?.archived != true) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
                     placeholder = { Text(if (task == null) "Describe a new task…" else "Message Farrow…") },

@@ -50,12 +50,15 @@ class ChatViewModel @Inject constructor(
 
     fun send(text: String) {
         val t = text.trim()
-        if (t.isEmpty()) return
+        if (t.isEmpty() || task.value?.archived == true) return
         viewModelScope.launch {
             val id = taskId.value
             if (id == 0L) taskId.value = startConversation(t) else sendMessage(id, t)
         }
     }
+
+    /** v1.0.12: bring an archived chat back to the home list. */
+    fun restore() { taskId.value.takeIf { it != 0L }?.let { viewModelScope.launch { tasks.restore(it) } } }
 
     fun stop() { taskId.value.takeIf { it != 0L }?.let(agent::stop) }
     fun resume() = forceRetry()

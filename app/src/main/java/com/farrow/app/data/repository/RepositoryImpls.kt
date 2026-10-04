@@ -28,8 +28,10 @@ class TaskRepositoryImpl @Inject constructor(
     private val messageDao: MessageDao,
     private val toolCallDao: ToolCallDao,
     private val memoryDao: MemoryDao,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
 ) : TaskRepository {
     private fun now() = System.currentTimeMillis()
+    private val chartsDir by lazy { java.io.File(context.filesDir, "charts") }
 
     override fun observeConversations() = taskDao.observeConversations().map { rows -> rows.map { Conversation(it.task.toDomain(), it.unreadCount) } }
     override fun observeTask(taskId: Long) = taskDao.observe(taskId).map { it?.toDomain() }
@@ -57,10 +59,17 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun addToolCall(record: ToolCallRecord) = toolCallDao.insert(record.toEntity().copy(id = 0))
     override suspend fun finishToolCall(id: Long, resultJson: String, status: ToolCallStatus) = toolCallDao.finish(id, resultJson, status.name, now())
     override suspend fun deleteTask(taskId: Long) {
+        // Chart PNGs first (their paths live in the tool results that the cascade removes).
+        val pngs = com.farrow.app.agent.tools.ChartFiles.owned(toolCallDao.results(taskId, com.farrow.app.agent.tools.ChartTool.NAME), chartsDir)
         taskDao.delete(taskId)
+        pngs.forEach { runCatching { it.delete() } }
         // The chat's short-term memory goes with it (plus any orphans left by older deletes).
         memoryDao.clearChat(taskId); memoryDao.deleteOrphans()
     }
+    override fun observeArchived() = taskDao.observeArchived().map { l -> l.map { it.toDomain() } }
+    override suspend fun archive(taskId: Long) { taskDao.archive(taskId, now()) }
+    override suspend fun restore(taskId: Long) { taskDao.restore(taskId) }
+    override suspend fun archivedIds() = taskDao.archivedIds()
     override suspend fun pause(taskId: Long, status: TaskStatus, subtitle: String, resumeAt: Long?, reason: PauseReason, attempt: Int) =
         taskDao.pause(taskId, status.name, subtitle, resumeAt, reason.name, attempt, now())
     override suspend fun setAttempt(taskId: Long, attempt: Int) = taskDao.setAttempt(taskId, attempt)

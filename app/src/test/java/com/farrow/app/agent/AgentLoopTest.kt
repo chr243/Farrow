@@ -47,6 +47,10 @@ class AgentLoopTest {
             toolCalls[(id - 1).toInt()] = toolCalls[(id - 1).toInt()].copy(resultJson = resultJson, status = status)
         }
         override suspend fun deleteTask(taskId: Long) {}
+        override fun observeArchived(): Flow<List<Task>> = flowOf(emptyList())
+        override suspend fun archive(taskId: Long) {}
+        override suspend fun restore(taskId: Long) {}
+        override suspend fun archivedIds() = emptyList<Long>()
         override suspend fun pause(taskId: Long, status: TaskStatus, subtitle: String, resumeAt: Long?, reason: PauseReason, attempt: Int) {
             task = task.copy(status = status, subtitle = subtitle, resumeAt = resumeAt); pausedReason = reason
         }

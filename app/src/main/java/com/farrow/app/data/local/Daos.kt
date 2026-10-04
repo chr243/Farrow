@@ -9,10 +9,24 @@ interface TaskDao {
         """
         SELECT t.*, (SELECT COUNT(*) FROM messages m WHERE m.taskId = t.id AND m.role = 'assistant'
                      AND m.kind = 'NORMAL' AND m.createdAt > t.lastOpenedAt) AS unreadCount
-        FROM tasks t ORDER BY t.updatedAt DESC
+        FROM tasks t WHERE t.archivedAt IS NULL ORDER BY t.updatedAt DESC
         """
     )
     fun observeConversations(): Flow<List<ConversationRow>>
+
+    /** Settings > Archive: newest archived first. */
+    @Query("SELECT * FROM tasks WHERE archivedAt IS NOT NULL ORDER BY archivedAt DESC, id DESC")
+    fun observeArchived(): Flow<List<TaskEntity>>
+
+    @Query("SELECT id FROM tasks WHERE archivedAt IS NOT NULL")
+    suspend fun archivedIds(): List<Long>
+
+    /** Moves a chat to the archive (no-op when already archived, so the first archive time is kept). */
+    @Query("UPDATE tasks SET archivedAt = :now WHERE id = :id AND archivedAt IS NULL")
+    suspend fun archive(id: Long, now: Long): Int
+
+    @Query("UPDATE tasks SET archivedAt = NULL WHERE id = :id")
+    suspend fun restore(id: Long): Int
 
     @Query("SELECT * FROM tasks WHERE id = :id")
     fun observe(id: Long): Flow<TaskEntity?>
@@ -47,7 +61,8 @@ interface TaskDao {
     @Query("UPDATE tasks SET attempt = :attempt WHERE id = :id")
     suspend fun setAttempt(id: Long, attempt: Int)
 
-    @Query("SELECT * FROM tasks WHERE status IN (:statuses) ORDER BY updatedAt ASC")
+    /** Recovery/resume candidates; archived chats never run again on their own. */
+    @Query("SELECT * FROM tasks WHERE status IN (:statuses) AND archivedAt IS NULL ORDER BY updatedAt ASC")
     suspend fun withStatus(statuses: List<String>): List<TaskEntity>
 }
 
@@ -73,6 +88,10 @@ interface ToolCallDao {
 
     @Insert
     suspend fun insert(entity: ToolCallEntity): Long
+
+    /** Results of one tool in a chat (e.g. `chart`, to delete its PNGs with the chat). */
+    @Query("SELECT resultJson FROM tool_calls WHERE taskId = :taskId AND name = :name AND resultJson IS NOT NULL")
+    suspend fun results(taskId: Long, name: String): List<String>
 
     @Query("UPDATE tool_calls SET resultJson = :result, status = :status, finishedAt = :now WHERE id = :id")
     suspend fun finish(id: Long, result: String, status: String, now: Long)
@@ -141,7 +160,7 @@ interface MemoryDao {
 
 @Database(
     entities = [TaskEntity::class, MessageEntity::class, ToolCallEntity::class, RateLimitEventEntity::class, NotificationEntity::class, MemoryEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class FarrowDatabase : RoomDatabase() {

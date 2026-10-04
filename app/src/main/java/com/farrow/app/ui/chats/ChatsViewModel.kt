@@ -11,6 +11,7 @@ import com.farrow.app.domain.repository.TaskRepository
 import com.farrow.app.domain.usecase.ObserveConversationsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 
@@ -27,7 +28,20 @@ class ChatsViewModel @Inject constructor(
     private val kiloUsage: com.farrow.app.data.network.KiloUsage,
     private val client: com.farrow.app.data.network.OpenRouterClient,
     updater: com.farrow.app.data.update.AppUpdater,
+    private val archive: com.farrow.app.domain.usecase.ChatArchiveUseCase,
 ) : ViewModel() {
+    /** v1.0.12: "delete" on the home list = move to the archive; the screen shows a snackbar with Undo. */
+    data class Archived(val taskId: Long, val title: String, val stopped: Boolean)
+    private val _archived = kotlinx.coroutines.channels.Channel<Archived>(kotlinx.coroutines.channels.Channel.BUFFERED)
+    val archivedEvents = _archived.receiveAsFlow()
+
+    fun archive(c: Conversation) = viewModelScope.launch {
+        val stopped = archive.archive(c.task.id)
+        _archived.send(Archived(c.task.id, c.task.title, stopped))
+    }
+
+    fun undoArchive(taskId: Long) = viewModelScope.launch { archive.restore(taskId) }
+
     /** Dot on the gear: a newer Farrow release exists. */
     val updateAvailable = updater.updateAvailable
     val query = MutableStateFlow("")

@@ -61,6 +61,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
                     if (unreadNotifications > 0) "$unreadNotifications unread · rate limits, quota warnings, completions"
                     else "Rate-limit alerts, quota warnings and completions", Routes.NOTIFICATIONS),
                 item("Memory", "Short-term (per chat) and long-term memory: list, search, edit, automatic saving", Routes.memory()),
+                item("Archive", "Chats deleted from the home list: open, restore or delete permanently", Routes.ARCHIVE),
             ))
             SettingsGroup("Models", listOf(
                 item("API keys", "Add, reorder and choose the primary OpenRouter key", Routes.KEYS),

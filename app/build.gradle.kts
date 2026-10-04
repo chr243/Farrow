@@ -56,6 +56,8 @@ android {
                 "Farrow-v${versionName}-${buildType.name}.apk"
         }
     }
+    // v1.0.12: Room DAO + migration tests run on the JVM via Robolectric (old schemas read from /schemas).
+    testOptions.unitTests.isIncludeAndroidResources = true
     lint {
         abortOnError = true
         checkReleaseBuilds = false
@@ -115,4 +117,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

@@ -2,6 +2,7 @@ package com.farrow.app.ui.chats
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -46,8 +47,18 @@ fun ChatsScreen(
     val hasKeys by vm.hasKeys.collectAsStateWithLifecycle()
     val updateAvailable by vm.updateAvailable.collectAsStateWithLifecycle()
     val now = rememberNow()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        vm.archivedEvents.collect { e ->
+            snackbar.currentSnackbarData?.dismiss()
+            val r = snackbar.showSnackbar(if (e.stopped) "Moved to archive (task stopped)" else "Moved to archive",
+                actionLabel = "Undo", duration = SnackbarDuration.Short)
+            if (r == SnackbarResult.ActionPerformed) vm.undoArchive(e.taskId)
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Farrow", fontWeight = FontWeight.Bold, fontSize = 26.sp) },
@@ -98,7 +109,9 @@ fun ChatsScreen(
                     )
                 }
             }
-            items(conversations, key = { it.task.id }) { c -> ConversationRow(c) { onOpenChat(c.task.id) } }
+            items(conversations, key = { it.task.id }) { c ->
+                ArchivableRow(c, onOpen = { onOpenChat(c.task.id) }, onArchive = { vm.archive(c) })
+            }
         }
     }
 }
@@ -161,10 +174,40 @@ private fun Story(c: Conversation, now: Long, onClick: () -> Unit) {
     }
 }
 
+/** v1.0.12: swipe left/right or long-press > Delete moves the chat to the archive (Undo in the snackbar). */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConversationRow(c: Conversation, onClick: () -> Unit) {
+private fun ArchivableRow(c: Conversation, onOpen: () -> Unit, onArchive: () -> Unit) {
+    val state = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
+        if (v != SwipeToDismissBoxValue.Settled) { onArchive(); true } else false
+    })
+    var menu by remember { mutableStateOf(false) }
+    SwipeToDismissBox(state, backgroundContent = {
+        val start = state.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+        Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (start) Arrangement.Start else Arrangement.End) {
+            Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+            Spacer(Modifier.width(8.dp))
+            Text("Archive", color = MaterialTheme.colorScheme.onErrorContainer)
+        }
+    }) {
+        Box(Modifier.background(MaterialTheme.colorScheme.surface)) {
+            ConversationRow(c, onClick = onOpen, onLongClick = { menu = true })
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Open") }, onClick = { menu = false; onOpen() })
+                DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
+                    onClick = { menu = false; onArchive() })
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun ConversationRow(c: Conversation, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TaskAvatar(c.task.type, c.task.status)

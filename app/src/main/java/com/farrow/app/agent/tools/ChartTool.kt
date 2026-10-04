@@ -154,6 +154,21 @@ object ChartMath {
         if (count <= 1 || slotPx <= 0f) 1 else maxOf(1, ceil((labelPx + 8f) / slotPx).toInt())
 }
 
+/** Chart PNG files referenced by `chart` tool results; only files inside [chartsDir] (never anything else on disk). */
+object ChartFiles {
+    fun owned(resultJsons: List<String>, chartsDir: File): List<File> {
+        val root = runCatching { chartsDir.canonicalFile }.getOrNull() ?: return emptyList()
+        return resultJsons.mapNotNull { ChartSpecs.fromResult(it)?.second ?: imagePath(it) }
+            .map { File(it) }
+            .filter { f -> runCatching { f.canonicalFile.parentFile == root && f.name.endsWith(".png") }.getOrDefault(false) }
+            .distinct()
+    }
+
+    private fun imagePath(json: String): String? = runCatching {
+        (Json.parseToJsonElement(json).jsonObject[ChartTool.IMAGE_PATH] as? JsonPrimitive)?.contentOrNull
+    }.getOrNull()
+}
+
 /** Writes a chart PNG (Android: [com.farrow.app.ui.chart.AndroidChartPng]); null when it could not render. */
 fun interface ChartPngRenderer {
     fun render(spec: ChartSpec, file: File): Boolean

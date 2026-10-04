@@ -41,7 +41,11 @@ data class Task(
     val attempt: Int = 0,
     /** [PauseReason] name when paused / rate-limited. */
     val pauseReason: String? = null,
-)
+    /** v1.0.12: set while the chat is in the archive (read-only, hidden from the home list). */
+    val archivedAt: Long? = null,
+) {
+    val archived: Boolean get() = archivedAt != null
+}
 
 /** Why a task is paused; drives the system message and whether it auto-resumes. */
 enum class PauseReason(val autoResume: Boolean) {
