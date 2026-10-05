@@ -655,3 +655,19 @@ Fixes, beta only:
   ok/error, the message, the log tail on failure, and seconds. The prompt says to use it once when browser tools hang
   or fail repeatedly.
 - **Colorful chat avatars:** a stable tonal color hashed from the chat id, and a topic/type/initial glyph.
+
+## v1.0.18
+
+- **Prefer curl / web_fetch over the internal browser.** The system prompt tells the agent to use `web_fetch` (plain
+  OkHttp GET/HEAD) or `termux_run` + curl for public APIs, static HTML and pages that don't need JS/login. The internal
+  browser (`web_*`, `x_*`, `fb_*`) is only for login/session, clicking, JS-rendered pages, CAPTCHA, or sites that block
+  plain HTTP. X posting rules and `reset_browser` stay.
+- **Crypto tools (Coinbase Exchange).** Revolut's public developer APIs (Business / Merchant / Open Banking) expose
+  accounts, payments and fiat FX — there is **no** crypto trading, order book, candles or spot-order endpoint. Retail
+  crypto in the Revolut app has no documented API. Farrow therefore uses **Coinbase Exchange** for:
+  - Public (no key): `crypto_markets`, `crypto_ticker`, `crypto_candles`, `crypto_orderbook`, `crypto_backtest` (local
+    SMA crossover → return %, max drawdown, win rate, equity chart payload).
+  - Authenticated (API key + secret + passphrase in EncryptedSharedPreferences, Settings > Shizuku… > Crypto exchange):
+    `crypto_balance`, `crypto_order_status`.
+  - Live trading (OFF by default under Tools): `crypto_place_order`, `crypto_cancel_order` — require `confirm=true` and
+    an explicit user request with size/pair.

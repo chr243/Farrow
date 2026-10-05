@@ -3,6 +3,7 @@ package com.farrow.app.ui.device
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.farrow.app.data.a11y.FarrowAccessibilityService
+import com.farrow.app.data.crypto.CryptoCredentials
 import com.farrow.app.data.git.GitCredentialStore
 import com.farrow.app.shizuku.ShellBackendStatus
 import com.farrow.app.shizuku.ShellExecutor
@@ -22,6 +23,8 @@ data class DeviceControlUi(
     val gitUser: String = "",
     val authorName: String = "",
     val authorEmail: String = "",
+    val cryptoKeyMasked: String? = null,
+    val cryptoConfigured: Boolean = false,
     val testOutput: String? = null,
     val testing: Boolean = false,
     val shizukuBindError: String? = null,
@@ -33,6 +36,7 @@ data class DeviceControlUi(
 class DeviceControlViewModel @Inject constructor(
     private val shizuku: ShizukuManager,
     private val git: GitCredentialStore,
+    private val crypto: CryptoCredentials,
     private val shell: ShellExecutor,
 ) : ViewModel() {
     val shizukuState: StateFlow<ShizukuState> = shizuku.state
@@ -47,7 +51,8 @@ class DeviceControlViewModel @Inject constructor(
         _ui.update {
             it.copy(accessibilityOn = FarrowAccessibilityService.isRunning, gitTokenMasked = git.maskedToken,
                 shizukuBindError = shizuku.lastBindError, shizukuInfo = shizuku.serverInfo(),
-                gitUser = git.username, authorName = git.authorName, authorEmail = git.authorEmail)
+                gitUser = git.username, authorName = git.authorName, authorEmail = git.authorEmail,
+                cryptoKeyMasked = crypto.maskedKey, cryptoConfigured = crypto.configured)
         }
     }
 
@@ -86,6 +91,16 @@ class DeviceControlViewModel @Inject constructor(
     }
 
     fun clearGitToken() { git.token = null; refresh() }
+
+    fun saveCrypto(key: String, secret: String, passphrase: String) {
+        if (key.isNotBlank()) crypto.apiKey = key
+        if (secret.isNotBlank()) crypto.apiSecret = secret
+        if (passphrase.isNotBlank()) crypto.passphrase = passphrase
+        refresh()
+        _ui.update { it.copy(message = "Crypto API credentials saved (encrypted)") }
+    }
+
+    fun clearCrypto() { crypto.clear(); refresh(); _ui.update { it.copy(message = "Crypto API credentials removed") } }
 
     fun consumeMessage() = _ui.update { it.copy(message = null) }
 }

@@ -118,11 +118,14 @@ object AppModule {
         vision: com.farrow.app.data.network.ModelCapabilities,
         appPrefs: com.farrow.app.data.prefs.AppPrefs,
         browserOps: com.farrow.app.data.browser.BrowserOpsManager,
+        cryptoClient: com.farrow.app.data.crypto.CoinbaseExchangeClient,
+        cryptoCreds: com.farrow.app.data.crypto.CryptoCredentials,
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
             // Phase 4: internal browser (Termux Browser Pilot bridge, HTTP+Jsoup fallback)
             WebScrapeTool(bridge, fallbackBrowser, { url -> com.farrow.app.agent.tools.SiteScopes.textScopeFor(url, selectors) }) { !appPrefs.loadImages.value },
+            WebFetchTool(),
             WebClickTool(bridge) { !appPrefs.loadImages.value }, WebTypeTool(bridge) { !appPrefs.loadImages.value }, WebSessionTool(bridge),
             // reset_browser: Settings > Internal browser setup > Reset browser, from the agent (background op, awaited)
             com.farrow.app.agent.tools.ResetBrowserTool(browserOps::resetBrowser, browserOps.state),
@@ -148,6 +151,8 @@ object AppModule {
                 // v1.0.12: native charts in the chat (+ PNG export for sharing)
                 ChartTool(File(context.filesDir, "charts"), com.farrow.app.ui.chart.AndroidChartPng()),
             ) +
+            // Crypto: Coinbase Exchange market data + optional live trading (place/cancel off by default)
+            com.farrow.app.agent.tools.CryptoToolFactory(cryptoClient, cryptoCreds).tools() +
             StubTool.all(),
         toolPrefs,
         dynamic = mcp::agentTools,

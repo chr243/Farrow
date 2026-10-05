@@ -38,7 +38,7 @@ class ToolPrefs @Inject constructor(@ApplicationContext context: Context) : Tool
         private const val KEY_DISABLED = "disabled"
         private const val KEY_OPT_IN = "opt_in"
         /** Tools that start switched off (v1.0.15: x_post_beta). */
-        val DEFAULT_OFF: Set<String> = setOf("x_post_beta")
+        val DEFAULT_OFF: Set<String> = setOf("x_post_beta", "crypto_place_order", "crypto_cancel_order")
         fun effective(disabled: Set<String>, optIn: Set<String>): Set<String> = (disabled - DEFAULT_OFF) + (DEFAULT_OFF - optIn)
     }
 }

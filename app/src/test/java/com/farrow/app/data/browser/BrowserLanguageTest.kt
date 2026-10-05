@@ -28,4 +28,15 @@ class BrowserLanguageTest {
         assertTrue(AgentLoop.systemPrompt("en").contains("Prefer English-language sources"))
         assertTrue(AgentLoop.systemPrompt("fr").contains("Français"))
     }
+
+    @Test fun `system prompt prefers curl over the browser and gates live crypto trading`() {
+        val p = AgentLoop.systemPrompt("en")
+        assertTrue(p.contains("web_fetch"))
+        assertTrue(p.contains("Prefer curl/web_fetch") || p.contains("prefer these first"))
+        assertTrue(p.contains("crypto_place_order"))
+        assertTrue(p.contains("OFF by default") || p.contains("off by default"))
+        assertTrue(p.contains("Revolut has no public crypto"))
+        assertTrue(p.contains("reset_browser"))
+        assertTrue(p.contains("x_post"))
+    }
 }

@@ -375,27 +375,36 @@ class AgentLoop internal constructor(
         /** Which tools control what — the agent kept asking for accessibility permission to click in its own browser. */
         val TOOL_GROUPS = """
             Tool groups:
-            - Internal browser (Firefox driven by Termux Browser Pilot inside Termux, invisible, not on the phone screen):
-              web_scrape, web_click, web_type, web_session, web_screenshot, and the site tools x_status / x_post / x_scrape,
-              fb_*. They need NO accessibility permission and no screen access. Use them for every web task (searching,
-              reading pages, clicking/typing on websites, posting on X).
+            - Fetching public info (prefer these first): web_fetch (plain HTTP GET/HEAD, no browser) or termux_run with curl
+              for APIs, static HTML, downloads and anything that does not need JavaScript or a login. Prefer curl/web_fetch
+              over the internal browser whenever the page answers without JS.
+            - Internal browser (Firefox via Termux Browser Pilot, invisible, not on the phone screen): web_scrape,
+              web_click, web_type, web_session, web_screenshot, and the site tools x_status / x_post / x_scrape, fb_*.
+              Use ONLY when Firefox is necessary: login/session cookies, clicking or typing on a page, JS-rendered
+              content, CAPTCHA, or sites that block plain HTTP. They need NO accessibility permission.
               X rules (strict): new posts ALWAYS with x_post. NEVER use web_click / web_type on X composers or the Post
               button: they are refused. Reading a post's thread: x_scrape kind=replies. If x_post fails, report its error
               and steps to the user instead of improvising clicks. x_post_beta (x_post with instant typing, off by default):
               use x_post unless the user turned x_post_beta on in Tools or asks for the beta; then post with x_post_beta.
               reset_browser: when browser tools (web_*, x_*) hang or fail repeatedly, call reset_browser once (it restarts the
               internal browser and waits until it is back), then retry; don't loop resets.
+            - Crypto (Coinbase Exchange; Revolut has no public crypto trading API): crypto_markets, crypto_ticker,
+              crypto_candles, crypto_orderbook (public, no key); crypto_balance, crypto_order_status (need API key in
+              Settings); crypto_backtest (local SMA crossover on public candles). Live trading tools crypto_place_order and
+              crypto_cancel_order are OFF by default — only use them when the user explicitly asks to trade with a size and
+              pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display; they cannot see or click the internal browser.
               Never ask the user for accessibility permission for a web task.
-            - Device: run_shell (Shizuku), termux_run (Termux packages). Files: read_file, write_file, list_dir. Git: git_*.
+            - Device: run_shell (Shizuku), termux_run (Termux packages, including curl). Files: read_file, write_file,
+              list_dir. Git: git_*.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
               and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
             - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown
               table (header row + one row per item) — the chat renders tables. Numeric comparisons (e.g. prices, ratings,
-              values over time, shares) with the chart tool (bar/line/pie/scatter), then a short summary in text.
+              values over time, shares, backtest equity) with the chart tool (bar/line/pie/scatter), then a short summary in text.
             System note (built in): clicking, typing and logging in on websites happens in the internal browser with the
-            web_* / x_* tools — accessibility is never required for that.
+            web_* / x_* tools — accessibility is never required for that. Prefer web_fetch/curl for read-only public pages.
         """.trimIndent()
 
         /** [SYSTEM_PROMPT] + the source-language rule for the "Browser language" setting (default English). */

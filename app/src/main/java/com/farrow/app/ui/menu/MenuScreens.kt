@@ -89,7 +89,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
             SettingsGroup("Phone", listOf(
                 item("Chat heads", "Auto / Bubbles / Overlay, permissions", Routes.CHAT_HEADS),
                 item("Background & battery", "Keep-alive service, battery optimisation, HyperOS autostart", Routes.KEEP_ALIVE),
-                item("Shizuku, accessibility & Git", "run_shell via Shizuku, screen control, Git token", Routes.SHIZUKU),
+                item("Shizuku, accessibility & Git", "run_shell via Shizuku, screen control, Git token, crypto API key", Routes.SHIZUKU),
             ))
             SettingsGroup("Appearance", listOf(item("Theme", "Light / dark mode and color palette", Routes.THEME)))
             SettingsGroup("App", listOf({ i -> AppUpdateRow(vm.updater, i) }))

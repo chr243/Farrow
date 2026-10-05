@@ -17,6 +17,12 @@ data class ToolStatus(val ready: Boolean, val text: String) {
             name in setOf("read_file", "write_file", "list_dir") -> READY
             name == "web_scrape" -> if (env.browserUp) READY else ToolStatus(true, "Ready (plain HTTP fallback) — full browser needs Settings > Internal browser setup")
             name.startsWith("web_") -> if (env.browserUp) READY else ToolStatus(false, "Needs the internal browser (Settings > Internal browser setup)")
+            name == "web_fetch" -> READY
+            name.startsWith("crypto_") -> when (name) {
+                "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings)")
+                "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku, accessibility & Git)")
+                else -> READY // public market data / backtest
+            }
             name.startsWith("x_") -> if (env.browserUp) ToolStatus(true, "Ready if logged in (Settings > X.com account)")
                 else ToolStatus(false, "Needs the internal browser and an X login (Settings > X.com account)")
             name.startsWith("fb_") -> if (env.browserUp) ToolStatus(true, "Ready if logged in (Settings > Facebook account)")
