@@ -23,6 +23,8 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { vm.onPermissionResult() }
+    val storageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { vm.refresh() }
     Scaffold(topBar = {
         TopAppBar(title = { Text("Tools") },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
@@ -53,6 +55,11 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
                     },
                     trailingContent = { Switch(checked = on, onCheckedChange = { vm.setEnabled(t.name, it) }) },
                 )
+            }
+            item {
+                Text("Shared folder", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp))
+                SharedFolderCard(state.storage,
+                    onGrant = { runCatching { storageLauncher.launch(com.farrow.app.data.storage.SharedFolder.accessIntent(context)) } })
             }
             item {
                 Text("Termux", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp))
@@ -120,6 +127,26 @@ fun McpServersScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             item { McpServersSection(vm.mcp, disabled, vm::setEnabled) }
             item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+/** Documents/Farrow: what it is for, All files access and folder status. */
+@Composable
+private fun SharedFolderCard(s: StorageSetup, onGrant: () -> Unit) {
+    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(com.farrow.app.data.storage.SharedFolder.DISPLAY_PATH, fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodyMedium)
+            Text("A folder you can open in any file manager. Put files for Farrow in Input/; Farrow saves its results in " +
+                "Output/. The agent creates, edits and deletes files only inside this folder (workspace_list, workspace_read, " +
+                "workspace_write, workspace_delete). Android 11+ needs All files access for this; the folders are created " +
+                "automatically at launch once it is granted.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SetupLine("1. All files access", s.access) {
+                if (!s.access) OutlinedButton(onClick = onGrant) { Text("Grant") }
+            }
+            SetupLine("2. Documents/Farrow with Input/ and Output/", s.exists) {}
         }
     }
 }

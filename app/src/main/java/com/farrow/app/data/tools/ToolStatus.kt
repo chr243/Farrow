@@ -7,6 +7,8 @@ data class ToolEnv(
     val termuxReady: Boolean = false,
     val accessibilityOn: Boolean = false,
     val gitToken: Boolean = false,
+    /** All files access granted, so Documents/Farrow is usable. */
+    val storageReady: Boolean = false,
 )
 
 data class ToolStatus(val ready: Boolean, val text: String) {
@@ -15,6 +17,8 @@ data class ToolStatus(val ready: Boolean, val text: String) {
 
         fun of(name: String, env: ToolEnv): ToolStatus = when {
             name in setOf("read_file", "write_file", "list_dir") -> READY
+            name.startsWith("workspace_") -> if (env.storageReady) READY
+                else ToolStatus(false, "Needs All files access for Documents/Farrow (Settings > Tools > Shared folder)")
             name == "web_fetch" || name == "web_search" -> READY
             name.startsWith("crypto_") -> when (name) {
                 "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings)")

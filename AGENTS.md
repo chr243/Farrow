@@ -1,6 +1,6 @@
 # AGENTS.md — Farrow
 
-Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), screen control via an Accessibility service, JGit, sandboxed file tools, memory and an MCP client. There is no backend server; everything runs on the device.
+Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Farrow` folder (`workspace_*`, All files access), memory and an MCP client. There is no backend server; everything runs on the device.
 
 ## Repo map
 

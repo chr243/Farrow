@@ -96,9 +96,14 @@ object AppModule {
     @Provides @Singleton
     fun provideSandbox(@ApplicationContext context: Context) = WorkspaceSandbox(File(context.filesDir, "workspace"))
 
+    /** Shared user-visible folder /storage/emulated/0/Documents/Farrow (Input/, Output/); needs All files access. */
+    @Provides @Singleton
+    fun provideSharedFolder(): com.farrow.app.data.storage.SharedFolder = com.farrow.app.data.storage.SharedFolder.android()
+
     @Provides @Singleton
     fun provideToolRegistry(
         sandbox: WorkspaceSandbox,
+        sharedFolder: com.farrow.app.data.storage.SharedFolder,
         shell: ShellExecutor,
         git: GitManager,
         toolPrefs: com.farrow.app.data.tools.ToolPrefs,
@@ -111,6 +116,9 @@ object AppModule {
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
+            // Shared Documents/Farrow folder (Input/, Output/) the user sees in their file manager
+            WorkspaceListTool(sharedFolder), WorkspaceReadTool(sharedFolder),
+            WorkspaceWriteTool(sharedFolder), WorkspaceDeleteTool(sharedFolder),
             // Default web search (keyless multi-engine, port of hec-ovi/websearch-skill) + fetch a known URL (raw or Markdown)
             WebSearchTool(), WebFetchTool(),
         ) +

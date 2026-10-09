@@ -31,8 +31,12 @@ data class PkgRow(val pkg: TermuxPackage, val state: PkgState, val detail: Strin
 /** Termux setup as seen from the app (allow-external-apps can only be observed by a command answering). */
 data class TermuxSetup(val installed: Boolean = false, val permission: Boolean = false, val answering: Boolean? = null)
 
+/** Documents/Farrow as seen from the app: All files access granted and the folders present. */
+data class StorageSetup(val access: Boolean = false, val exists: Boolean = false)
+
 data class ToolsState(
     val tools: List<ToolRow> = emptyList(),
+    val storage: StorageSetup = StorageSetup(),
     val termux: TermuxSetup = TermuxSetup(),
     val packages: List<PkgRow> = TermuxPackages.ALL.map { PkgRow(it, PkgState.UNKNOWN) },
     val packagesNote: String? = "Checking Termux…",
@@ -48,6 +52,7 @@ class ToolsViewModel @Inject constructor(
     val termux: TermuxManager,
     private val pkgJobs: TermuxPackageJobs,
     val mcp: com.farrow.app.data.mcp.McpManager,
+    val sharedFolder: com.farrow.app.data.storage.SharedFolder,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ToolsState(tools = rows(ToolEnv())))
     val state: StateFlow<ToolsState> = _state.asStateFlow()
@@ -65,6 +70,10 @@ class ToolsViewModel @Inject constructor(
         if (_state.value.checking) return
         _state.update { it.copy(checking = true) }
         viewModelScope.launch {
+            val storage = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                StorageSetup(sharedFolder.hasAccess(), sharedFolder.ensure() || sharedFolder.exists())
+            }
+            _state.update { it.copy(storage = storage) }
             val installed = termux.isInstalled()
             val permission = installed && termux.hasRunCommandPermission()
             _state.update { it.copy(termux = TermuxSetup(installed, permission)) }
@@ -73,6 +82,7 @@ class ToolsViewModel @Inject constructor(
                 shizukuReady = runCatching { shizuku.refresh() }.getOrNull() == ShizukuState.READY,
                 accessibilityOn = FarrowAccessibilityService.isRunning,
                 gitToken = gitCreds.maskedToken != null,
+                storageReady = storage.access,
             )
             _state.update { it.copy(tools = rows(env)) }
             detectPackages()

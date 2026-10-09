@@ -370,7 +370,12 @@ class AgentLoop internal constructor(
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display.
             - Device: run_shell (Shizuku, adb shell user), termux_run (bash in Termux with the packages the user installed,
-              e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Files: read_file, write_file, list_dir. Git: git_*.
+              e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Git: git_*.
+            - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
+              /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
+              you and save deliverables (reports, exports, generated files) in Output/. Paths are relative to that folder;
+              nothing outside it is reachable. Only delete what the user asked for. read_file, write_file, list_dir are a
+              private scratch workspace the user can't see.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
               and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
             - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown

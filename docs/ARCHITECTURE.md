@@ -97,6 +97,7 @@ com.farrow.app
 | Tool | Status |
 |---|---|
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
+| `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
 | `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
@@ -338,5 +339,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   extraction, ≈4 chars/token pagination, random-nonce untrusted fence, block detection). `web_fetch` gained
   `format=markdown`, `page`, `page_size_tokens` and a 20-entry cache. Jsoup is back as a dependency for HTML parsing.
   The prompt tells the agent to use `web_search` first, then `web_fetch format=markdown` on the best 2–3 hits.
+- **Shared folder `Documents/Farrow`.** `data/storage/SharedFolder` creates `/storage/emulated/0/Documents/Farrow` with
+  `Input/` and `Output/` at launch (`FarrowApp`) and whenever Tools refreshes or a `workspace_*` tool runs, if missing.
+  Needs `MANAGE_EXTERNAL_STORAGE` (All files access, minSdk 30); Settings → Tools has a *Shared folder* card explaining
+  the folder with a Grant button (`ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`). Tools `workspace_list`,
+  `workspace_read` (offset/max_bytes, binary detection), `workspace_write` (overwrite/append/create, directory=true) and
+  `workspace_delete` (recursive=true for non-empty folders, root refused, Input/Output recreated) go through
+  `SharedFolderSandbox`. `read_file`/`write_file`/`list_dir` stay the private `filesDir/workspace` scratch area.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

@@ -16,6 +16,7 @@
 - **Web fetching:** `web_fetch`, a plain HTTP GET/HEAD (no browser, no JavaScript) for a known URL or API. `format=markdown` returns a clean Markdown extract of the page, paginated by tokens (`page`, `page_size_tokens`, cached), wrapped in an untrusted-content fence, with block/captcha detection.
 - **Crypto:** Coinbase Exchange market data, a local backtest and optional live trading (`crypto_place_order` / `crypto_cancel_order` are off by default; the API key is stored only in EncryptedSharedPreferences).
 - **Device control:** `run_shell` via Shizuku (shell uid), `screen_*` tools via an Accessibility service, and `termux_run` (bash in Termux through its RUN_COMMAND service) with optional Termux packages (ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc, …) installable from Settings → Tools.
+- **Shared folder:** `/storage/emulated/0/Documents/Farrow` with `Input/` (files you give Farrow) and `Output/` (its results), created at launch once *All files access* is granted (Settings → Tools → Shared folder). `workspace_list` / `workspace_read` / `workspace_write` / `workspace_delete` can only reach that tree (path escapes and symlinks are rejected).
 - **Git:** clone / status / commit / push with JGit inside the app workspace.
 - **Memory, MCP client, sandboxed file tools** and a keep-alive service that only runs while a task runs.
 - **Security first:** API keys in EncryptedSharedPreferences (Android Keystore), no backups, HTTPS only.
@@ -31,6 +32,10 @@ adb install -r Farrow-v1.0.0-debug.apk
 ```
 
 Then open Farrow → **Menu → API keys** and add an OpenRouter key (`sk-or-…`) and/or a Kilo key.
+
+### Shared folder (optional, for `workspace_*`)
+
+Open **Settings → Tools → Shared folder** and tap **Grant** to give Farrow *All files access* (Android 11+ `MANAGE_EXTERNAL_STORAGE`). Farrow then creates `Documents/Farrow/Input` and `Documents/Farrow/Output`.
 
 ### 2. Termux (optional, for `termux_run`)
 

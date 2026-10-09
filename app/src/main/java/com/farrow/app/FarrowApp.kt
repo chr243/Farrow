@@ -19,6 +19,7 @@ class FarrowApp : Application(), Configuration.Provider {
     @Inject lateinit var scheduler: AgentScheduler
     @Inject lateinit var keepAlive: KeepAliveController
     @Inject lateinit var agent: com.farrow.app.domain.repository.AgentController
+    @Inject lateinit var sharedFolder: com.farrow.app.data.storage.SharedFolder
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
@@ -38,6 +39,8 @@ class FarrowApp : Application(), Configuration.Provider {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { scheduler.recover() }
         QuotaPollWorker.schedule(this)
         removeLegacyAdb()
+        // Documents/Farrow with Input/ and Output/ (no-op until All files access is granted; Tools re-checks it).
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { runCatching { sharedFolder.ensure() } }
         // v0.9.19: the keep-alive service runs only while a task is running (no idle notification).
         keepAlive.watch(agent.runningTaskIds, CoroutineScope(SupervisorJob() + Dispatchers.Main))
     }

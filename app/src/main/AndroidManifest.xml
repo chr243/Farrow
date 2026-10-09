@@ -17,6 +17,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- termux_run + Settings > Tools package installer: run commands in Termux (user grants it + enables allow-external-apps). -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+    <!-- Shared folder /storage/emulated/0/Documents/Farrow (Input/, Output/): All files access on Android 11+ -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <queries>
         <package android:name="com.termux" />
