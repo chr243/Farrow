@@ -50,12 +50,45 @@ class RishStore(dir: File) {
         return Result.Installed(s, c)
     }
 
+    /** A rish script found on shared storage together with its companion dex. */
+    data class Found(val script: File, val companion: File)
+
+    /**
+     * Looks for `rish` + its companion (`rish_shizuku.dex`) in [roots] and their sub-folders up to [depth] levels
+     * (newest match first). Needs All files access on the device.
+     */
+    fun find(roots: List<File>, depth: Int = 2): Found? {
+        val hits = mutableListOf<Found>()
+        fun scan(dir: File, level: Int) {
+            val files = runCatching { dir.listFiles() }.getOrNull() ?: return
+            files.filter { it.isFile && it.name == SCRIPT && it.length() in 3..MAX_SCRIPT }.forEach { f ->
+                val bytes = runCatching { f.readBytes() }.getOrNull() ?: return@forEach
+                if (!isScript(Picked(f.name, bytes))) return@forEach
+                val comp = File(dir, companionName(bytes.toString(Charsets.UTF_8)) ?: DEFAULT_COMPANION)
+                if (comp.isFile && comp.canRead()) hits += Found(f, comp)
+            }
+            if (level < depth) files.filter { it.isDirectory && !it.name.startsWith(".") }.take(MAX_DIRS).forEach { scan(it, level + 1) }
+        }
+        roots.distinct().filter { it.isDirectory }.forEach { scan(it, 0) }
+        return hits.maxByOrNull { it.script.lastModified() }
+    }
+
+    /** [find] + copy both files into [dir]. */
+    fun findAndInstall(roots: List<File>): Result? {
+        val f = find(roots) ?: return null
+        return install(listOf(Picked(f.script.name, f.script.readBytes()), Picked(f.companion.name, f.companion.readBytes())))
+    }
+
     fun remove() { dir.listFiles()?.forEach { it.setWritable(true, true); it.delete() } }
 
     companion object {
         const val SCRIPT = "rish"
         const val DEFAULT_COMPANION = "rish_shizuku.dex"
         private const val MAX_SCRIPT = 64_000
+        private const val MAX_DIRS = 200
+        /** Where "Find rish" looks: Download, Documents and Documents/Farrow/Input (and their sub-folders). */
+        fun searchRoots(storage: File = File("/storage/emulated/0")): List<File> = listOf(
+            File(storage, "Download"), File(storage, "Documents"), File(storage, "Documents/Farrow/Input"))
 
         fun isScript(p: Picked): Boolean =
             p.bytes.size in 3..MAX_SCRIPT && p.bytes[0] == '#'.code.toByte() && p.bytes[1] == '!'.code.toByte() &&

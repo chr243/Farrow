@@ -32,6 +32,7 @@ data class DeviceControlUi(
     val message: String? = null,
     val rishInstalled: Boolean = false,
     val rishInfo: String? = null,
+    val rishNeedsAccess: Boolean = false,
 )
 
 @HiltViewModel
@@ -150,6 +151,31 @@ class DeviceControlViewModel @Inject constructor(
         } ?: return@runCatching null
         java.io.File(java.io.File(path).parentFile, name).takeIf { it.canRead() }?.readBytes()
     }.getOrNull()
+
+    /** "Find rish": scan Download, Documents and Documents/Farrow/Input (needs All files access), then copy both files. */
+    fun findRish() {
+        if (!runCatching { android.os.Environment.isExternalStorageManager() }.getOrDefault(false)) {
+            _ui.update { it.copy(message = "Find rish needs All files access — grant it (Settings → Permissions), or use Pick rish file.", rishNeedsAccess = true) }
+            return
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val msg = runCatching {
+                val roots = com.farrow.app.shizuku.RishStore.searchRoots(android.os.Environment.getExternalStorageDirectory())
+                when (val r = rish.findAndInstall(roots)) {
+                    null -> "No rish + rish_shizuku.dex found in Download, Documents or Documents/Farrow/Input. Export them from Shizuku " +
+                        "(Use Shizuku in terminal apps → Export files) into one of those folders, or use Pick rish file."
+                    is com.farrow.app.shizuku.RishStore.Result.Installed -> "Found rish — copied ${r.script.name} and ${r.companion.name} into Farrow's internal folder"
+                    is com.farrow.app.shizuku.RishStore.Result.NeedCompanion -> "Found rish but not ${r.name}"
+                    is com.farrow.app.shizuku.RishStore.Result.Invalid -> r.reason
+                }
+            }.getOrElse { "Find rish failed: ${it.message}" }
+            refresh()
+            _ui.update { it.copy(message = msg, rishNeedsAccess = false) }
+        }
+    }
+
+    fun allFilesAccessIntent(): android.content.Intent =
+        com.farrow.app.data.storage.SharedFolder.accessIntent(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
     fun removeRish() { rish.remove(); refresh(); _ui.update { it.copy(message = "rish removed") } }
 

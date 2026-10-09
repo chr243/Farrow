@@ -51,6 +51,24 @@ class RishStoreTest {
         assertTrue(r is RishStore.Result.Installed && store.isInstalled())
     }
 
+    @Test fun findScansDownloadDocumentsAndInputThenCopies() {
+        val storage = File(base, "storage").apply { mkdirs() }
+        val roots = RishStore.searchRoots(storage)
+        assertEquals(listOf("Download", "Documents", "Documents/Farrow/Input"), roots.map { it.relativeTo(storage).path })
+        assertNull(store.find(roots))
+        // A rish without its dex is ignored; a decoy file named rish that isn't a script too.
+        File(storage, "Download").mkdirs(); File(storage, "Download/rish").writeBytes(script)
+        File(storage, "Documents/other").mkdirs(); File(storage, "Documents/other/rish").writeText("hello")
+        assertNull(store.find(roots))
+        val exportDir = File(storage, "Documents/Farrow/Input/shizuku").apply { mkdirs() }
+        File(exportDir, "rish").writeBytes(script); File(exportDir, "rish_shizuku.dex").writeBytes(dex)
+        val found = store.find(roots)!!
+        assertEquals(File(exportDir, "rish"), found.script)
+        assertTrue(store.findAndInstall(roots) is RishStore.Result.Installed)
+        assertTrue(store.isInstalled())
+        assertArrayEquals(dex, File(base, "files/rish/rish_shizuku.dex").readBytes())
+    }
+
     @Test fun rejectsWrongFiles() {
         assertTrue(store.install(listOf(RishStore.Picked("photo.jpg", ByteArray(100) { 1 }))) is RishStore.Result.Invalid)
         assertTrue(store.install(listOf(RishStore.Picked("rish", script), RishStore.Picked("rish_shizuku.dex", "not a dex".toByteArray())))

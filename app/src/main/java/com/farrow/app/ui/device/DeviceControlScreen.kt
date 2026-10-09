@@ -87,15 +87,20 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
 
                 Section("rish (rish_run)") {
                     Text("Shizuku's rish lets Farrow run privileged shell commands (rish_run). In Shizuku, open “Use Shizuku in " +
-                        "terminal apps” → Export files, then pick the exported rish file here (select rish_shizuku.dex too if asked). " +
+                        "terminal apps” → Export files into Download, Documents or Documents/Farrow/Input and tap Find rish (needs " +
+                        "All files access), or pick the exported rish file (select rish_shizuku.dex too if asked). " +
                         "Farrow copies both into its internal folder.", style = MaterialTheme.typography.bodySmall)
                     Text(if (ui.rishInstalled) "✅ Installed: ${ui.rishInfo}" else "Not set up", style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = { rishPicker.launch(arrayOf("*/*")) }) { Text(if (ui.rishInstalled) "Pick again" else "Pick rish file") }
-                        if (ui.rishInstalled) {
-                            OutlinedButton(onClick = vm::testRish, enabled = !ui.testing) { Text("Test (id)") }
-                            TextButton(onClick = vm::removeRish) { Text("Remove") }
-                        }
+                        Button(onClick = vm::findRish) { Text("Find rish") }
+                        OutlinedButton(onClick = { rishPicker.launch(arrayOf("*/*")) }) { Text(if (ui.rishInstalled) "Pick again" else "Pick rish file") }
+                    }
+                    if (ui.rishInstalled) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = vm::testRish, enabled = !ui.testing) { Text("Test (id)") }
+                        TextButton(onClick = vm::removeRish) { Text("Remove") }
+                    }
+                    if (ui.rishNeedsAccess) TextButton(onClick = { runCatching { context.startActivity(vm.allFilesAccessIntent()) } }) {
+                        Text("Grant All files access")
                     }
                     TextButton(onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/RikkaApps/Shizuku-API/tree/master/rish")))

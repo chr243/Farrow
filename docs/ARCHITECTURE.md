@@ -398,3 +398,11 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Skills index only.** The system prompt lists enabled skills as `id: name — description` (one line each, 4k chars max);
   the agent loads the full SKILL.md with `skill_get`. `skill_save` requires a one-line description (≤160 chars) and
   `skill_edit` can't blank it.
+
+## v1.0.21
+
+- **Find rish.** Settings → Shizuku, accessibility & Git → rish has a *Find rish* button: with All files access it scans
+  `Download`, `Documents` and `Documents/Farrow/Input` (and sub-folders, 2 levels) for a `rish` script plus the companion
+  it references (`rish_shizuku.dex`), takes the newest match and copies both into `files/rish` (`RishStore.find` /
+  `findAndInstall`). Without the permission it says so and offers *Grant All files access*; the SAF *Pick rish file* stays
+  as the fallback.
