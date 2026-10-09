@@ -433,3 +433,19 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Settings → Shizuku:** Re-check and rish Remove are proper outlined buttons; button rows wrap (FlowRow).
 - **Chat avatars:** only the circle colors changed — mid-tone circles in light theme (≥2:1 vs surface), brighter circles in
   dark theme (≥2.6:1), letters still ≥4.5:1.
+
+## v1.0.24
+
+- **termux_run returns as soon as the command ends.** Termux sends the result only when stdout/stderr reach EOF; a
+  background job (or a daemon started by the `bash -l` profile) kept the pipes open, so every call waited the full
+  timeout. Commands now write to temp files with stdin from /dev/null; the wrapper waits only for the command, kills
+  leftovers in its process group, replays the output and exits. Same wrapper for selenium_* and termux_python.
+- **Stacked shell tool rows:** consecutive termux_run (termux_python, rish_run, run_shell) calls fold into one
+  expandable "termux_run ×N" row.
+- **ebook_translate (howtotranslate.md):** googletrans>=4.0.2 with a browser User-Agent; chunks ≤4000 chars (hard cap
+  below 5000, enforced by an assert); ~0.3 s between requests + exponential backoff (10→160 s) on "Too many requests";
+  batches of 4 chapters then a 5–10 s pause; MyMemory fallback in 500-char pieces (its limit); plain-text extraction
+  fallback; resume. Two-step: first call estimates chapters/chunks/ETA (chunks × (request + delay) + batch pauses) and
+  asks the user to confirm; `confirmed=true` runs it. Python packages install automatically on first use. Absolute
+  /storage/emulated/0/Documents/Farrow paths.
+- **Chat avatars:** circles use only shades of the theme green, with a wide light/dark tone range.
