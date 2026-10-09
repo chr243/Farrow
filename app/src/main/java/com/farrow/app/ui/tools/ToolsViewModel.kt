@@ -78,6 +78,13 @@ class ToolsViewModel @Inject constructor(
     private val _state = MutableStateFlow(ToolsState(tools = rows(ToolEnv())))
     val state: StateFlow<ToolsState> = _state.asStateFlow()
 
+    // Must be declared before init: refresh() runs check() immediately (Main.immediate) and needs checkLock.
+    private val _events = kotlinx.coroutines.flow.MutableSharedFlow<SetupEvent>(extraBufferCapacity = 4)
+    val events: kotlinx.coroutines.flow.SharedFlow<SetupEvent> = _events
+    private val checkLock = kotlinx.coroutines.sync.Mutex()
+    /** Last step the flow acted on, so coming back without progress shows a hint instead of re-triggering it. */
+    private var lastActed: com.farrow.app.data.termux.TermuxSetupStep? = null
+
     init {
         refresh()
         viewModelScope.launch { pkgJobs.jobs.collect(::applyJobs) }
@@ -86,12 +93,6 @@ class ToolsViewModel @Inject constructor(
     private fun rows(env: ToolEnv) = registry.tools.map { ToolRow(it.name, ToolStatus.short(it.description), ToolStatus.of(it.name, env)) }
 
     fun setEnabled(name: String, on: Boolean) = prefs.setEnabled(name, on)
-
-    private val _events = kotlinx.coroutines.flow.MutableSharedFlow<SetupEvent>(extraBufferCapacity = 4)
-    val events: kotlinx.coroutines.flow.SharedFlow<SetupEvent> = _events
-    private val checkLock = kotlinx.coroutines.sync.Mutex()
-    /** Last step the flow acted on, so coming back without progress shows a hint instead of re-triggering it. */
-    private var lastActed: com.farrow.app.data.termux.TermuxSetupStep? = null
 
     fun refresh() {
         if (_state.value.checking) return
