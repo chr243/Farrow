@@ -42,7 +42,14 @@ class TermuxManager @Inject constructor(@ApplicationContext private val context:
 
     fun installIntent(): Intent = Intent(Intent.ACTION_VIEW, Uri.parse(FDROID_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    private fun runCommand(command: String, label: String, resultTag: String): Result<Unit> {
+    /** Launcher intent for the Termux app (null when not installed). */
+    fun openIntent(): Intent? = context.packageManager.getLaunchIntentForPackage(TERMUX_PACKAGE)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /** Runs [command] in a visible Termux terminal session (for interactive prompts such as termux-setup-storage). */
+    fun runInTerminal(command: String, label: String = "Farrow"): Boolean =
+        runCommand(command, label, "term-${System.nanoTime()}", background = false).isSuccess
+
+    private fun runCommand(command: String, label: String, resultTag: String, background: Boolean = true): Result<Unit> {
         if (!isInstalled()) return Result.failure(IllegalStateException("Termux is not installed"))
         if (!hasRunCommandPermission()) return Result.failure(SecurityException("RUN_COMMAND permission not granted"))
         val intent = Intent(ACTION_RUN_COMMAND).apply {
@@ -50,7 +57,7 @@ class TermuxManager @Inject constructor(@ApplicationContext private val context:
             putExtra(EXTRA_PATH, "$TERMUX_PREFIX/bin/bash")
             putExtra(EXTRA_ARGUMENTS, arrayOf("-lc", command))
             putExtra(EXTRA_WORKDIR, TERMUX_HOME)
-            putExtra(EXTRA_BACKGROUND, true)
+            putExtra(EXTRA_BACKGROUND, background)
             putExtra(EXTRA_LABEL, label)
             putExtra(EXTRA_PENDING_INTENT, resultIntent(resultTag))
         }

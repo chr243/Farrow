@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 data class ToolRow(val name: String, val description: String, val status: ToolStatus)
@@ -47,7 +48,20 @@ data class ToolsState(
     val packages: List<PkgRow> = TermuxPackages.ALL.map { PkgRow(it, PkgState.UNKNOWN) },
     val packagesNote: String? = "Checking Termux…",
     val checking: Boolean = false,
+    /** "Set up Termux" flow: running, current step and the message for the user. */
+    val setupActive: Boolean = false,
+    val setupStep: com.farrow.app.data.termux.TermuxSetupStep? = null,
+    val setupMessage: String? = null,
 )
+
+/** One-shot UI actions of the Set up Termux flow (need an Activity: intents, permission dialog, clipboard). */
+sealed interface SetupEvent {
+    data object OpenInstall : SetupEvent
+    data object RequestPermission : SetupEvent
+    /** Copy the allow-external-apps command and open Termux. */
+    data object PasteAllowCommand : SetupEvent
+    data object OpenTermux : SetupEvent
+}
 
 @HiltViewModel
 class ToolsViewModel @Inject constructor(
@@ -72,10 +86,59 @@ class ToolsViewModel @Inject constructor(
 
     fun setEnabled(name: String, on: Boolean) = prefs.setEnabled(name, on)
 
+    private val _events = kotlinx.coroutines.flow.MutableSharedFlow<SetupEvent>(extraBufferCapacity = 4)
+    val events: kotlinx.coroutines.flow.SharedFlow<SetupEvent> = _events
+    private val checkLock = kotlinx.coroutines.sync.Mutex()
+    /** Last step the flow acted on, so coming back without progress shows a hint instead of re-triggering it. */
+    private var lastActed: com.farrow.app.data.termux.TermuxSetupStep? = null
+
     fun refresh() {
         if (_state.value.checking) return
+        viewModelScope.launch { check() }
+    }
+
+    /** "Set up Termux": re-check, then do the next step (always acts, even if it is the same step again). */
+    fun setupTermux() {
+        lastActed = null
+        _state.update { it.copy(setupActive = true, setupMessage = "Checking Termux…") }
+        viewModelScope.launch { check(); advance() }
+    }
+
+    fun cancelSetup() = _state.update { it.copy(setupActive = false, setupStep = null, setupMessage = null) }
+
+    /** Back in Farrow (resume / permission dialog closed): re-check and continue the flow if it is running. */
+    fun onReturned() {
+        if (!_state.value.setupActive) return refresh()
+        viewModelScope.launch { check(); advance() }
+    }
+
+    private fun nextStep(): com.farrow.app.data.termux.TermuxSetupStep = _state.value.termux.let {
+        com.farrow.app.data.termux.TermuxSetupFlow.next(it.installed, it.permission, it.answering, it.storage)
+    }
+
+    private fun advance() {
+        if (!_state.value.setupActive) return
+        val step = nextStep()
+        val retry = step == lastActed
+        val msg = com.farrow.app.data.termux.TermuxSetupFlow.message(step, retry)
+        _state.update { it.copy(setupStep = step, setupMessage = msg, setupActive = step != com.farrow.app.data.termux.TermuxSetupStep.DONE) }
+        if (retry) return
+        lastActed = step
+        when (step) {
+            com.farrow.app.data.termux.TermuxSetupStep.INSTALL -> _events.tryEmit(SetupEvent.OpenInstall)
+            com.farrow.app.data.termux.TermuxSetupStep.GRANT -> _events.tryEmit(SetupEvent.RequestPermission)
+            com.farrow.app.data.termux.TermuxSetupStep.ALLOW_EXTERNAL -> _events.tryEmit(SetupEvent.PasteAllowCommand)
+            com.farrow.app.data.termux.TermuxSetupStep.STORAGE -> {
+                termux.runInTerminal("termux-setup-storage && echo 'Storage OK - you can go back to Farrow'", label = "Farrow: storage setup")
+                _events.tryEmit(SetupEvent.OpenTermux)
+            }
+            com.farrow.app.data.termux.TermuxSetupStep.DONE -> lastActed = null
+        }
+    }
+
+    private suspend fun check() = checkLock.withLock {
         _state.update { it.copy(checking = true) }
-        viewModelScope.launch {
+        run {
             val storage = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 StorageSetup(sharedFolder.hasAccess(), sharedFolder.ensure() || sharedFolder.exists())
             }
@@ -97,7 +160,7 @@ class ToolsViewModel @Inject constructor(
     }
 
     /** Result of the RUN_COMMAND runtime permission request from the Termux card. */
-    fun onPermissionResult() = refresh()
+    fun onPermissionResult() = onReturned()
 
     private suspend fun detectPackages() {
         val t = _state.value.termux

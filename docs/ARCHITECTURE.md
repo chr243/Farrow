@@ -365,5 +365,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   12k chars; the rest listed for `skill_get`) before the memory block; disabled skills are never sent. Settings → Agent
   tools → Skills lists skills (tap to read), with an enable switch and Delete. The prompt tells the agent to offer saving
   a reusable multi-step procedure as a skill.
+- **Set up Termux (one tap).** Settings → Tools → Termux has a *Set up Termux* button driven by
+  `data/termux/TermuxSetupFlow` (INSTALL → GRANT → ALLOW_EXTERNAL → STORAGE → DONE) in `ToolsViewModel`: opens F-Droid,
+  requests RUN_COMMAND, copies the allow-external-apps command to the clipboard and opens Termux (can't be automated:
+  Termux rejects RUN_COMMAND until it is set), then runs `termux-setup-storage` in a visible Termux session
+  (`TermuxManager.runInTerminal`, background=false) and opens Termux. Returning to Farrow (ON_RESUME / permission result)
+  re-checks and continues; a step that is still pending shows a retry hint instead of re-triggering. The manual
+  per-step buttons stay as a fallback.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

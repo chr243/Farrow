@@ -41,7 +41,7 @@ Open **Settings → Tools → Shared folder** and tap **Grant** to give Farrow *
 
 ### 2. Termux (optional, for `termux_run`)
 
-Install [Termux](https://f-droid.org/packages/com.termux/) (F-Droid build), then open Farrow → **Settings → Tools → Termux**: grant the *Run commands in Termux* permission and paste the shown `allow-external-apps` command into Termux once. Packages under **Available to install** are installed in the background with `pkg`.
+Open Farrow → **Settings → Tools → Termux** and tap **Set up Termux**. It walks through everything and continues each time you come back to Farrow: opens F-Droid if [Termux](https://f-droid.org/packages/com.termux/) is missing, asks for the *Run commands in Termux* permission, copies the `allow-external-apps` command and opens Termux for one paste (Termux refuses outside commands until that is set), then starts `termux-setup-storage` in Termux so you only tap Allow. Packages under **Available to install** are installed in the background with `pkg`.
 
 ### 3. Shizuku (optional, for `run_shell`)
 

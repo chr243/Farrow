@@ -25,6 +25,26 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { vm.onPermissionResult() }
     val storageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { vm.refresh() }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    LaunchedEffect(Unit) {
+        vm.events.collect { e ->
+            when (e) {
+                SetupEvent.OpenInstall -> runCatching { context.startActivity(vm.termux.installIntent()) }
+                SetupEvent.RequestPermission -> permissionLauncher.launch(com.farrow.app.data.termux.TermuxManager.PERMISSION_RUN_COMMAND)
+                SetupEvent.PasteAllowCommand -> {
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(com.farrow.app.data.termux.TermuxManager.ALLOW_EXTERNAL_APPS_CMD))
+                    android.widget.Toast.makeText(context, "Command copied — paste it in Termux and press Enter", android.widget.Toast.LENGTH_LONG).show()
+                    vm.termux.openIntent()?.let { runCatching { context.startActivity(it) } }
+                }
+                SetupEvent.OpenTermux -> vm.termux.openIntent()?.let { runCatching { context.startActivity(it) } }
+            }
+        }
+    }
+    // Coming back from Termux / F-Droid / a permission screen continues the setup (or just re-checks).
+    var resumedOnce by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        if (resumedOnce) vm.onReturned() else resumedOnce = true
+    }
     Scaffold(topBar = {
         TopAppBar(title = { Text("Tools") },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
@@ -63,7 +83,8 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
             }
             item {
                 Text("Termux", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp))
-                TermuxSetupCard(state.termux,
+                TermuxSetupCard(state.termux, state,
+                    onSetup = vm::setupTermux, onCancel = vm::cancelSetup,
                     onInstall = { runCatching { context.startActivity(vm.termux.installIntent()) } },
                     onGrant = { permissionLauncher.launch(com.farrow.app.data.termux.TermuxManager.PERMISSION_RUN_COMMAND) })
             }
@@ -153,11 +174,28 @@ private fun SharedFolderCard(s: StorageSetup, onGrant: () -> Unit) {
 
 /** Termux setup for termux_run and the package installer: install, RUN_COMMAND permission, allow-external-apps. */
 @Composable
-private fun TermuxSetupCard(t: TermuxSetup, onInstall: () -> Unit, onGrant: () -> Unit) {
+private fun TermuxSetupCard(t: TermuxSetup, s: ToolsState, onSetup: () -> Unit, onCancel: () -> Unit, onInstall: () -> Unit, onGrant: () -> Unit) {
     ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("termux_run and the add-ons below run in the Termux app (in the background, no Termux window).",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val allDone = com.farrow.app.data.termux.TermuxSetupFlow.next(t.installed, t.permission, t.answering, t.storage) ==
+                com.farrow.app.data.termux.TermuxSetupStep.DONE
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSetup, enabled = !s.checking) {
+                    Text(when { allDone -> "Check setup"; s.setupActive -> "Continue setup"; else -> "Set up Termux" })
+                }
+                if (s.setupActive) TextButton(onClick = onCancel) { Text("Cancel") }
+                if (s.checking) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+            Text("One tap walks through everything: install, permission, allow-external-apps (copied for one paste) and storage. " +
+                "Come back to Farrow after each step and it continues.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            s.setupMessage?.let {
+                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp))
+                }
+            }
             SetupLine("1. Termux installed", t.installed) {
                 if (!t.installed) OutlinedButton(onClick = onInstall) { Text("Get Termux (F-Droid)") }
             }
