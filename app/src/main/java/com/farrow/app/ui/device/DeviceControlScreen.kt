@@ -41,6 +41,8 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
     var email by remember(ui.authorEmail) { mutableStateOf(ui.authorEmail) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
+    val rishPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { vm.installRish(it) }
     LaunchedEffect(ui.message) { ui.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() } }
 
     BackScaffold("Shell, accessibility & Git", onBack) { padding ->
@@ -81,6 +83,23 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                         if (ui.testing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
                     ui.testOutput?.let { CopyableText(it) }
+                }
+
+                Section("rish (rish_run)") {
+                    Text("Shizuku's rish lets Farrow run privileged shell commands (rish_run). In Shizuku, open “Use Shizuku in " +
+                        "terminal apps” → Export files, then pick the exported rish file here (select rish_shizuku.dex too if asked). " +
+                        "Farrow copies both into its internal folder.", style = MaterialTheme.typography.bodySmall)
+                    Text(if (ui.rishInstalled) "✅ Installed: ${ui.rishInfo}" else "Not set up", style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { rishPicker.launch(arrayOf("*/*")) }) { Text(if (ui.rishInstalled) "Pick again" else "Pick rish file") }
+                        if (ui.rishInstalled) {
+                            OutlinedButton(onClick = vm::testRish, enabled = !ui.testing) { Text("Test (id)") }
+                            TextButton(onClick = vm::removeRish) { Text("Remove") }
+                        }
+                    }
+                    TextButton(onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/RikkaApps/Shizuku-API/tree/master/rish")))
+                    }) { Text("About rish (GitHub)") }
                 }
 
                 Section("Accessibility (screen_read / tap / swipe / type)") {

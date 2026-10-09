@@ -73,6 +73,7 @@ class ToolsViewModel @Inject constructor(
     private val pkgJobs: TermuxPackageJobs,
     val mcp: com.farrow.app.data.mcp.McpManager,
     val sharedFolder: com.farrow.app.data.storage.SharedFolder,
+    private val rish: com.farrow.app.shizuku.RishStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ToolsState(tools = rows(ToolEnv())))
     val state: StateFlow<ToolsState> = _state.asStateFlow()
@@ -152,6 +153,7 @@ class ToolsViewModel @Inject constructor(
                 accessibilityOn = FarrowAccessibilityService.isRunning,
                 gitToken = gitCreds.maskedToken != null,
                 storageReady = storage.access,
+                rishReady = rish.isInstalled(),
             )
             _state.update { it.copy(tools = rows(env)) }
             detectPackages()

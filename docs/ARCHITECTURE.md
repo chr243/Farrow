@@ -100,6 +100,7 @@ com.farrow.app
 | `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
 | `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/FarrowSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
 | `skill_list`, `skill_get`, `skill_save`, `skill_edit`, `skill_delete` | Agent-writable skills in `files/skills/<id>/SKILL.md` (`data/skills/SkillStore`); enabled ones injected into the system prompt |
+| `rish_run` | `sh files/rish/rish -c <cmd>` with `RISH_APPLICATION_ID` = Farrow (`shizuku/RishStore`, `RishRunner`) |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
 | `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
@@ -372,5 +373,11 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   (`TermuxManager.runInTerminal`, background=false) and opens Termux. Returning to Farrow (ON_RESUME / permission result)
   re-checks and continues; a step that is still pending shows a retry hint instead of re-triggering. The manual
   per-step buttons stay as a fallback.
+- **rish picker + `rish_run`.** Settings → Shizuku, accessibility & Git → *rish*: the user picks the `rish` file exported by
+  Shizuku (SAF multi-select; if only `rish` is picked, Farrow reads the sibling `rish_shizuku.dex` via All files access or asks
+  for it). `RishStore` validates (shebang script / `dex\n` magic, companion name read from the script) and copies both into
+  `files/rish/` (dex made read-only for Android 14+). `rish_run` runs `/system/bin/sh files/rish/rish -c <cmd>` in Farrow's
+  process with `RISH_APPLICATION_ID=com.farrow.app` (Farrow holds the Shizuku permission), with timeout (exit 124).
+  Settings shows status, *Test (id)* and *Remove*.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

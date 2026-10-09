@@ -9,6 +9,8 @@ data class ToolEnv(
     val gitToken: Boolean = false,
     /** All files access granted, so Documents/Farrow is usable. */
     val storageReady: Boolean = false,
+    /** rish + its dex copied into files/rish. */
+    val rishReady: Boolean = false,
 )
 
 data class ToolStatus(val ready: Boolean, val text: String) {
@@ -31,6 +33,11 @@ data class ToolStatus(val ready: Boolean, val text: String) {
                 else ToolStatus(false, "Needs Termux + the chromium-selenium add-on (Settings > Tools)")
             name == "termux_run" -> if (env.termuxReady) ToolStatus(true, "Ready if allow-external-apps is on in Termux")
                 else ToolStatus(false, "Needs Termux and the Run commands permission (Settings > Tools > Termux)")
+            name == "rish_run" -> when {
+                !env.rishReady -> ToolStatus(false, "Needs the rish file picked in Settings > Shizuku, accessibility & Git")
+                !env.shizukuReady -> ToolStatus(false, "rish is set up; needs Shizuku running with permission")
+                else -> READY
+            }
             name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku, accessibility & Git)")
             name == "git_push" || name == "git_clone" -> if (env.gitToken) READY
                 else ToolStatus(true, "Ready for public repos — private ones need a Git token (Settings > Shizuku, accessibility & Git)")

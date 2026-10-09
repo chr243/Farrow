@@ -100,6 +100,14 @@ object AppModule {
     @Provides @Singleton
     fun provideSharedFolder(): com.farrow.app.data.storage.SharedFolder = com.farrow.app.data.storage.SharedFolder.android()
 
+    /** Shizuku rish: the user-picked rish + rish_shizuku.dex copied into files/rish. */
+    @Provides @Singleton
+    fun provideRishStore(@ApplicationContext context: Context) = com.farrow.app.shizuku.RishStore(File(context.filesDir, "rish"))
+
+    @Provides @Singleton
+    fun provideRishRunner(@ApplicationContext context: Context, store: com.farrow.app.shizuku.RishStore) =
+        com.farrow.app.shizuku.RishRunner(store, context.packageName)
+
     /** Agent-writable skills: files/skills/<id>/SKILL.md (app-internal, not Documents). */
     @Provides @Singleton
     fun provideSkillStore(@ApplicationContext context: Context) = com.farrow.app.data.skills.SkillStore(File(context.filesDir, "skills"))
@@ -107,6 +115,8 @@ object AppModule {
     @Provides @Singleton
     fun provideToolRegistry(
         skills: com.farrow.app.data.skills.SkillStore,
+        rishStore: com.farrow.app.shizuku.RishStore,
+        rishRunner: com.farrow.app.shizuku.RishRunner,
         sandbox: WorkspaceSandbox,
         sharedFolder: com.farrow.app.data.storage.SharedFolder,
         shell: ShellExecutor,
@@ -129,7 +139,7 @@ object AppModule {
         ) +
             // Shizuku shell, Termux (RUN_COMMAND), JGit, Accessibility
             listOf(
-                RunShellTool(shell, sandbox), TermuxRunTool(termux),
+                RunShellTool(shell, sandbox), TermuxRunTool(termux), RishRunTool(rishStore, rishRunner),
                 // Headless Chromium + Selenium inside Termux, and the agent's own Python scrapers (scripts stay in filesDir/workspace)
                 SeleniumOpenTool(termux, sharedFolder), SeleniumPageSourceTool(termux, sharedFolder),
                 SeleniumScreenshotTool(termux, sharedFolder), TermuxPythonTool(termux, sandbox),

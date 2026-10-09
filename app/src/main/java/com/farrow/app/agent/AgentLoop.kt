@@ -375,7 +375,8 @@ class AgentLoop internal constructor(
               pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display.
-            - Device: run_shell (Shizuku, adb shell user), termux_run (bash in Termux with the packages the user installed,
+            - Device: run_shell (Shizuku, adb shell user), rish_run (same privileged shell through Shizuku's rish, if the
+              user set it up; try it when run_shell fails), termux_run (bash in Termux with the packages the user installed,
               e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Git: git_*.
             - Headless Chromium (inside Termux, needs the chromium-selenium add-on): selenium_open (title, visible text,
               links), selenium_page_source (rendered HTML), selenium_screenshot (PNG to Documents/Farrow/Output). Slower than
