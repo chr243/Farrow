@@ -11,7 +11,7 @@ import kotlinx.serialization.json.*
 
 class RunShellTool(private val shell: ShellExecutor, private val sandbox: WorkspaceSandbox) : AgentTool {
     override val name = "run_shell"
-    override val description = "Run a shell command on the phone as the adb shell user via Shizuku. Returns backend, exit_code, stdout and stderr."
+    override val description = "Run a shell command on the phone as the adb shell user via Shizuku (no Termux packages here — use termux_run for those). Returns backend, exit_code, stdout and stderr."
     override val parameters = schema(listOf("command"),
         "command" to prop("string", "Shell command (sh -c)"),
         "workdir" to prop("string", "Working directory relative to the agent workspace (default: workspace root)"),

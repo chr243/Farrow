@@ -1,6 +1,6 @@
 # AGENTS.md — Farrow
 
-Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: plain HTTP fetching (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, screen control via an Accessibility service, JGit, sandboxed file tools, memory and an MCP client. There is no backend server; everything runs on the device.
+Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: plain HTTP fetching (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), screen control via an Accessibility service, JGit, sandboxed file tools, memory and an MCP client. There is no backend server; everything runs on the device.
 
 ## Repo map
 
@@ -17,7 +17,7 @@ Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Mate
 │       │   │   ├── FarrowApp.kt, MainActivity.kt
 │       │   │   ├── agent/        AgentLoop, AgentRunner, backoff, context/ (summarisation), tools/ (tool implementations, registry)
 │       │   │   ├── chathead/     chat heads overlay + Android Bubbles
-│       │   │   ├── data/         a11y, crypto (Coinbase Exchange), git, local (Room), mcp, memory,
+│       │   │   ├── data/         a11y, crypto (Coinbase Exchange), git, termux (RUN_COMMAND manager + result receiver), local (Room), mcp, memory,
 │       │   │   │                 network (OpenRouter/Kilo clients, providers, model caps), notify, prefs, repository,
 │       │   │   │                 secure (encrypted key store), settings (DataStore), tools, update, work (WorkManager)
 │       │   │   ├── di/           Hilt AppModule (incl. tool registry)

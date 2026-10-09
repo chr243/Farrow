@@ -14,7 +14,7 @@
 - **Free-model agent loop:** tool calling on OpenRouter free models and Kilo, priority list, automatic fallback across models and API keys, backoff and auto-resume after rate limits.
 - **Web fetching:** `web_fetch`, a plain HTTP GET/HEAD (no browser, no JavaScript) for public pages and APIs.
 - **Crypto:** Coinbase Exchange market data, a local backtest and optional live trading (`crypto_place_order` / `crypto_cancel_order` are off by default; the API key is stored only in EncryptedSharedPreferences).
-- **Device control:** `run_shell` via Shizuku (shell uid) and `screen_*` tools via an Accessibility service.
+- **Device control:** `run_shell` via Shizuku (shell uid), `screen_*` tools via an Accessibility service, and `termux_run` (bash in Termux through its RUN_COMMAND service) with optional Termux packages (ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc, …) installable from Settings → Tools.
 - **Git:** clone / status / commit / push with JGit inside the app workspace.
 - **Memory, MCP client, sandboxed file tools** and a keep-alive service that only runs while a task runs.
 - **Security first:** API keys in EncryptedSharedPreferences (Android Keystore), no backups, HTTPS only.
@@ -31,7 +31,11 @@ adb install -r Farrow-v1.0.0-debug.apk
 
 Then open Farrow → **Menu → API keys** and add an OpenRouter key (`sk-or-…`) and/or a Kilo key.
 
-### 2. Shizuku (optional, for `run_shell`)
+### 2. Termux (optional, for `termux_run`)
+
+Install [Termux](https://f-droid.org/packages/com.termux/) (F-Droid build), then open Farrow → **Settings → Tools → Termux**: grant the *Run commands in Termux* permission and paste the shown `allow-external-apps` command into Termux once. Packages under **Available to install** are installed in the background with `pkg`.
+
+### 3. Shizuku (optional, for `run_shell`)
 
 Install [Shizuku](https://shizuku.rikka.app/), open it and start it via **Wireless debugging** (Developer options → Wireless debugging → pair from the Shizuku app), or from a computer:
 
@@ -41,7 +45,7 @@ adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.s
 
 Then open Farrow → **Menu → Shizuku, accessibility & Git** and grant the Shizuku permission; **Test (id)** should report `uid=2000(shell)`.
 
-### 3. Build from source
+### 4. Build from source
 
 Requires JDK 17 and an Android SDK with `platforms;android-35` and `build-tools;35.0.0`.
 

@@ -3,6 +3,8 @@ package com.farrow.app.data.tools
 /** What the phone currently offers; [ToolStatus.of] turns it into "ready" or what a tool still needs. */
 data class ToolEnv(
     val shizukuReady: Boolean = false,
+    /** Termux installed and Farrow holds its RUN_COMMAND permission. */
+    val termuxReady: Boolean = false,
     val accessibilityOn: Boolean = false,
     val gitToken: Boolean = false,
 )
@@ -19,6 +21,8 @@ data class ToolStatus(val ready: Boolean, val text: String) {
                 "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku, accessibility & Git)")
                 else -> READY // public market data / backtest
             }
+            name == "termux_run" -> if (env.termuxReady) ToolStatus(true, "Ready if allow-external-apps is on in Termux")
+                else ToolStatus(false, "Needs Termux and the Run commands permission (Settings > Tools > Termux)")
             name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku, accessibility & Git)")
             name == "git_push" || name == "git_clone" -> if (env.gitToken) READY
                 else ToolStatus(true, "Ready for public repos — private ones need a Git token (Settings > Shizuku, accessibility & Git)")

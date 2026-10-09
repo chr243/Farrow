@@ -317,11 +317,16 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Internal browser removed.** The Termux/Firefox/Termux Browser Pilot browser and everything built on it are gone:
   the `tbp_bridge.py` asset and X/Facebook selector files, `BridgeClient`, setup wizard and auto-start, `BrowserOpsManager`
   and its service, X/Facebook login, WebView/cookie session import, session-expiry pause and Re-login, the
-  `web_scrape`/`web_click`/`web_type`/`web_session`/`web_screenshot`, `x_*`, `x_post_beta`, `fb_*`, `reset_browser` and
-  `termux_run` tools, the Termux package installer on the Tools page, browser prefs (language, load images, show
-  Termux, clear WebView cookies), the Termux permission, the localhost cleartext exception and the Jsoup and
+  `web_scrape`/`web_click`/`web_type`/`web_session`/`web_screenshot`, `x_*`, `x_post_beta`, `fb_*` and `reset_browser`
+  tools, browser prefs (language, load images, show Termux, clear WebView cookies), the localhost cleartext exception and the Jsoup and
   androidx.browser dependencies. `web_fetch` (plain HTTP), crypto, Shizuku `run_shell`, screen, Git, memory and chart
   tools stay. The system prompt still prefers English sources.
 - **Tasks screen removed** from Settings.
+- **Termux kept without the bridge.** `termux_run` now runs `bash -lc` through Termux's RUN_COMMAND service in the
+  background (`data/termux/TermuxManager`, result via `TermuxResultReceiver` + a mutable PendingIntent), in
+  `~/farrow-work` under coreutils `timeout` (max 600 s, exit 124 = `timed_out`). Settings → Tools has a Termux card
+  (installed / *Run commands in Termux* permission with a Grant button / allow-external-apps command to copy) and the
+  "Available to install" package list (ffmpeg, imagemagick, yt-dlp, git, nodejs, jq, curl, pandoc; app-scoped
+  `TermuxPackageJobs`). Needs `com.termux.permission.RUN_COMMAND` and a `com.termux` package query.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

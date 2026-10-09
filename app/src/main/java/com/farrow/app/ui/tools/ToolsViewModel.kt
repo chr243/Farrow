@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.farrow.app.agent.tools.ToolRegistry
 import com.farrow.app.data.a11y.FarrowAccessibilityService
 import com.farrow.app.data.git.GitCredentialStore
+import com.farrow.app.data.termux.TermuxManager
+import com.farrow.app.data.tools.TermuxPackage
+import com.farrow.app.data.tools.TermuxPackageJobs
+import com.farrow.app.data.tools.TermuxPackages
 import com.farrow.app.data.tools.ToolEnv
 import com.farrow.app.data.tools.ToolPrefs
 import com.farrow.app.data.tools.ToolStatus
@@ -20,8 +24,18 @@ import javax.inject.Inject
 
 data class ToolRow(val name: String, val description: String, val status: ToolStatus)
 
+enum class PkgState { UNKNOWN, INSTALLED, NOT_INSTALLED, INSTALLING, FAILED }
+
+data class PkgRow(val pkg: TermuxPackage, val state: PkgState, val detail: String? = null)
+
+/** Termux setup as seen from the app (allow-external-apps can only be observed by a command answering). */
+data class TermuxSetup(val installed: Boolean = false, val permission: Boolean = false, val answering: Boolean? = null)
+
 data class ToolsState(
     val tools: List<ToolRow> = emptyList(),
+    val termux: TermuxSetup = TermuxSetup(),
+    val packages: List<PkgRow> = TermuxPackages.ALL.map { PkgRow(it, PkgState.UNKNOWN) },
+    val packagesNote: String? = "Checking Termux…",
     val checking: Boolean = false,
 )
 
@@ -31,6 +45,8 @@ class ToolsViewModel @Inject constructor(
     val prefs: ToolPrefs,
     private val shizuku: ShizukuManager,
     private val gitCreds: GitCredentialStore,
+    val termux: TermuxManager,
+    private val pkgJobs: TermuxPackageJobs,
     val mcp: com.farrow.app.data.mcp.McpManager,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ToolsState(tools = rows(ToolEnv())))
@@ -38,6 +54,7 @@ class ToolsViewModel @Inject constructor(
 
     init {
         refresh()
+        viewModelScope.launch { pkgJobs.jobs.collect(::applyJobs) }
     }
 
     private fun rows(env: ToolEnv) = registry.tools.map { ToolRow(it.name, ToolStatus.short(it.description), ToolStatus.of(it.name, env)) }
@@ -48,13 +65,54 @@ class ToolsViewModel @Inject constructor(
         if (_state.value.checking) return
         _state.update { it.copy(checking = true) }
         viewModelScope.launch {
+            val installed = termux.isInstalled()
+            val permission = installed && termux.hasRunCommandPermission()
+            _state.update { it.copy(termux = TermuxSetup(installed, permission)) }
             val env = ToolEnv(
+                termuxReady = permission,
                 shizukuReady = runCatching { shizuku.refresh() }.getOrNull() == ShizukuState.READY,
                 accessibilityOn = FarrowAccessibilityService.isRunning,
                 gitToken = gitCreds.maskedToken != null,
             )
             _state.update { it.copy(tools = rows(env)) }
+            detectPackages()
             _state.update { it.copy(checking = false) }
         }
+    }
+
+    /** Result of the RUN_COMMAND runtime permission request from the Termux card. */
+    fun onPermissionResult() = refresh()
+
+    private suspend fun detectPackages() {
+        val t = _state.value.termux
+        if (!t.installed) return setNote("Install Termux (F-Droid build) to add these.")
+        if (!t.permission) return setNote("Grant the Run commands in Termux permission (Termux card above) first.")
+        val r = termux.runAndWait(TermuxPackages.detectQuery(), "pkgs-${System.nanoTime()}", 10_000, label = "Farrow status")
+        val found = r?.let { TermuxPackages.parseDetect(it.stdout) }
+        _state.update { it.copy(termux = it.termux.copy(answering = found != null)) }
+        if (found == null) return setNote("Termux did not answer — paste the allow-external-apps command (Termux card above) into Termux once.")
+        _state.update { s ->
+            s.copy(packagesNote = null, packages = s.packages.map { row ->
+                if (row.state == PkgState.INSTALLING) row
+                else row.copy(state = if (found[row.pkg.pkg] == true) PkgState.INSTALLED else PkgState.NOT_INSTALLED, detail = null)
+            })
+        }
+    }
+
+    private fun setNote(text: String) = _state.update { it.copy(packagesNote = text) }
+
+    /** pkg install in the background (no Termux window), app-scoped ([TermuxPackageJobs]). */
+    fun install(p: TermuxPackage) { pkgJobs.install(p) }
+
+    private fun applyJobs(jobs: Map<String, TermuxPackageJobs.Job>) = _state.update { s ->
+        s.copy(packages = s.packages.map { row ->
+            val j = jobs[row.pkg.pkg] ?: return@map row
+            when {
+                j.running -> row.copy(state = PkgState.INSTALLING, detail = j.detail)
+                j.ok -> row.copy(state = PkgState.INSTALLED, detail = null)
+                row.state == PkgState.INSTALLING -> row.copy(state = PkgState.FAILED, detail = j.detail)
+                else -> row
+            }
+        })
     }
 }

@@ -107,15 +107,16 @@ object AppModule {
         @ApplicationContext context: Context,
         cryptoClient: com.farrow.app.data.crypto.CoinbaseExchangeClient,
         cryptoCreds: com.farrow.app.data.crypto.CryptoCredentials,
+        termux: com.farrow.app.data.termux.TermuxManager,
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
             // Plain HTTP GET/HEAD (OkHttp, no browser)
             WebFetchTool(),
         ) +
-            // Shizuku shell, JGit, Accessibility
+            // Shizuku shell, Termux (RUN_COMMAND), JGit, Accessibility
             listOf(
-                RunShellTool(shell, sandbox),
+                RunShellTool(shell, sandbox), TermuxRunTool(termux),
                 GitStatusTool(git), GitCommitTool(git), GitCloneTool(git), GitPushTool(git),
                 ScreenReadTool(), ScreenTapTool(), ScreenSwipeTool(), ScreenTypeTool(), ScreenGlobalActionTool(),
                 // v0.9.16: persistent memory

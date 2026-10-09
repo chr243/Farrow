@@ -1,5 +1,6 @@
 package com.farrow.app.agent.tools
 
+import com.farrow.app.data.tools.TermuxPackages
 import com.farrow.app.data.tools.ToolEnv
 import com.farrow.app.data.tools.ToolStatus
 import com.farrow.app.data.tools.ToolSwitches
@@ -38,6 +39,18 @@ class ToolRegistrySwitchTest {
         assertTrue(ToolStatus.of("run_shell", none.copy(shizukuReady = true)).ready)
         assertFalse(ToolStatus.of("screen_tap", none).ready)
         assertTrue(ToolStatus.of("crypto_ticker", none).ready)
+        assertFalse(ToolStatus.of("termux_run", none).ready)
+        assertTrue(ToolStatus.of("termux_run", none.copy(termuxReady = true)).ready)
         assertEquals("Echo tool.", ToolStatus.short("Echo tool. Second sentence."))
+    }
+
+    @Test fun `package detection query and parsing`() {
+        val q = TermuxPackages.detectQuery()
+        assertTrue(q.contains("command -v yt-dlp") && q.contains("P_yt_dlp") && q.endsWith("echo PROBE=ok"))
+        val parsed = TermuxPackages.parseDetect("P_ffmpeg=1\nP_imagemagick=0\nP_yt_dlp=1\nPROBE=ok\n")!!
+        assertEquals(true, parsed["ffmpeg"]); assertEquals(false, parsed["imagemagick"]); assertEquals(true, parsed["yt-dlp"]); assertEquals(false, parsed["jq"])
+        assertNull(TermuxPackages.parseDetect(""))
+        val s = TermuxPackages.installScript(TermuxPackages.ALL.first { it.pkg == "jq" })
+        assertTrue(s.contains("install jq") && s.contains("INSTALLED=") && s.contains("--force-confold"))
     }
 }

@@ -364,7 +364,8 @@ class AgentLoop internal constructor(
               pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display.
-            - Device: run_shell (Shizuku). Files: read_file, write_file, list_dir. Git: git_*.
+            - Device: run_shell (Shizuku, adb shell user), termux_run (bash in Termux with the packages the user installed,
+              e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Files: read_file, write_file, list_dir. Git: git_*.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
               and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
             - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown

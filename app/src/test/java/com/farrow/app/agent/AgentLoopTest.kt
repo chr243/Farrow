@@ -160,14 +160,15 @@ class AgentLoopTest {
         assertEquals(3, h.sent.size)
     }
 
-    @Test fun `system prompt has no internal browser and keeps web_fetch, crypto and English sources`() {
+    @Test fun `system prompt has no internal browser and keeps web_fetch, termux_run, crypto and English sources`() {
         val p = AgentLoop.systemPrompt()
         assertTrue(p.contains("Phone screen (accessibility)") && p.contains("OTHER Android apps"))
         assertTrue(p.contains("web_fetch") && p.contains("There is no internal browser"))
         assertTrue(p.contains("crypto_place_order") && p.contains("OFF by default") && p.contains("Revolut has no public crypto"))
         assertTrue(p.contains("Prefer English-language sources"))
         for (gone in listOf("web_scrape", "web_click", "web_type", "web_session", "web_screenshot", "x_post", "x_scrape", "fb_",
-            "reset_browser", "termux_run", "Firefox", "Termux")) assertFalse(gone, p.contains(gone))
+            "reset_browser", "Firefox", "tbp")) assertFalse(gone, p.contains(gone))
+        assertTrue(p.contains("termux_run") && p.contains("run_shell"))
     }
 
     @Test fun `memory block is appended to the system prompt`() = runTest {
