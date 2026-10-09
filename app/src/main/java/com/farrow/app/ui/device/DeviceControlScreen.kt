@@ -97,6 +97,7 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                     }
                     if (ui.rishInstalled) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = vm::testRish, enabled = !ui.testing) { Text("Test (id)") }
+                        OutlinedButton(onClick = vm::fixRishPermissions) { Text("Fix rish permissions") }
                         TextButton(onClick = vm::removeRish) { Text("Remove") }
                     }
                     if (ui.rishNeedsAccess) TextButton(onClick = { runCatching { context.startActivity(vm.allFilesAccessIntent()) } }) {

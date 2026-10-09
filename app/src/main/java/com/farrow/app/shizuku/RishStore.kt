@@ -42,11 +42,8 @@ class RishStore(dir: File) {
         // Replace atomically-ish: remove old copies (the dex is read-only), then write.
         dir.listFiles()?.forEach { it.setWritable(true, true); it.delete() }
         val s = File(dir, SCRIPT).apply { writeBytes(rish.bytes); setReadable(true, true); setExecutable(true, true) }
-        val c = File(dir, compName).apply {
-            writeBytes(comp)
-            // Android 14+ refuses to load writable dex files: make the internal copy read-only.
-            setWritable(false, false); setReadable(true, true)
-        }
+        val c = File(dir, compName).apply { writeBytes(comp) }
+        fixPermissions() // Android 14+ refuses to load a writable dex: chmod 400 right after copying
         return Result.Installed(s, c)
     }
 
@@ -79,6 +76,17 @@ class RishStore(dir: File) {
         return install(listOf(Picked(f.script.name, f.script.readBytes()), Picked(f.companion.name, f.companion.readBytes())))
     }
 
+    /**
+     * chmod 400 on the internal dex (owner read-only; Android 14+ refuses writable dex files) and owner rwx on the script.
+     * Returns the dex mode afterwards (e.g. "r--------"), or null when rish isn't installed.
+     */
+    fun fixPermissions(): String? {
+        val c = companion?.takeIf { it.isFile } ?: return null
+        chmod(c, "r--------")
+        if (script.isFile) chmod(script, "rwx------")
+        return mode(c)
+    }
+
     fun remove() { dir.listFiles()?.forEach { it.setWritable(true, true); it.delete() } }
 
     companion object {
@@ -86,6 +94,21 @@ class RishStore(dir: File) {
         const val DEFAULT_COMPANION = "rish_shizuku.dex"
         private const val MAX_SCRIPT = 64_000
         private const val MAX_DIRS = 200
+
+        private fun chmod(f: File, perms: String) {
+            val ok = runCatching {
+                java.nio.file.Files.setPosixFilePermissions(f.toPath(), java.nio.file.attribute.PosixFilePermissions.fromString(perms)); true
+            }.getOrDefault(false)
+            if (!ok) { // fallback without POSIX attribute support
+                f.setReadable(false, false); f.setWritable(false, false); f.setExecutable(false, false)
+                f.setReadable(perms[0] == 'r', true); f.setWritable(perms[1] == 'w', true); f.setExecutable(perms[2] == 'x', true)
+            }
+        }
+
+        /** POSIX mode string such as "r--------" (null if unsupported). */
+        fun mode(f: File): String? = runCatching {
+            java.nio.file.attribute.PosixFilePermissions.toString(java.nio.file.Files.getPosixFilePermissions(f.toPath()))
+        }.getOrNull()
         /** Where "Find rish" looks: Download, Documents and Documents/Farrow/Input (and their sub-folders). */
         fun searchRoots(storage: File = File("/storage/emulated/0")): List<File> = listOf(
             File(storage, "Download"), File(storage, "Documents"), File(storage, "Documents/Farrow/Input"))
@@ -104,17 +127,17 @@ class RishStore(dir: File) {
     }
 }
 
-/** Runs `sh <files/rish/rish> -c <command>` in Farrow's process, with RISH_APPLICATION_ID = Farrow (holds the Shizuku permission). */
+/** Runs `sh <files/rish/rish> -c <command>` in Farrow's process, always with RISH_APPLICATION_ID=com.termux. */
 class RishRunner(
     private val store: RishStore,
-    private val applicationId: String,
     private val shell: String = "/system/bin/sh",
 ) {
     data class Out(val exitCode: Int, val stdout: String, val stderr: String, val timedOut: Boolean)
 
     fun run(command: String, timeoutS: Int): Out {
         val pb = ProcessBuilder(shell, store.script.path, "-c", command).directory(store.dir)
-        pb.environment()["RISH_APPLICATION_ID"] = applicationId
+        pb.environment()["RISH_APPLICATION_ID"] = APPLICATION_ID
+        store.fixPermissions() // keep the dex at 400 even if something reset it
         val p = pb.start()
         p.outputStream.close()
         val out = StringBuilder(); val err = StringBuilder()
@@ -127,5 +150,9 @@ class RishRunner(
         return Out(if (finished) p.exitValue() else 124, synchronized(out) { out.toString() }, synchronized(err) { err.toString() }, !finished)
     }
 
-    private companion object { const val MAX_OUT = 200_000 }
+    companion object {
+        /** rish_run always identifies as Termux (the terminal app the rish files were exported for). */
+        const val APPLICATION_ID = "com.termux"
+        private const val MAX_OUT = 200_000
+    }
 }

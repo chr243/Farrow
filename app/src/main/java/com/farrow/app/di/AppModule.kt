@@ -105,8 +105,7 @@ object AppModule {
     fun provideRishStore(@ApplicationContext context: Context) = com.farrow.app.shizuku.RishStore(File(context.filesDir, "rish"))
 
     @Provides @Singleton
-    fun provideRishRunner(@ApplicationContext context: Context, store: com.farrow.app.shizuku.RishStore) =
-        com.farrow.app.shizuku.RishRunner(store, context.packageName)
+    fun provideRishRunner(store: com.farrow.app.shizuku.RishStore) = com.farrow.app.shizuku.RishRunner(store)
 
     /** Agent-writable skills: files/skills/<id>/SKILL.md (app-internal, not Documents). */
     @Provides @Singleton

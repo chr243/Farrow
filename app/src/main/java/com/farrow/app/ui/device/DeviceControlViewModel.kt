@@ -60,7 +60,8 @@ class DeviceControlViewModel @Inject constructor(
                 gitUser = git.username, authorName = git.authorName, authorEmail = git.authorEmail,
                 cryptoKeyMasked = crypto.maskedKey, cryptoConfigured = crypto.configured,
                 rishInstalled = rish.isInstalled(),
-                rishInfo = if (rish.isInstalled()) "${rish.script.path} + ${rish.companion?.name}" else null)
+                rishInfo = if (rish.isInstalled()) "${rish.script.path} + ${rish.companion?.name}" +
+                    (rish.companion?.let { c -> com.farrow.app.shizuku.RishStore.mode(c) }?.let { m -> " ($m)" } ?: "") else null)
         }
     }
 
@@ -176,6 +177,15 @@ class DeviceControlViewModel @Inject constructor(
 
     fun allFilesAccessIntent(): android.content.Intent =
         com.farrow.app.data.storage.SharedFolder.accessIntent(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /** "Fix rish permissions": chmod 400 the internal dex again (also done automatically after every copy). */
+    fun fixRishPermissions() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val mode = runCatching { rish.fixPermissions() }.getOrNull()
+            refresh()
+            _ui.update { it.copy(message = if (mode == null) "rish is not set up yet" else "rish_shizuku.dex is now $mode (chmod 400)") }
+        }
+    }
 
     fun removeRish() { rish.remove(); refresh(); _ui.update { it.copy(message = "rish removed") } }
 

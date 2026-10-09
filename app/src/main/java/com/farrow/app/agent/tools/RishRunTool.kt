@@ -26,7 +26,7 @@ class RishRunTool(private val store: RishStore, private val runner: RishRunner) 
             if (r.timedOut) put("timed_out", true)
             put("stdout", r.stdout.takeLast(30_000)); put("stderr", r.stderr.takeLast(10_000))
             if (r.exitCode != 0 && (r.stderr.contains("permission", true) || r.stderr.contains("binder", true)))
-                put("hint", "Check that Shizuku is running and Farrow has the Shizuku permission (Settings > Shizuku, accessibility & Git).")
+                put("hint", "Check that Shizuku is running and authorized for com.termux, and try Fix rish permissions (Settings > Shizuku, accessibility & Git).")
         }.toString()
     }
 }

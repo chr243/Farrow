@@ -37,6 +37,7 @@ class RishStoreTest {
         assertArrayEquals(script, File(base, "files/rish/rish").readBytes())
         val d = File(base, "files/rish/rish_shizuku.dex")
         assertArrayEquals(dex, d.readBytes()); assertFalse(d.canWrite()) // read-only for Android 14+
+        assertEquals("r--------", RishStore.mode(d)) // chmod 400 right after the copy
         assertEquals("rish_shizuku.dex", RishStore.companionName(String(script)))
         // Picking again replaces the read-only dex.
         assertTrue(store.install(listOf(RishStore.Picked("rish", script), RishStore.Picked("x", dex))) is RishStore.Result.Installed)
@@ -69,6 +70,16 @@ class RishStoreTest {
         assertArrayEquals(dex, File(base, "files/rish/rish_shizuku.dex").readBytes())
     }
 
+    @Test fun fixPermissionsRestoresChmod400() {
+        assertNull(store.fixPermissions())
+        store.install(listOf(RishStore.Picked("rish", script), RishStore.Picked("rish_shizuku.dex", dex)))
+        val d = File(base, "files/rish/rish_shizuku.dex")
+        Files.setPosixFilePermissions(d.toPath(), java.nio.file.attribute.PosixFilePermissions.fromString("rw-rw-rw-"))
+        assertEquals("r--------", store.fixPermissions())
+        assertEquals("r--------", RishStore.mode(d))
+        assertEquals("rwx------", RishStore.mode(File(base, "files/rish/rish")))
+    }
+
     @Test fun rejectsWrongFiles() {
         assertTrue(store.install(listOf(RishStore.Picked("photo.jpg", ByteArray(100) { 1 }))) is RishStore.Result.Invalid)
         assertTrue(store.install(listOf(RishStore.Picked("rish", script), RishStore.Picked("rish_shizuku.dex", "not a dex".toByteArray())))
@@ -77,14 +88,14 @@ class RishStoreTest {
     }
 
     @Test fun rishRunUsesInternalCopiesWithFarrowAsApplicationId() = runTest {
-        val runner = RishRunner(store, "com.farrow.app", shell = "sh")
+        val runner = RishRunner(store, shell = "sh")
         val tool = RishRunTool(store, runner)
         assertTrue(Json.parseToJsonElement(tool.execute(buildJsonObject { put("command", "id") })).jsonObject["error"]!!
             .jsonPrimitive.content.contains("Settings"))
         store.install(listOf(RishStore.Picked("rish", script), RishStore.Picked("rish_shizuku.dex", dex)))
         val r = Json.parseToJsonElement(tool.execute(buildJsonObject { put("command", "echo hi; echo oops >&2; exit 3") })).jsonObject
         assertEquals(3, r["exit_code"]?.jsonPrimitive?.int)
-        assertEquals("app=com.farrow.app\nhi\n", r["stdout"]?.jsonPrimitive?.content)
+        assertEquals("app=com.termux\nhi\n", r["stdout"]?.jsonPrimitive?.content)
         assertEquals("oops\n", r["stderr"]?.jsonPrimitive?.content)
         val t = Json.parseToJsonElement(tool.execute(buildJsonObject { put("command", "sleep 30"); put("timeout_seconds", 1) })).jsonObject
         assertEquals(true, t["timed_out"]?.jsonPrimitive?.boolean)
