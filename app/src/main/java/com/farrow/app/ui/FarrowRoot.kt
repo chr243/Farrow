@@ -17,15 +17,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.farrow.app.domain.repository.NotificationRepository
-import com.farrow.app.ui.browser.BrowserSetupScreen
 import com.farrow.app.ui.chat.ChatDetailScreen
 import com.farrow.app.ui.device.DeviceControlScreen
 import com.farrow.app.ui.device.KeepAliveScreen
 import com.farrow.app.ui.chats.ChatsScreen
 import com.farrow.app.ui.menu.*
 import com.farrow.app.ui.notifications.NotificationsScreen
-import com.farrow.app.ui.social.ReloginScreen
-import com.farrow.app.ui.tasks.TasksScreen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -33,7 +30,6 @@ import javax.inject.Inject
 
 object Routes {
     const val CHATS = "chats"
-    const val TASKS = "tasks"
     const val NOTIFICATIONS = "notifications"
     const val SETTINGS = "settings"
     const val MCP = "settings/mcp"
@@ -43,15 +39,12 @@ object Routes {
     const val LIMITS = "settings/limits"
     const val SHIZUKU = "shizuku"
     const val CHAT_HEADS = "settings/chatheads"
-    const val BROWSER_SETUP = "settings/browser"
-    const val RELOGIN = "relogin/{site}?web={web}"
     const val KEEP_ALIVE = "settings/keepalive"
     const val TOOLS = "settings/tools"
     const val THEME = "settings/theme"
     const val ARCHIVE = "settings/archive"
     const val MEMORY = "settings/memory?chat={chat}"
     fun memory(chatId: Long? = null) = "settings/memory?chat=${chatId ?: -1}"
-    fun relogin(site: String, web: Boolean = false) = "relogin/$site?web=$web"
     fun chat(taskId: Long) = "chat/$taskId"
 }
 
@@ -76,7 +69,7 @@ fun FarrowRoot(
         }
     }
 
-    // No bottom bar (v0.9.18): the chat list is home; Settings opens from its gear, Tasks lives in Settings.
+    // No bottom bar (v0.9.18): the chat list is home; Settings opens from its gear.
     run {
         // Transitions disabled everywhere so tab switches and navigation are instant (no crossfade).
         NavHost(
@@ -96,7 +89,6 @@ fun FarrowRoot(
                     onOpenModels = { nav.navigate(Routes.MODELS) },
                 )
             }
-            composable(Routes.TASKS) { TasksScreen(onOpenChat = { nav.navigate(Routes.chat(it)) }, onBack = { nav.popBackStack() }) }
             composable(Routes.NOTIFICATIONS) {
                 NotificationsScreen(onOpenChat = { nav.navigate(Routes.chat(it)) }, onBack = { nav.popBackStack() })
             }
@@ -110,7 +102,7 @@ fun FarrowRoot(
                     com.farrow.app.chathead.VisibleChat.taskId = chatId
                     onDispose { if (com.farrow.app.chathead.VisibleChat.taskId == chatId) com.farrow.app.chathead.VisibleChat.taskId = null }
                 }
-                ChatDetailScreen(onBack = { nav.popBackStack() }, onRelogin = { nav.navigate(Routes.relogin(it, web = true)) },
+                ChatDetailScreen(onBack = { nav.popBackStack() },
                     onChatMemory = { id -> nav.navigate(Routes.memory(id)) })
             }
             composable(Routes.KEYS) { ApiKeysScreen(onBack = { nav.popBackStack() }) }
@@ -128,11 +120,6 @@ fun FarrowRoot(
             }
             composable(Routes.THEME) { com.farrow.app.ui.theme.ThemeScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.CHAT_HEADS) { ChatHeadSettingsScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.BROWSER_SETUP) { BrowserSetupScreen(onBack = { nav.popBackStack() }) }
-            composable(Routes.RELOGIN, arguments = listOf(navArgument("site") { type = NavType.StringType },
-                navArgument("web") { type = NavType.BoolType; defaultValue = false })) {
-                ReloginScreen(onBack = { nav.popBackStack() })
-            }
         }
     }
 }

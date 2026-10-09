@@ -56,7 +56,6 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
             fun item(title: String, subtitle: String, route: String): @Composable (Int) -> Unit = { i -> MenuItem(title, subtitle, i) { onNavigate(route) } }
             if (!kiloNoticeSeen) KiloNotice(onDismiss = vm.appPrefs::dismissKiloNotice)
             SettingsGroup("Activity", listOf(
-                item("Tasks", "Running, waiting and finished tasks", Routes.TASKS),
                 item("Notifications",
                     if (unreadNotifications > 0) "$unreadNotifications unread · rate limits, quota warnings, completions"
                     else "Rate-limit alerts, quota warnings and completions", Routes.NOTIFICATIONS),
@@ -78,13 +77,8 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
                 },
             ))
             SettingsGroup("Agent tools", listOf(
-                item("Tools", "Built-in agent tools (status, on/off) and Termux add-ons to install", Routes.TOOLS),
+                item("Tools", "Built-in agent tools (status, on/off)", Routes.TOOLS),
                 item("MCP servers", "Remote MCP servers, their status and per-tool switches", Routes.MCP),
-            ))
-            SettingsGroup("Browser & accounts", listOf(
-                item("Internal browser setup", "Termux + Firefox + Xvfb + Termux Browser Pilot bridge", Routes.BROWSER_SETUP),
-                item("X.com account", "Login state, re-login, cookie import, selectors file", Routes.relogin("x")),
-                item("Facebook account", "Login state, re-login, cookie import, selectors file", Routes.relogin("facebook")),
             ))
             SettingsGroup("Phone", listOf(
                 item("Chat heads", "Auto / Bubbles / Overlay, permissions", Routes.CHAT_HEADS),

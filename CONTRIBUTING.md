@@ -15,19 +15,18 @@ Thanks for helping! Farrow is a small personal project, so keep changes focused 
    ```
 
    Lint runs with `abortOnError = true`: any lint error fails the build. Fix errors rather than suppressing them; if a suppression (`@SuppressLint`) is truly needed, add a comment explaining why. Don't add new warnings.
-6. **Device-test** if you touched the Termux bridge, setup steps, Shizuku, Accessibility, chat heads or social automation (JVM tests don't cover these).
-7. **Commit** with a clear message (imperative, e.g. `Fix bridge restart when port is busy`) and open a PR against `main` using the template.
+6. **Device-test** if you touched Shizuku, Accessibility or chat heads (JVM tests don't cover these).
+7. **Commit** with a clear message (imperative, e.g. `Fix chat head position after rotation`) and open a PR against `main` using the template.
 
 ## PR checklist
 
 - [ ] `./gradlew assembleDebug testDebugUnitTest lint` passes locally
 - [ ] Tests added/updated for logic changes
 - [ ] No secrets, `local.properties`, keystores, APKs or build outputs committed
-- [ ] Bridge `VERSION` bumped + `BridgeVersionsTest` updated (if `tbp_bridge.py` changed)
 - [ ] Room migration + `app/schemas/` export (if the database changed)
 - [ ] Device-tested (if runtime-only paths changed), with device/Android version noted
 - [ ] Docs updated (README / AGENTS.md / docs/ARCHITECTURE.md) where behaviour changed
 
 ## Reporting security issues
 
-Don't open a public issue for vulnerabilities (for example a way to bypass the bridge token). TODO(maintainer): add a private contact or enable GitHub private vulnerability reporting.
+Don't open a public issue for vulnerabilities (for example a way to read stored API keys). TODO(maintainer): add a private contact or enable GitHub private vulnerability reporting.

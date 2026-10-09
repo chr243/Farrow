@@ -11,7 +11,7 @@ import kotlinx.serialization.json.*
 
 class RunShellTool(private val shell: ShellExecutor, private val sandbox: WorkspaceSandbox) : AgentTool {
     override val name = "run_shell"
-    override val description = "Run a shell command on the phone as the adb shell user via Shizuku (no Termux packages here — use termux_run for those). Returns backend, exit_code, stdout and stderr."
+    override val description = "Run a shell command on the phone as the adb shell user via Shizuku. Returns backend, exit_code, stdout and stderr."
     override val parameters = schema(listOf("command"),
         "command" to prop("string", "Shell command (sh -c)"),
         "workdir" to prop("string", "Working directory relative to the agent workspace (default: workspace root)"),
@@ -95,16 +95,9 @@ class GitPushTool(private val git: GitManager) : AgentTool {
 
 // ---------------------------------------------------------------- Accessibility
 
-/** Shown whenever a screen_* tool might be used for a web task (the internal browser isn't on the phone screen). */
-internal const val WEB_HINT = "Web pages (including x.com) open in the internal browser (Firefox in Termux), which is NOT on the phone screen: " +
-    "use web_scrape / web_click / web_type / web_session and x_* / fb_* instead — they need no accessibility permission."
 private const val A11Y_OFF = "Accessibility service is off (enable 'Farrow agent control' in Settings > Shizuku & accessibility setup). " +
-    "It is only needed to control OTHER Android apps on the phone screen. $WEB_HINT"
-private const val PHONE = "Phone screen (accessibility): controls other Android apps on the phone's display, not the internal browser. "
-
-/** screen_* call that looks like a web task (URL / web words in the text) → the browser-tools hint. */
-internal fun looksLikeWebTask(text: String?): Boolean =
-    text != null && Regex("""(?i)(https?://|www\.|\b[a-z0-9-]+\.(com|org|net|fr|io)\b|\b(tweet|x\.com|twitter|browser|firefox|web ?page)\b)""").containsMatchIn(text)
+    "It is only needed to control OTHER Android apps on the phone screen."
+private const val PHONE = "Phone screen (accessibility): controls other Android apps on the phone's display. "
 
 private fun A11yNode.toJson(): JsonObject = buildJsonObject {
     cls?.let { put("class", it.substringAfterLast('.')) }
@@ -125,7 +118,7 @@ class ScreenReadTool : AgentTool {
         val svc = FarrowAccessibilityService.instance ?: return errorJson(A11Y_OFF)
         val tree = svc.screenTree((args.int("max_depth") ?: 25).coerceIn(1, 60)) ?: return errorJson("No active window")
         val s = tree.toJson().toString()
-        if (s.contains("com.farrow.app")) return buildJsonObject { put("note", "This is Farrow's own UI. $WEB_HINT"); put("tree", s.take(60_000)) }.toString()
+        if (s.contains("com.farrow.app")) return buildJsonObject { put("note", "This is Farrow's own UI."); put("tree", s.take(60_000)) }.toString()
         return if (s.length > 60_000) buildJsonObject { put("truncated", true); put("tree", s.take(60_000)) }.toString() else s
     }
 }
@@ -164,7 +157,6 @@ class ScreenTypeTool : AgentTool {
     override suspend fun execute(args: JsonObject): String {
         val svc = FarrowAccessibilityService.instance ?: return errorJson(A11Y_OFF)
         val text = args.str("text") ?: return errorJson("text is required")
-        if (looksLikeWebTask(text)) return errorJson("screen_type types into the phone screen, not the internal browser. $WEB_HINT")
         return buildJsonObject { put("ok", svc.setText(text)) }.toString()
     }
 }

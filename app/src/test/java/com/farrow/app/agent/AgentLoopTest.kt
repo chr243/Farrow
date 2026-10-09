@@ -100,7 +100,6 @@ class AgentLoopTest {
             tasks, FakeSettings(maxSteps), ToolRegistry(listOf(ThrowingTool())), notifications,
             model = { m: List<ApiMessage>, _: JsonArray?, _: Long, _: suspend (String) -> Unit -> sent += m; replies[minOf(i++, replies.lastIndex)] },
             summarize = { _, _, _ -> },
-            consumeExpiredSession = { null },
             notifyOnFinish = { notifyFinish },
             systemNotify = { _, _, _ -> systemNotified++ },
         )
@@ -161,11 +160,14 @@ class AgentLoopTest {
         assertEquals(3, h.sent.size)
     }
 
-    @Test fun `system prompt groups browser vs accessibility tools`() {
-        val p = AgentLoop.systemPrompt("en")
-        assertTrue(p.contains("Internal browser") && p.contains("NO accessibility permission"))
+    @Test fun `system prompt has no internal browser and keeps web_fetch, crypto and English sources`() {
+        val p = AgentLoop.systemPrompt()
         assertTrue(p.contains("Phone screen (accessibility)") && p.contains("OTHER Android apps"))
-        assertTrue(p.indexOf("web_click") < p.indexOf("screen_tap"))
+        assertTrue(p.contains("web_fetch") && p.contains("There is no internal browser"))
+        assertTrue(p.contains("crypto_place_order") && p.contains("OFF by default") && p.contains("Revolut has no public crypto"))
+        assertTrue(p.contains("Prefer English-language sources"))
+        for (gone in listOf("web_scrape", "web_click", "web_type", "web_session", "web_screenshot", "x_post", "x_scrape", "fb_",
+            "reset_browser", "termux_run", "Firefox", "Termux")) assertFalse(gone, p.contains(gone))
     }
 
     @Test fun `memory block is appended to the system prompt`() = runTest {
@@ -173,7 +175,7 @@ class AgentLoopTest {
         val sent = mutableListOf<List<ApiMessage>>()
         val loop = AgentLoop(tasks, FakeSettings(5), ToolRegistry(emptyList()), FakeNotifications(),
             model = { m: List<ApiMessage>, _: JsonArray?, _: Long, _: suspend (String) -> Unit -> sent += m; reply("ok") },
-            summarize = { _, _, _ -> }, consumeExpiredSession = { null }, notifyOnFinish = { false }, systemNotify = { _, _, _ -> },
+            summarize = { _, _, _ -> }, notifyOnFinish = { false }, systemNotify = { _, _, _ -> },
             memoryPrompt = { "Memory (persistent):\n- [#1] The user is called Chris." })
         loop.run(1)
         assertTrue(sent[0][0].content!!.contains("[#1] The user is called Chris."))
@@ -202,7 +204,7 @@ class AgentLoopTest {
         val tasks = FakeTasks()
         val loop = AgentLoop(tasks, FakeSettings(5), ToolRegistry(emptyList()), FakeNotifications(),
             model = { _: List<ApiMessage>, _: JsonArray?, _: Long, _: suspend (String) -> Unit -> throw IllegalStateException("kaboom") },
-            summarize = { _, _, _ -> }, consumeExpiredSession = { null }, notifyOnFinish = { false }, systemNotify = { _, _, _ -> })
+            summarize = { _, _, _ -> }, notifyOnFinish = { false }, systemNotify = { _, _, _ -> })
         assertEquals(RunResult.Stopped, loop.run(1))
         assertEquals(TaskStatus.FAILED, tasks.task.status)
         assertTrue(tasks.statusTexts().last().contains("kaboom"))

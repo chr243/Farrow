@@ -2,11 +2,11 @@
 
 ## Description (GitHub "About", one sentence)
 
-On-device AI agent for Android: free OpenRouter/Kilo LLMs with tool calling that browse with real Firefox via Termux, run shell commands via Shizuku, control apps with Accessibility and use Git, all in a Kotlin + Jetpack Compose app with no backend.
+On-device AI agent for Android: free OpenRouter/Kilo LLMs with tool calling that fetch web pages over HTTP, read crypto market data, run shell commands via Shizuku, control apps with Accessibility and use Git, all in a Kotlin + Jetpack Compose app with no backend.
 
 ## Topics (15)
 
-`android` `kotlin` `jetpack-compose` `ai-agent` `llm` `openrouter` `tool-calling` `termux` `shizuku` `browser-automation` `firefox` `accessibility-service` `material3` `hilt` `on-device-ai`
+`android` `kotlin` `jetpack-compose` `ai-agent` `llm` `openrouter` `tool-calling` `shizuku` `accessibility-service` `material3` `hilt` `on-device-ai`
 
 ## Social preview image (Settings → General → Social preview)
 

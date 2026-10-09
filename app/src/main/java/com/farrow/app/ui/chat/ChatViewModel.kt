@@ -5,8 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.farrow.app.chathead.ChatHeadController
 import com.farrow.app.chathead.ChatHeadResult
-import com.farrow.app.data.social.SelectorStore
-import com.farrow.app.data.social.SessionGuard
 import com.farrow.app.domain.model.ChatMessage
 import com.farrow.app.domain.model.PauseReason
 import com.farrow.app.domain.model.Task
@@ -30,7 +28,6 @@ class ChatViewModel @Inject constructor(
     private val startConversation: StartConversationUseCase,
     private val sendMessage: SendMessageUseCase,
     val chatHeads: ChatHeadController,
-    private val sessionGuard: SessionGuard,
 ) : ViewModel() {
     /** 0 = a brand-new conversation that is created on the first send. */
     private val taskId = MutableStateFlow(savedState.get<Long>("taskId") ?: 0L)
@@ -41,10 +38,6 @@ class ChatViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val toolCalls: StateFlow<List<ToolCallRecord>> = taskId.flatMapLatest { if (it == 0L) flowOf(emptyList()) else tasks.observeToolCalls(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    /** Phase 5/9: site ("x", "facebook") whose session expired while this task ran, for the Re-login button. */
-    val expiredSite: StateFlow<String?> = task.map { t ->
-        if (t != null && t.pauseReason == PauseReason.SESSION_EXPIRED.name) sessionGuard.expiredSiteFor(t.id) ?: SelectorStore.X else null
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val isGenerating: StateFlow<Boolean> = combine(taskId, agent.runningTaskIds) { id, running -> id in running }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 

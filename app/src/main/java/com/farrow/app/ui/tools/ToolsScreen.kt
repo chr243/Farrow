@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-/** Settings > Tools: built-in agent tools (status + persisted on/off) and optional Termux add-ons. MCP has its own screen. Text only. */
+/** Settings > Tools: built-in agent tools (status + persisted on/off). MCP has its own screen. Text only. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
@@ -49,49 +49,6 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
                         }
                     },
                     trailingContent = { Switch(checked = on, onCheckedChange = { vm.setEnabled(t.name, it) }) },
-                )
-            }
-            item {
-                Text("Available to install", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp))
-                Text("Termux packages the agent can use with termux_run. Installed in the background with pkg (no Termux window).",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                state.packagesNote?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                }
-            }
-            itemsIndexed(state.packages, key = { _, p -> "p-" + p.pkg.pkg }) { i, p ->
-                ListItem(
-                    modifier = Modifier.groupedRow(i, state.packages.size),
-                    colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                    headlineContent = { Text(p.pkg.pkg, fontFamily = FontFamily.Monospace) },
-                    supportingContent = {
-                        Column {
-                            Text(p.pkg.description)
-                            val s = when (p.state) {
-                                PkgState.INSTALLED -> "Installed (${p.pkg.binary})"
-                                PkgState.NOT_INSTALLED -> "Not installed"
-                                PkgState.INSTALLING -> "Installing…"
-                                PkgState.FAILED -> "Install failed"
-                                PkgState.UNKNOWN -> "Unknown"
-                            }
-                            Text(s, style = MaterialTheme.typography.labelMedium,
-                                color = if (p.state == PkgState.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                            p.detail?.let { d ->
-                                Text(d, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 6)
-                                if (p.state == PkgState.FAILED) com.farrow.app.ui.components.CopyButton(d)
-                            }
-                        }
-                    },
-                    trailingContent = {
-                        when (p.state) {
-                            PkgState.INSTALLED -> Text("Installed", style = MaterialTheme.typography.labelLarge)
-                            PkgState.INSTALLING -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                            else -> OutlinedButton(onClick = { vm.install(p.pkg) }, enabled = state.packagesNote == null) {
-                                Text(if (p.state == PkgState.FAILED) "Retry" else "Install")
-                            }
-                        }
-                    },
                 )
             }
             item { Spacer(Modifier.height(24.dp)) }

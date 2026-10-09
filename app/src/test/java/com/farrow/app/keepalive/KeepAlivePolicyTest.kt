@@ -14,7 +14,7 @@ class KeepAlivePolicyTest {
 
     @Test fun `working notification texts`() {
         assertEquals("Working on: Post on X", WorkingText.title("Post on X"))
-        assertEquals("Running x_post…", WorkingText.text("Running x_post…", 0))
+        assertEquals("Running web_fetch…", WorkingText.text("Running web_fetch…", 0))
         assertEquals("Thinking... (+2 more tasks)", WorkingText.text("Thinking...", 2))
         assertEquals("Working…", WorkingText.text("", 0))
     }

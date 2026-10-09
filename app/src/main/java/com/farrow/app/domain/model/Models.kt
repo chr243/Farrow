@@ -50,7 +50,7 @@ data class Task(
 /** Why a task is paused; drives the system message and whether it auto-resumes. */
 enum class PauseReason(val autoResume: Boolean) {
     DAILY_QUOTA(true), RATE_LIMIT(true), TRANSIENT(true), INTERRUPTED(true),
-    MAX_STEPS(false), USER(false), SESSION_EXPIRED(false);
+    MAX_STEPS(false), USER(false);
 
     companion object {
         fun of(name: String?): PauseReason? = entries.firstOrNull { it.name == name }

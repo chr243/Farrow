@@ -10,15 +10,14 @@ assignees: ''
 What are you trying to do, and what's missing today?
 
 **Proposed solution**
-How should it work? (UI, new agent tool, provider, bridge command, …)
+How should it work? (UI, new agent tool, provider, …)
 
 **Alternatives considered**
 
 **Area**
 - [ ] Agent loop / models / providers
-- [ ] Internal browser (Termux / tbp / bridge)
 - [ ] Device control (Shizuku / Accessibility)
-- [ ] Social (X / Facebook)
+- [ ] Crypto tools
 - [ ] UI / chat heads
 - [ ] Other
 

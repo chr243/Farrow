@@ -15,12 +15,9 @@ A native Android agent app (Kotlin, Jetpack Compose, Material 3) with a Messenge
 | 2 | Agent core: OpenRouter client, rate-limit detection and logging, client RPM limiter, model/key fallback, quota polling, tool loop, file tools, rolling summarization, chat UI | ✅ done |
 | 2.1 | Chat heads (Bubbles API + HyperOS overlay fallback), 3-tab nav, instant transitions | ✅ compiled in v0.9.0 (not device-tested yet) |
 | 3 | Rate-limit recovery: durable WorkManager queue, checkpoints, backoff, daily-quota pause, persisted cooldowns/counters | ✅ compiled in v0.9.0 (not device-tested yet) |
-| 4 | Internal browser: Termux/Firefox/Xvfb/TBP setup wizard, localhost bridge, human input, device fingerprint, HTTP+Jsoup fallback, web_* tools | ✅ compiled in v0.9.0 (not device-tested yet) |
-| 5 | X.com automation: login detection, post, timeline/profile/search scraping, selectors file, session-expiry pause + Re-login | ✅ compiled in v0.9.0 (not device-tested yet) |
 | 6 | Accessibility service (tap/swipe/type/read tree), Shizuku (UserService `run_shell`), JGit clone/status/commit/push | ✅ compiled in v0.9.0 (not device-tested yet) |
 | 7 | Chat heads | ✅ (see 2.1) |
 | 8 | Keep-alive foreground service (min-importance), battery-optimisation prompt, HyperOS autostart guidance, resume on boot | ✅ compiled in v0.9.0 (not device-tested yet) |
-| 9 | Facebook automation (minimal): login detection, post, scrape, re-login, same engine as X | ✅ compiled in v0.9.0 (not device-tested yet) |
 
 ## Build
 
@@ -53,7 +50,6 @@ com.farrow.app
 ├── ui/            Compose screens + ViewModels
 │   ├── chats/         conversation list, stories row, search, quota banner, FAB
 │   ├── chat/          chat detail (bubbles, tool cards, status lines, Stop/Resume, input)
-│   ├── tasks/         running / queue & paused / finished
 │   ├── notifications/ Room-backed alerts (opened from Menu → Notifications)
 │   ├── menu/          Notifications, API keys, model priority, rate limits & quota, Rate Limit Log, Chat heads, Shizuku placeholder
 │   ├── chathead/      compact chat panel, chat-head avatar, dismiss target, overlay-permission dialog
@@ -101,9 +97,9 @@ com.farrow.app
 | Tool | Status |
 |---|---|
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
-| `web_scrape`, `web_click`, `web_type`, `web_session` | Phase 4: Termux Browser Pilot bridge; `web_scrape` falls back to HTTP + Jsoup |
-| `x_status`, `x_post`, `x_scrape` | Phase 5: X.com through the bridge; a login wall pauses the task (`SESSION_EXPIRED`) |
-| `fb_status`, `fb_post`, `fb_scrape` | Phase 9: Facebook through the same engine |
+| `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript) |
+| `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
+| `memory_*`, `chart` | Persistent memory (v0.9.16) and native charts (v1.0.12) |
 | `run_shell` | Phase 6: Shizuku UserService (`sh -c` as uid 2000) |
 | `git_clone`, `git_status`, `git_commit`, `git_push` | Phase 6: JGit 5.13 inside the workspace, using the token from encrypted settings |
 | `screen_read`, `screen_tap`, `screen_swipe`, `screen_type`, `screen_action` | Phase 6: `FarrowAccessibilityService` |
@@ -124,7 +120,7 @@ Tried top to bottom (Menu → Model priority to change):
 A one-time DataStore migration (`ModelDefaultsMigration`, `model_defaults_version` = 2) applies the new defaults to existing installs only when the saved list is exactly the old default list. Customised lists are kept as they are.
 
 ### Navigation
-The bottom bar has three tabs: **Chats, Tasks, Menu**. The in-app notification list is under Menu → Notifications, and the Menu tab shows the unread badge. The Chats screen still shows the low-quota banner. All NavHost transitions are set to `EnterTransition.None`/`ExitTransition.None`, so switching tabs is instant.
+There is no bottom bar: the chat list is home and a gear opens **Settings** (Notifications, Memory, Archive, models, tools, phone and appearance settings). Notifications show an unread count in Settings. The Chats screen shows the low-quota banner. All NavHost transitions are set to `EnterTransition.None`/`ExitTransition.None`, so navigation is instant.
 
 ### Chat heads (v0.2.1)
 - The 🫧 button in the chat detail top bar opens the conversation as a floating chat head. On Android 13+ it asks for `POST_NOTIFICATIONS` first.
@@ -151,70 +147,8 @@ The bottom bar has three tabs: **Chats, Tasks, Menu**. The in-app notification l
   - An `X-RateLimit-Reset` header overrides the backoff cap.
   - When every key is out of daily free quota, the task pauses until 00:00 UTC with the message "⏸️ Paused: Daily free quota exhausted. Resuming at 00:00 UTC."
 - **Persisted state:** the model cooldown pool, key blocks and per-key UTC-day request counters are stored in SharedPreferences (`AgentStateStore`).
-- **UI:** a yellow story dot with a countdown, an auto-resume countdown in the chat, a notification entry, and **Force retry now** / **Cancel** in both the chat and the Tasks tab.
+- **UI:** a yellow story dot with a countdown, an auto-resume countdown in the chat, a notification entry, and **Force retry now** / **Cancel** in the chat.
 - Room schema v2 adds `tasks.attempt` and `tasks.pauseReason` (migration `MIGRATION_1_2`).
-
-### Internal browser (Phase 4)
-- **Setup wizard** (Menu → Internal browser setup): shows whether Termux is installed, whether `com.termux.permission.RUN_COMMAND` is granted, whether the bridge is reachable, whether `tbp` is installed and whether the TBP daemon is running. Each step has a copyable command and, once the permission is granted, a **Run in Termux** button that uses Termux's `RunCommandService`:
-  1. Enable `allow-external-apps = true` in `~/.termux/termux.properties`. This one has to be pasted by hand.
-  2. Install `x11-repo`, `tur-repo`, `firefox`, `xorg-server-xvfb`, `xdotool`, `xclip`, `openbox`, `python` and `git`.
-  3. Clone [Termux Browser Pilot](https://github.com/salviz/termux-browser-pilot) and run `setup.sh`, which provides `tbp`.
-  4. Write `~/.farrow/tbp_bridge.py` (shipped in `assets/`) and the shared token.
-  5. Start the bridge on `127.0.0.1:8765`.
-- **Bridge** (`assets/tbp_bridge.py`, Python stdlib only):
-  - `GET /health`, `POST /cmd {cmd,args}` and a minimal WebSocket at `/ws`.
-  - Wraps `tbp goto/text/html/eval/click/type/press/cookies --json`.
-  - Every request needs the `X-Bridge-Token` header, because any app on the phone can reach localhost.
-  - Cleartext is allowed only to `127.0.0.1`/`localhost` (`network_security_config.xml`).
-- **Kotlin client:** `BridgeClient` uses OkHttp for both HTTP and WebSocket.
-- **Human input:**
-  - Clicks send a normalised cubic-Bézier path, which the bridge maps from the current pointer to the element centre (`mozInnerScreenX/Y`) and replays with `xdotool`, then calls `tbp click --human`.
-  - Typing sends per-character delays that model ~220 WPM with jitter and pauses at punctuation.
-- **Device fingerprint:** screen (physical display mode, dpi, refresh rate), GPU (renderer/vendor/version from an offscreen EGL14 pbuffer and GLES20), CPU (SoC, cores, ABIs), model, locale, timezone and the WebView UA. It can be pushed to the bridge (`~/.farrow/fingerprint.json`). TBP also auto-detects the real hardware itself.
-- **Cookie sessions:** `web_session save|load|list` maps to `tbp cookies --save/--load ~/.farrow/sessions/<name>.json`.
-- **Fallback:** when the bridge is down, `web_scrape` uses OkHttp + Jsoup, while `web_click` and `web_type` return a "bridge not running" error. **Limitation:** Chrome Custom Tabs can't return the DOM to the app, so they are only used to show pages to the user (for example a manual login). The HTTP fallback runs no JavaScript.
-
-
-**v0.9.2 setup wizard:** each step runs in a foreground Termux session that stays open. A wrapper tees output to `~/.farrow/logs/step-N.log`, prints `✅ Step N succeeded` or `❌ Step N failed (exit X)`, and writes `step-N.status`. Results come back to the app through `RUN_COMMAND_PENDING_INTENT` (`TermuxResultReceiver`). Each card shows its status and log tail, and has a View log button. Only one step runs at a time. The apt steps wait up to 2 minutes for other apt/dpkg processes, then run `dpkg --configure -a` and `apt-get -y -o Dpkg::Options::=--force-confold`.
-
-**Bridge "started but not reachable" (v0.9.1):** `pkill -f tbp_bridge.py` matched the `bash -c` running the step, because that shell's argv contains the script name. The step therefore killed itself, and the bridge also died when its session closed. "Failed to connect to /127.0.0.1:8765" was a refused connection, not a cleartext block: `network_security_config.xml` already allows cleartext to 127.0.0.1 and localhost. Step 5 now kills only processes whose `comm` is `python*`. It starts `setsid nohup python -u …` detached and writes `bridge.pid`, then waits up to 10 s for the port. On failure it prints the tail of `bridge.log`. The Status card has a **Connect / Re-check** button with backoff of about 10 s, and also re-checks on resume. When the check fails, it shows the `bridge.log` tail fetched via RUN_COMMAND. Bridge 1.1.0 adds a `screenshot` command (`tbp screenshot`, falling back to ImageMagick `import`). Re-run step 4 to update the bridge.
-
-### X.com automation (Phase 5)
-- **One updatable file:** every URL, DOM selector, scrape field and step script lives in `assets/selectors/x.json`. You can override it at runtime (Menu → X.com account → Selectors file, or by dropping a file at `filesDir/selectors/x.json`) and restore the bundled copy with "Reset to bundled".
-- **Login detection** (`SocialAutomation.loginStatus`) checks, in order:
-  1. Logged-in DOM markers (`SideNav_AccountSwitcher_Button`, …).
-  2. A redirect to a login URL (`/i/flow/login`, `/login`, …).
-  3. A login form in the DOM.
-  4. Whether readable cookies (`twid`/`ct0`) are present. `auth_token` is HttpOnly, so `document.cookie` can't see it.
-- **Tools:**
-  - `x_status`: restores the saved cookie session and reports the login state.
-  - `x_post {text ≤ 280}`: runs `postSteps` (compose URL → human-typed text → tweet button → waits until the composer closes).
-  - `x_scrape {kind: timeline|profile|search, handle, query, limit}`: extracts `article[data-testid=tweet]` items (author, text, time, url, reply/repost/like labels), scrolls, and de-duplicates by URL.
-- **Session expiry:** a login wall throws `SessionExpiredException`, and the tool flags the task in `SessionGuard`. After the step, the agent loop pauses the task with `PauseReason.SESSION_EXPIRED` (no auto-resume) and adds the status message "🔐 Paused: x session expired…". It also creates a 🔐 in-app notification and a system notification on the `alerts` channel that opens the chat.
-- **Re-login:** the chat shows a **Re-login** button, which opens `relogin/x`. From there you can:
-  - Log in with credentials. The bridge types them into X's login flow, including an optional challenge or 2FA code. They are never stored.
-  - Import the `auth_token` and `ct0` cookies.
-  - Open the login page in a Custom Tab (view only, since it uses a separate cookie jar).
-
-  On success the cookies are saved as the `x` session. Then tap **Force retry now**.
-
-
-**v0.9.2 login:** step scripts poll the page via `eval` instead of using fixed sleeps. Every step has a budget of about 15 s, and failures name the step and its selector. Bridge calls are cancellable, which powers the **Cancel** button and stops the spinner on failure. A failure shows the page URL, a page-text snippet and a screenshot in the app. `x.json` v2 targets the current `/i/flow/login` → `/i/jf/onboarding` flow:
-- `autocomplete=username` / `name=text` → **Next** (matched by text)
-- the optional `ocfEnterTextTextInput` unusual-activity check
-- `name=password` → `LoginForm_Login_Button`
-- the optional 2FA code
-
-**Paste cookies** is now the recommended path. It accepts `auth_token` and `ct0` values, a Cookie-Editor JSON export, Netscape cookies.txt, or a `name=value; …` header (`CookieParser`). It then verifies the session by loading x.com/home.
-
-**v0.9.4 login (x.json v3):** X's `/i/jf/onboarding` page now opens with a cookie banner, labels its field "Email or username" and uses a **Continue** button. Login steps find elements by visible text and label through `DomFinder`, a JS helper run via `eval`. It also searches open shadow roots and same-origin iframes, and tags hits with `data-farrow-target`. Steps:
-1. Refuse non-essential cookies, or accept all if there is no refuse button.
-2. Click and type into the input labelled "Email or username" or "Phone, email, or username" (FR variants too). Fallbacks, in order: `name=text` or `autocomplete=username`, then any visible text input in the dialog.
-3. Click `/^(Next|Continue|Suivant|Continuer)$/`, skipping "Continue with …" buttons.
-4. Fill Password / Mot de passe.
-5. Click `/^(Log in|Se connecter|Connexion)$/`.
-
-Elements in the main document get human-like clicks and typing through the bridge. Elements inside shadow roots or iframes get JS clicks and are filled using the native value setter plus input events.
 
 ### Accessibility, Shizuku and Git (Phase 6)
 - **Accessibility:** `FarrowAccessibilityService` (`res/xml/accessibility_service_config.xml`, protected by `BIND_ACCESSIBILITY_SERVICE`) uses `dispatchGesture` for taps and swipes, `ACTION_SET_TEXT` on the first editable or focused node for text, and `rootInActiveWindow` for a bounded JSON tree with class, text, description, view id, bounds and the clickable/editable flags. It also supports global actions (back, home, recents, …). The user turns it on in system Accessibility settings, or on HyperOS under Additional settings → Accessibility → Downloaded apps.
@@ -245,9 +179,9 @@ The device screen shows the active backend and each backend's error. **Connect /
 **v0.9.18:**
 - **Harmonized themes:** each palette is now built from one seed with Material 3's tonal-palette algorithm (`SchemeContent`, via `com.materialkolor:material-color-utilities`). Primary, secondary, tertiary, surfaces, the surface-container ladder, containers and outlines all come from the same tones in light and dark. Seeds: Messenger Blue #0084FF, Forest #2E7D32, Sunset #F4511E, Purple #7E57C2, Rose #D81B60, Ocean #00897B. Midnight is the dark scheme on pure black. Dynamic still uses Material You on Android 12+.
 - **Every screen uses theme color roles.** Sent bubbles use primary/onPrimary and received bubbles use surfaceContainerHigh/onSurface. Tool cards use surfaceContainer (errorContainer for errors). The chat head badge and dismiss target, the code colors, task avatars and status dots (harmonized with primary), the quota banner (tertiaryContainer), and the status/nav bar icons all follow the theme. The contrast tests are stricter.
-- **New layout.** The bottom navigation bar is gone: the chat list is the home screen, and a gear opens **Settings** (the old Menu). **Tasks** has moved into Settings, and Back returns to the chats. The chat-head button and the pen/new-chat icon are removed. The ＋ button on the chat list starts a new chat. A ⋮ menu in the chat screen opens Chat memory.
+- **New layout.** The bottom navigation bar is gone: the chat list is the home screen, and a gear opens **Settings** (the old Menu). Back returns to the chats. The chat-head button and the pen/new-chat icon are removed. The ＋ button on the chat list starts a new chat. A ⋮ menu in the chat screen opens Chat memory.
 - **Settings has rounded groups with alternating row tones** (surfaceContainerLow/surfaceContainer), and so do Tools, MCP servers, API keys and Model priority.
-- **MCP servers has its own screen.** Tools now only shows the built-in tools and Termux add-ons.
+- **MCP servers has its own screen.** Tools now only shows the built-in tools.
 - **The Rate Limit Log screen is removed.** Rate-limit handling and logging are unchanged.
 
 **v0.9.17:**
@@ -259,134 +193,36 @@ The device screen shows the active backend and each backend's error. **Connect /
 - Room DB v4 (`memories.chatId` + index) with a migration, tested against the exported schema. The export file lists long-term memories and each chat's notes.
 
 **v0.9.16:**
-- **Bridge 1.8.0, updates itself:** the app compares the running bridge with the bundled one. If the running bridge is older, it rewrites `~/.farrow/tbp_bridge.py` and restarts the bridge in the background (steps 4 + 5 through Termux, no window; Firefox keeps running), at most once every 10 min. Browser setup and the X login screen also show a **"Bridge outdated (old → new), tap to update"** banner.
-- **Sturdier x_post:** the compose click now has 45 s. TBP click gets up to 30 s; if it times out or fails, the app waits until TBP is idle again, then focuses the Draft.js editor with one eval. Text goes in through the new `editor_type` command (xdotool typing, checked via `innerText`, with `execCommand('insertText')`/paste as fallback). Post button: TBP click → JS click → ctrl+Return (new `key` command). Old bridges fall back to `tbp type` plus an insertText check. The selectors are now x.json v5.
-- **Fast login Check:** step 1 reads the session cookies from a copy of `cookies.sqlite` plus the history URL (no ready-wait, no eval, under 1 s) and shows "cookies present" right away. Step 2 runs in the background, and only when the browser is idle: it opens x.com/home and checks that the page stays on /home and the title isn't a login page. Timings show in the card.
 - **Agent memory:** stored in a Room table `memories` (DB v3) and exported to `files/memory/MEMORY.md`. New tools `memory_save` (merges duplicates), `memory_search` and `memory_delete`, with toggles on the Tools page. The system prompt carries the ~20 most important/recent memories (≤ ~1.5k tokens) and tells the agent to save lasting facts without duplicates. New Menu > Memory screen: list, search, add, edit, delete, Clear all (with confirmation) and an Automatic saving switch.
-- **No more accessibility confusion:** the system prompt now groups tools into *Internal browser* (web_*, x_*, fb_*, which need no accessibility permission) and *Phone screen (accessibility)* (screen_*, which only control other apps), plus a built-in note saying so. screen_* descriptions and errors point web tasks to the browser tools.
 - **Empty replies:** the nudge now asks for a 2–4 sentence progress report (done / stuck / next). The report shows as an agent message and the agent then keeps working. If the reply is empty a second time, the app shows a summary of the recent tool calls plus Continue.
 
 **v0.9.15:**
-- **x_post / x_status timeouts fixed.** TBP's goto runs location.assign() through the DevTools console, waits 3 s, hides the console and then polls document.readyState and location.href. Every poll is another console paste, which takes seconds on a phone, and X doesn't settle quickly. The app's 20 s "goto compose" budget ran out while the daemon kept running the goto, and TBP runs one command at a time. So the next eval (x_status) waited behind it until the 90 s timeout.
-- **Bridge 1.7.0, new commands:**
-  - `nav`: navigates with the keyboard (no JS, no wait for 'load') and returns as soon as the Firefox history shows the target URL.
-  - `ready`: socket up, no command still running, console answering; waits up to 30 s and runs before every X/Facebook tool.
-  - `site_status`: login state from cookies.sqlite plus the current URL and title, with no JS.
-- **x_status** (and Check on the account screen) no longer navigates or runs eval.
-- **x_post:**
-  - Navigates with `nav`. If that isn't confirmed but the page is already the compose page, it carries on; a login URL means the session expired.
-  - Waits up to 45 s for the compose box and retries evals that fail or are slow.
-  - After Post, it confirms success: the toast appears or the compose box closes.
-  - Errors include a per-step log (time, result, last eval error), and successful posts return it too.
-- **Selectors:** bundled x.json is now v4; an override older than the bundled file is ignored.
-- **Account screens** (Menu > X.com / Facebook) no longer check or scan on open. They show the last known status with its time and only check when you tap Check.
 - **Themes** (Menu > Theme):
   - Mode: System, Light or Dark.
   - Palettes: Messenger Blue (default), Dynamic (Material You, Android 12+), Midnight (true-black AMOLED), Forest green, Sunset orange, Purple, Rose pink, Ocean teal. Each has its own light and dark Material 3 scheme.
   - Chat bubbles and the chat head follow the theme. The choice is saved and applies instantly.
 
 **v0.9.14:**
-- **X import "no session cookies" + Google page fixed (root cause).** TBP runs JS by pasting it into the DevTools console. On the first JS after each daemon start it "syncs" the console: ctrl+l, a ctrl+shift+k toggle, then a test paste. On a slow phone the DevTools window wasn't open in time, so the script went into the address bar and ctrl+Return ran it as a Google search (hence the consent wall). TBP then thought the console was open and every later eval leaked the same way. The import restarts the daemon, so it always hit this. Bridge 1.6.0 now opens and focuses the DevTools window right after the daemon starts and before every bridge JS command (eval, url, title, text, html, links). It detects a leak from the main window title or the last history URL, goes back with the keyboard, reopens the console and returns a clear error.
-- **The import is verified without JS.** It counts rows in cookies.sqlite before the write, after the write, after the restart and after goto. The final URL comes from places.sqlite history plus the window title. `logged_in` is true when auth_token/ct0 (or c_user/xs) are present and the URL is not a login, flow or onboarding page. The app uses this result instead of an eval-based login check.
-- **Cookie write fix.** `pgrep`/`pkill` are often missing on Termux. That made "Firefox gone" true at once, so cookies.sqlite could be written while Firefox was still running and then overwritten. A `/proc` cmdline scan now waits until the daemon and every Firefox on the profile have exited (kill after 20 s). The write is followed by a WAL checkpoint.
-- **The daemon always restarts after an import** and its socket is confirmed, with one clean retry (or a reset if a pid hangs). If it is still down: "The internal browser did not come back" with the daemon.log tail, Copy and a **Start browser** button.
-- **Consent.** A reject-all SOCS cookie is pre-seeded on google.* and youtube.com while Firefox is stopped, before each daemon start (only where missing). After a goto, a consent wall (consent.google.com, "Before you continue", "Avant d'accéder à Google"…) gets Reject all, then the target page. The cookie-banner JS clicks Reject first, in EN/FR/DE/ES/IT/NL/PT.
-- **Internal browser in English by default.** Before every daemon start, user.js gets intl.accept_languages "en-US, en", intl.locale.requested en-US and javascript.use_us_english_locale. Google search goes to www.google.com with hl=en&gl=us&pws=0, and DuckDuckGo gets kl=us-en. The HTTP fallback sends Accept-Language en-US. The system prompt says to prefer English sources. New **Browser language** setting (EN/FR/DE/ES/IT) in Internal browser setup. web_scrape suggests html.duckduckgo.com for searches.
 - **Remote MCP servers** (Menu > Tools > MCP servers). Supports Streamable HTTP (JSON or SSE replies, Mcp-Session-Id) and the legacy HTTP+SSE transport. Local stdio servers are not supported. Each server has a name, a URL, an optional auth header/token (stored encrypted; a bare token is sent as Bearer), an on/off switch, a status (connected with tool count, or error with Copy), and an expandable tool list with a switch per tool. You can add, edit and delete servers. The flow is initialize, then notifications/initialized, tools/list (paged) and tools/call (90 s timeout, one reconnect). Tools are exposed as `mcp__<server>__<tool>` with their input schemas. Results come back as text and errors go back to the model. Example servers, off by default (initialize, tools/list and tools/call checked from the box): DeepWiki, Context7, Microsoft Learn, Hugging Face.
 
 **v0.9.13:**
-- **X/Facebook login import, fixed for real.** TBP has no privileged cookie API: its `cookies --load` and the
-  `auto_cookies.json` auto-load ("Auto-loaded 0 cookies") both run page JS (`document.cookie`). That can't set HttpOnly
-  (`auth_token`, `xs`) and only works for the page that is open. Bridge 1.5.0 instead:
-  1. Stops the daemon and waits for Firefox to exit.
-  2. Writes the cookies straight into the profile's `cookies.sqlite` (`moz_cookies`): host `.x.com` / `.facebook.com`,
-     path `/`, isSecure=1, isHttpOnly for the session cookies, SameSite=None, schemeMap=https, expiry +1 year.
-     Expiry is in ms for schema 16 (Firefox ≥ 142) and in seconds before. Columns are detected per schema.
-  3. Restarts the daemon, opens the home page and dismisses the cookie banner.
-  4. Reads Firefox's cookie store back (a copy of the db + WAL) for the verification card, with domain, path, expiry
-     and HttpOnly per cookie plus the final URL.
-  Restoring a saved session is a no-op while the cookies are still in the store.
 - **Menu > Tools.**
   - Every agent tool, with a short description, its status (ready, or what it needs) and a persisted on/off switch.
     Tools that are off are left out of the model's tool list and refused if called.
-  - New `termux_run` tool: runs bash in Termux through the bridge.
-  - "Available to install": ffmpeg, imagemagick, yt-dlp, git, nodejs, jq, curl, pandoc, installed with `pkg` in the
-    background and detected with `command -v`.
 - The Menu tab and its sub-screens are plain text: no leading icons/emoji on rows.
 - The system prompt no longer says most tools are "not available yet".
 
-**v0.9.12:** Termux stays out of the way.
-- "Set up everything" and single steps run as background RUN_COMMAND tasks by default: no Termux window, with live
-  progress and logs in Farrow. Bridge and daemon starts were already in the background.
-- A new switch, "Show the Termux window during setup", opts back into a visible session. When setup succeeds there,
-  the script runs `am start --activity-reorder-to-front` to bring Farrow back (the app does the same with
-  `FLAG_ACTIVITY_REORDER_TO_FRONT`) and ends with `exit 0`. Termux removes sessions that end with exit code 0 and
-  closes its activity once none are left. On failure the session stays open so the error can be read.
-- The Termux app process is never killed.
-- The bridge keeps running after the UI closes: it is detached with `setsid nohup`, and the daemon is started in a new
-  session. `termux-wake-lock` keeps TermuxService in the foreground; without it the service stops once no
-  session/task is left.
-
-**v0.9.11:** Fix "daemon pid … alive but its socket doesn't answer" and the repeated daemon restarts.
-Root cause: TBP's `status` action reads url/title through the Firefox devtools console. That call is serialised with
-every other JS call, so it can take far longer than the 5 s bridge 1.3.0 allowed. The bridge then called a healthy
-daemon an orphan and killed it, which is where "Firefox process died (rc=1)" came from. The app's next auto-start
-started it again.
-
-Bridge 1.4.0:
-- Health uses TBP's own check: the unix socket accepts a connection. Details come from `tbp status --json` (10 s,
-  background, cached).
-- It starts the daemon only when it is definitively absent (no live pid and nothing listening).
-- If a pid is alive but nothing listens, it waits up to 20 s and then reports `needs_reset`. It never kills it; only
-  **Reset browser** does.
-- TBP discards Firefox's stderr, so when Firefox dies the bridge runs a one-off Firefox probe and shows its stderr
-  (`~/.farrow/firefox-probe.log`) in the status/log.
-
-App: no auto-start while the daemon is unresponsive; the Reset hint is shown instead.
-
-**v0.9.10:** Fix "TBP daemon fails to start: Another browser session is running (PID …) / remove .tbp_browser.lock".
-Root cause (termux-browser-pilot `src/client.py` `ensure_daemon`): any daemon-backed `tbp` command that runs while the
-daemon is still starting (pid written, socket not yet created; Xvfb and Firefox take 6+ s) deletes `~/.tbp/daemon.pid`
-and spawns a second daemon. The second one crashes on the session lock while the first keeps running without a pid file,
-so `tbp status` / `tbp start` stop seeing it. Concurrent starts from step 5, setup and the app made this likely.
-Bridge 1.3.0:
-- Health means the socket answers `status` (daemon.pid gets repaired from the lock).
-- `/daemon/start` is single-flight. Before starting it removes dead locks; it kills an orphaned lock holder and its
-  children (Firefox, Xvfb) plus stale daemon.pid/sock and X99 lock files. It runs `tbp start` and waits up to 30 s for the socket.
-- Daemon-backed commands never run while a start is in progress.
-- New `/daemon/reset`.
-
-App:
-- One mutex-guarded, debounced daemon start shared by setup, web tools and app launch.
-- Step 5 asks the bridge instead of running `tbp start`.
-- New **Reset browser** button with a copyable log.
-
-X/Facebook WebView login import fixed. In Firefox mode TBP's `cookies --load` sets cookies with `document.cookie` on
-the *current* page, without expiry or SameSite. Cookies loaded before reaching x.com, or sent to a dead daemon, were
-silently dropped while it still reported "loaded 9".
-`cookies_import` now:
-- Makes sure the daemon is healthy, then opens https://x.com/ first.
-- Sets every cookie on `.x.com` with path `/`, expiry +1 year, `secure` and `SameSite=None`.
-- Dumps `document.cookie` and reports which of auth_token/ct0/twid/kdt/att/guest_id are present, with domain/path/expiry
-  (shown with Copy).
-- Reloads /home and dismisses the cookie banner.
-
-Saved sessions are restored the same way.
-
+**v0.9.10:**
 Chat head: Back and Home/Recents collapse the expanded panel back to the head at its saved position.
 - Back: the focused panel root handles it. If the keyboard is open, the first Back closes the keyboard.
 - Home/Recents: detected via `ACTION_CLOSE_SYSTEM_DIALOGS`.
 - Outside taps still collapse it too.
 
 **v0.9.9:**
-- **Log in to X / Facebook in the app:** this is now the primary option on the account screen. A full-screen WebView opens x.com/i/flow/login or m.facebook.com/login with a mobile-Chrome user agent (no `; wv` or `Version/…`). JS, DOM storage and third-party cookies are on. You log in yourself. The app checks the cookies every second and on each page load. Once auth_token + ct0 (X) or c_user + xs (Facebook) exist, it closes and imports **all** site cookies into TBP: domain .x.com / .facebook.com, path /, secure, httpOnly for the session cookies (new bridge command `cookies_import` → `tbp cookies --load`). It then verifies on the home page and saves the session. You get "Logged in as @handle". The WebView's cookies are cleared afterwards unless you turn that off. The chat's Re-login button opens this login directly. Cookie paste and the automated login are under **Other ways**.
-- **TBP daemon fix (bridge 1.2.0):** the daemon counts as running only when it matches TBP's own check (`~/.tbp/daemon.pid` alive, `daemon.sock` present, and `tbp status --json` returns success). New endpoints: `GET /daemon/status` (state, `~/.farrow/tbp.log`, `~/.tbp/daemon.log` tails) and `POST /daemon/start` (`tbp start` in a new session, output in `~/.farrow/tbp.log`). **Start browser** and **Set up everything** only report success once the daemon runs. They start it if needed and wait up to 30 s; otherwise they show ❌ with the logs and Copy. Re-check shows the daemon state and logs, and has a **Start TBP daemon** button. web_* tools also start a stopped daemon automatically. Because the bridge script changed, the first **Set up everything** reinstalls step 4.
 - **ADB over TCP removed:** run_shell now uses Shizuku newProcess, then the Shizuku UserService. The ADB card, the boot toggle, MiniAdb/AdbKey, their tests and the saved ADB settings and key are gone.
 
 **v0.9.8:**
-- Internal browser: one **Set up everything** button. It checks Termux, the RUN_COMMAND permission and allow-external-apps (if that is missing it shows one command to copy), runs a fast check of what is already installed (packages, tbp, bridge script sha256, token), then installs only the missing steps in **one** Termux session. It shows live progress (progress bar, per-step ✅/⏭️/❌, log with Copy) and offers **Retry from step N**, then starts the bridge + daemon and connects. When everything is installed, the button reads **Start browser** and only starts the bridge, so nothing is reinstalled after a reboot. The individual steps are under **Advanced**.
-- **Auto-start bridge when needed** (default on): on app launch, at boot (only with keep-alive on) and when a web_* tool finds the bridge down, step 5 runs in the background and the app waits up to 15 s.
-- Notifications: task completions no longer notify. Turn on **Notify when a task finishes** (Notifications screen, default off) to get them back. Rate limits, quota warnings, failures and re-login requests still notify.
+- Notifications: task completions no longer notify. Turn on **Notify when a task finishes** (Notifications screen, default off) to get them back. Rate limits, quota warnings and failures still notify.
 - **Auto chat head on Home** (Chat heads settings, default on): pressing Home or Recents in a chat opens it as an overlay head (only if overlay permission is granted). The head is removed when you return.
 - Agent loop never stops silently. Tool exceptions (any Throwable) are returned to the model as tool results and the loop continues. An empty reply gets one nudge (with the last tool error); if the next reply is also empty, a fallback agent message is posted. finish_reason length/content_filter/error, unparsable tool calls, max steps and crashes each post a visible reason, set the task to PAUSED/FAILED and show a **Continue** button.
 
@@ -408,24 +244,14 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **HyperOS autostart:** a button opens `com.miui.securitycenter/…AutoStartManagementActivity`, falling back to the app details page, alongside written guidance (Autostart, Battery saver → No restrictions, lock in Recents).
 - **Boot:** `BootReceiver` (`BOOT_COMPLETED`, `QUICKBOOT_POWERON`, `MY_PACKAGE_REPLACED`) restarts the service if enabled and calls `AgentScheduler.recover()`, which re-queues interrupted tasks and re-arms paused tasks' WorkManager resume jobs. WorkManager jobs themselves also survive reboots.
 
-### Facebook (Phase 9, minimal)
-- This is the same `SocialAutomation` engine as X, driven by `assets/selectors/facebook.json` on `www.facebook.com`.
-- **Login detection:** the "Your profile" / "Create a post" aria labels, a redirect to `/login` or `/checkpoint`, and the readable `c_user` cookie.
-- **Tools:**
-  - `fb_post` opens "Create a post", types into the dialog's contenteditable and clicks **Post**.
-  - `fb_scrape` (timeline/profile/search) reads `div[role=article]`/`[aria-posinset]` items.
-  - Session expiry pauses the task and shows **Re-login** (Menu → Facebook account) exactly like X. Cookie import uses `c_user` + `xs`.
-- Facebook's DOM is obfuscated and changes often, so expect to update the selectors file. Checkpoints and captchas aren't automated.
-
 ## Security
 - API keys are stored with EncryptedSharedPreferences (AES-256-GCM values, AES-256-SIV key names, master key in the Android Keystore). Keys are masked in the UI and redacted from debug HTTP logs.
 - `allowBackup=false` and data-extraction rules exclude preferences, databases and files.
 - Nothing secret is committed. `local.properties`, keystores and `.env` files are git-ignored.
 
 ## Known limitations
-- (v0.9.0) Everything after Phase 2 compiles, and its 25 JVM unit tests pass, but it **has not been tested on a device**. The bridge, Shizuku, accessibility and JGit paths are only exercised at runtime.
-- `web_click`/`web_type` need the Termux bridge. The HTTP + Jsoup fallback only supports `web_scrape`, without JavaScript.
-- X/Facebook selectors and login scripts are best-effort and will drift as those sites change. Update `assets/selectors/*.json` (or use the in-app override). Captchas and checkpoints are not automated.
+- (v0.9.0) Everything after Phase 2 compiles, and its 25 JVM unit tests pass, but it **has not been tested on a device**. The Shizuku, accessibility and JGit paths are only exercised at runtime.
+- There is no in-app browser: `web_fetch` runs no JavaScript and can't log in, so JS-only or login-walled pages can't be read.
 - JGit 5.x doesn't support shallow clones. `run_shell` runs as the shell uid, which can't read the app's private workspace.
 - The keep-alive notification can't be fully hidden (Android rule).
 - (Phase 3) If a crash happens halfway through running a step's tools, the tool calls that didn't run are dropped and the model is asked again.
@@ -434,95 +260,23 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - Markdown rendering is minimal: headings, bullets, bold, italic, inline code and fenced code.
 - Not tested against the live API from the build machine because no key was available. The parsing logic is covered by unit tests.
 
-## v1.0.1
-- **Account jobs are app-scoped:** the X/Facebook cookie import (WebView login), Check, credential login, pasted-cookie import and Start browser run in `SocialSessionManager` (`@Singleton`, own `SupervisorJob` scope; lifecycle logic in the unit-tested `SocialJobRunner`). `ReloginViewModel` only observes its `StateFlow`, so leaving the screen or backgrounding the app no longer cancels them; only the Cancel button does. While a job runs, `SocialSessionService` (specialUse foreground service) shows a silent "Importing X login…" notification with the step and a Cancel action. The last result (message, error, cookie report, diagnostics, timings, screenshot path) is persisted (`social_session` prefs) and shown when the screen is reopened.
-- **Atomic cookie import (bridge 1.10.0):** `job_start {"cmd": "cookies_import"}` runs stop Firefox → write cookies.sqlite → always restart the daemon in a bridge thread and returns a job id at once; the app polls `job_status`. Cancelling or losing the app only stops the waiting; the bridge always finishes the write and restart. Results persist in `~/.farrow/jobs/<id>.json`; a reopened screen waits for an import still pending from before the app was killed.
-- **Thread scrape (`x_scrape kind=replies url=<post>`, read-only):** returns only `article[data-testid="tweet"]` posts inside `[data-testid="primaryColumn"]` after the focal post, stopping at "Discover more". The side nav/account switcher, the inline compose box, the focal post and entries without a status permalink are dropped. The logged-in handle (from `AppTabBar_Profile_Link`) is reported as `logged_in_as`, and posts by that account get `is_self: true`. Parsing is done in Kotlin with Jsoup (`ThreadReplies`, tested with fixture HTML); the spec lives in `selectors/x.json` (`replies`, `textScope`).
-- **web_scrape on x.com/twitter.com** (no selector) returns only the main column text, without header, nav, sidebar, account banner or composer.
-
 ## v1.0.2
 - An experimental feature, removed again in v1.0.11.
-
-## v1.0.3
-- **Stray-dialog cleanup before x_post** (`StrayDialogs`, Jsoup, fixture-tested; spec `selectors/x.json` `stray`).
-  - **Detection:** an overlay is any `[role=dialog]`, `[aria-modal=true]`, `div[data-testid=sheetDialog]`, any `#layers` child with interactive content (toasts and hover cards are ignored), or anything around `unsentButton`, `scheduledConfirmationPrimaryAction` or `app-bar-close`. An overlay that isn't our own composer is stray.
-  - **Closing:** one action per round, re-checking after each: Discard on a Save/Discard sheet (never Save or Enregistrer), then the close button, then Escape, then the mask.
-  - **Fallback:** if a stray stays open, it hard-navigates with `location.replace` to x.com/home and cleans up once more.
-  - **When:** before x_post's steps start (never during typing or the submit).
 
 ## v1.0.4
 - Changes to the experimental feature removed in v1.0.11.
 
 ## v1.0.5
-- **Fast x_scrape (timeline / profile / search / replies), `FastScrape.kt`.** The v1.0.4 path was slow for these reasons:
-  - It used TBP `goto` even when the page was already open. That is `location.assign` through the console, a fixed 3 s pause, then `readyState` polls (each poll is another console paste), and X rarely settles.
-  - `waitFor` polled at 600 ms intervals with a separate eval per check.
-  - Each scroll was a TBP `scroll` command followed by a fixed 1.2 s sleep.
-  - Images and video downloaded during the scrape.
-
-  Now:
-  - The first eval reads `location.href`. If the page already is the target (the path regex, plus `q` for search), navigation is skipped. If it's scrolled down, it is scrolled to the top first.
-  - Otherwise it uses keyboard `nav`, which doesn't wait for `load`.
-  - Then it polls every 150 ms with ONE eval per poll. That eval extracts every post, using the unchanged v1.0.4 field JS and the same dedupe. It returns as soon as `limit` unique posts are there.
-  - It scrolls (`scrollBy` inside the same eval) only when the count has stopped growing for 0.7 s. The stop rules are the same as v1.0.4.
-  - No screenshots or diagnostics on success.
-  - Results gain `timings_ms` (ready, locate, nav, wait_first_posts, polls, parse, restore_media, total) and `steps`.
-- **Media blocked during X scrapes (`blockMedia` in x.json).** TBP drives Firefox without Marionette or WebDriver. There is no runtime privileged context, and prefs would need a restart. So a page-scope request filter does the job, in the same eval:
-  - `src`/`srcset`/`poster` on img/source/video (property and `setAttribute`) are held back.
-  - CSS background images are suppressed.
-  - `play()` is refused like an autoplay block (NotAllowedError).
-  - The last poll releases it once the page holds `limit` posts, otherwise one restore eval does. Held media then loads normally, so web_screenshot and x_post media are unaffected. It also lapses by itself after 45 s.
-  - Images that started before the first poll after a fresh navigation still load.
-- **Canonical post URLs (`StatusUrl.kt`).** x_scrape items carry `status_url`, normalized to `https://x.com/<user>/status/<id>`: twitter.com and mobile.x.com are accepted, query and fragment stripped, /photo/, /video/ and /analytics suffixes dropped, and a bare id becomes /i/status/<id>.
 - **In-app updater (`data/update/`).** Settings > App > App update shows the installed version and a "Check for updates" button.
   - It reads the public GitHub API `releases/latest` (no token) and compares versions numerically (`UpdateLogic.compare`, pre-releases rank below their release). It then shows "Up to date" or "vX.Y.Z available" with the release notes and an Update button.
   - Update downloads `Farrow-*-<buildType>.apk` (`pickAsset`) with OkHttp into `cacheDir/updates`, with a progress bar, and checks that the size matches the asset.
   - It then opens the system installer through FileProvider (`${applicationId}.updates`) + ACTION_VIEW (`REQUEST_INSTALL_PACKAGES`). Without the "Install unknown apps" permission it opens `ACTION_MANAGE_UNKNOWN_APP_SOURCES` for Farrow first.
   - The same debug key means it installs over the app. A silent check runs on app start at most every 6 h, and a dot on the gear and the row marks an available update.
 
-## v1.0.6
-- **Generic tools are guarded (`ComposerGuard`).** A phone run typed into an X composer with web_type and clicked its button with web_click: X showed "Save post?" and truncated the text. On x.com/twitter.com, web_click and web_type now refuse compose surfaces with "Use x_post for new posts; generic clicks and typing on X composers are blocked":
-  - tweetTextarea_* and tweetButton*
-  - Post/Poster buttons
-  - a compose box or a compose dialog
-  - the "Save post?" sheet
-
-  The check is one eval (`closest()` on the resolved element) plus a selector check, which fails closed when the page doesn't answer. There is no web_key tool. The prompt rules for X are strict.
-- A pre-submit settle step and a whole-x_post time budget were added to x_post (both reverted in v1.0.11).
-
 ## v1.0.7
-- **Grok shield (`GrokShield`).** X's Grok drawer could cover the page. While x_post and the scrapes run, a page-scope MutationObserver marks Grok drawers, panels and buttons with `data-farrow-grok`, clicks their close button and hides them. It never touches a root that contains a composer, a post or the main column, and it lapses after 90 s. Snapshots (`StrayDialogs`) ignore Grok overlays.
-- **Images and video blocked in the internal browser.**
-  - Bridge 1.11.0 adds `set_media {load_images}`. It writes `~/.farrow/load_images` and Firefox's `user.js` prefs. Images blocked: `permissions.default.image=2`, `media.autoplay.default=5`, `media.autoplay.blocking_policy=2`. Images on: 1/1/0.
-  - The prefs are written again before every daemon start. Firefox reads them only at startup, so they apply the next time the internal browser starts. **A restart is never forced.**
-  - Settings → Internal browser → "Load images" (default off).
-  - Until the pref is active, the page-level filter blocks media for 10 min on pages used by the X tools, the scrapes, web_scrape, web_click and web_type. Scrapes no longer restore images.
-  - `web_screenshot load_images=true` releases what the page filter held back.
-- **Browser setup actions are app-scoped (`BrowserOpsManager`).**
-  - The affected actions are Set up everything / Start browser, Start TBP daemon, Reset browser, Update bridge and single setup steps. They ran in the screen's `viewModelScope`, so leaving Settings stopped them midway. This was the same bug as the v1.0.1 cookie import.
-  - They now run in a SupervisorJob app scope, one at a time. `BrowserOpsService` shows a foreground notification with the current step and Cancel.
-  - State and the last result are persisted (shown as "Last browser action" on return and after an app restart). The screen only observes it.
-- **Atomic reset.** Bridge 1.11.0 runs `reset` (also `start`/`stop`) as a detached `job_start` job, like the cookie import. The app only waits for it, and the job id is persisted, so after an app restart the app waits for the same job again. Cancel only stops waiting. Older bridges fall back to `POST /daemon/reset`.
 - **Audit of other screen-scoped jobs:**
   - The app update check and download moved from the Settings composable scope to `AppUpdater`'s app scope. The installer opens by itself only while the row is visible; otherwise tap Install.
-  - Termux `pkg install` (up to 15 min) moved from the Tools ViewModel to `TermuxPackageJobs`.
   - MCP reconnect already runs in `McpManager`. Memory edits and key/model edits are short DB/DataStore writes and stay in the screen scope.
-
-## v1.0.8
-- Changes to the experimental feature removed in v1.0.11.
-
-## v1.0.9
-- x_post gained a logging `target` step (reverted in v1.0.11).
-
-## v1.0.10
-- x_post's steps were re-pointed at a composer marked by the `target` step, and bridge 1.12.0 replaced `editor_type` with a probe-type / clipboard-paste / marker-selector variant. On the phone this typed no text into X's composer (reverted in v1.0.11).
-
-## v1.0.11
-- **The experimental feature from v1.0.2–v1.0.10 is removed** (its tool, code, selectors, prompt rules, loop guard, tests and fixtures, and `tools/draftjs-repro/`).
-- **x_post is v1.0.0's flow again.** `selectors/x.json` (v13) `postSteps` are exactly v1.0.0's: `goto compose` → `waitFor composeText` → `click composeText` → `typeEditor composeText` → `sleep 800` → `click composeSubmit` (ctrl+Return fallback) → `waitPosted`. The step engine in `SocialAutomation` (`runSteps`, `click`/`sturdyClick`, `typeIntoEditor`, `waitPosted`) is v1.0.0's code; there is no `target`/`settleSubmit` step, no marker selectors and no whole-x_post time budget.
-- **Bridge 1.13.0:** `editor_type` is v1.0.0's (bridge 1.9.0) again: focus by eval → xdotool typing into the main Firefox window → verify → `execCommand('insertText')` fallback. The version bump makes the app update the bridge on the phone.
-- Kept around x_post, without touching focus, typing or submit: the stray-dialog cleanup before the steps start, and the Grok shield + image filter after navigation.
-- Regression test `XPostV100Test`: x_post's steps equal v1.0.0's, and the bridge calls of a post run (`nav`, `click`, `editor_type`, `click`) match v1.0.0's sequence and arguments.
 
 ## v1.0.12
 - Chat bubbles render GFM tables (`MarkdownTables` parser + `MarkdownTableView`): header row, zebra rows, inline
@@ -542,126 +296,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - Tests: Robolectric (JVM) DAO + migration tests that build v1/v4 databases from the exported schema JSON and let
   Room migrate and validate.
 
-## v1.0.13
-- **Faster x_post (waits only):** focus, typing and clicks are unchanged from v1.0.0 (same commands, selectors and
-  order; `XPostV100Test` hashes the click/typing code and compares it with tag v1.0.0). Changes:
-  - Step polls 600 → 200 ms (each poll is one eval); bridge `nav` history poll 0.7 → 0.2 s, window/console polls 0.2–0.25 s.
-  - Settle sleep before the Post click 800 → 150 ms (`editor_type` already verified the text and the click step's
-    presence eval adds a render tick).
-  - `waitPosted` (x.json v14, `text`): done on the success toast, a closed compose box, or no visible compose box still
-    holding the text. X's home page keeps an empty inline composer with the same test id, so "box closed" alone could
-    miss a sent post when the toast was missed and run the full 25 s.
-  - Stray-dialog cleanup: fixed 700 ms per action → polls until the overlay is gone (≤ 1.5 s); hard-nav recovery
-    fixed 2 s → polls until home is loading/loaded (≤ 3 s).
-  - The step budgets (45 s, 45 s + 400 ms/char for typing) are caps (`withTimeoutOrNull`), never slept.
-  - Result `timings_ms` (ready, stray_cleanup, `<n>_<action>_<selector>` per step, total); the step log is in ms; the
-    bridge (1.14.0) adds `ms` to every command reply.
-
-## v1.0.14
-
-x_post clicks taking 30 s+ and a wedged browser (the next x_post's navigation stayed on /home).
-
-- **Cause (TBP, not v1.0.13):** the bridge called `tbp click --human`. TBP's human click makes two DevTools-console
-  evals for the element's centre and bounds, then 8–40 CDP-emulated mouse moves. Each move re-reads the viewport offset
-  through the console because the offset is cached for only 2 s, and a phone needs seconds per console eval. Every TBP
-  command runs under one global daemon lock, so the click blocked everything (even `ready` and the JS fallback). Killing
-  the CLI didn't stop the daemon handler, and the ongoing console/xdotool activity stole the keyboard focus from the
-  next keyboard navigation.
-- **Click:** bridge `click` keeps our xdotool Bézier mouse path but uses TBP's plain click (one eval, JS `.click()` and
-  a refocus). `tbp_human: true` restores `--human`. The per-click try cap is now 10 s (was 30 s).
-- **Hard step timeout:** each step runs detached with a hard budget. On a timeout the app calls the new bridge `cancel`
-  command, which kills the bridge's hung `tbp` CLI calls (never the daemon), then waits until TBP is idle. An abandoned
-  `click` also fires `cancel`.
-- **Wedge restart:** if x_post fails before any text was typed, because the browser isn't ready/busy, a step hit the
-  hard timeout, or the navigation failed, the browser daemon is restarted once and the post retried. The result then
-  carries `recovered`. There is never a retry after typing or the Post click.
-- **Bounded cleanup and shield:** the stray-overlay `location.replace(home)` is capped at 10 s, then the app waits for
-  idle. Shield evals are capped at 10 s.
-- Bridge 1.15.0.
-
-## v1.0.15: x_post_beta (released)
-
-`x_post_beta` is a separate tool and is off by default. On the Tools page its label is "Beta: faster X posting". Its
-code lives in `XPostBeta.kt`, `XPostBetaShield.kt` and `agent/tools/XPostBetaTool.kt`. x_post is unchanged: no x_post
-file, x.json or XPostV100Test hash was touched. The shield/media JS and the URL check are copies; a test checks that
-the copies still match the originals. ToolPrefs gained `DEFAULT_OFF`, stored as opt-ins. The system prompt says to use
-x_post unless the user turned the beta on or asks for it.
-
-Why x_post took 152 s on the phone (and 260 s on the first attempt). Every bridge eval costs about 3–4 s: CLI start,
-DevTools console focus, clipboard paste, then clipboard polling.
-- stray_cleanup (45 s): the snapshot counts every `#layers` child that has a button as an overlay, not only real
-  dialogs. Each round is a snapshot eval, then a TBP click or Escape, then up to 1.5 s of settle snapshots. That repeats
-  up to 6 rounds. When an overlay can't be closed, it hard-navigates home, waits idle, polls for 3 s and runs a second
-  cleanup. The cleanup log was discarded, so this never showed.
-- click (14 s; 68 s on v1.0.13): an exists eval, the bridge's element-centre eval, 28 xdotool moves, the TBP click
-  eval and a refocus. On v1.0.13 there was also a 30 s timeout and an idle wait before the JS fallback, which is the
-  one that worked.
-- typeEditor (36 s): an exists eval, a focus eval, and about 20 s of human-paced xdotool keystrokes that never reach
-  Draft.js on the phone. Then 3 more evals: verify, insertText, verify. That is why the result always said
-  "via insertText".
-
-The beta does one eval per phase. TBP is only a fallback, used when the JS action had no visible effect.
-
-| phase | what | evals |
-|---|---|---|
-| ready | `ready` | 1 |
-| stray_check | shield on, URL/login check and real dialogs only. A dialog found is acted on in the same eval: Discard, never Save; else Close; else the mask; else Escape. Stops at the first clean probe; after 3 tries it goes on. | 1 when clean, +1 per dialog |
-| goto_compose | keyboard `nav` (no shield eval after it) | 0 |
-| focus_composeText | find the editor (the dialog's one first), mark it, focus it, verify `activeElement`. If focus didn't land: TBP click, then one verify eval. | 1 |
-| insert_text | selectAll + insertText + verify in one eval. If 'pending': one re-check. If it failed: a paste event. | 1 |
-| click_composeSubmit | JS click on the Post button in our editor's dialog. Waits ≤ 5 s if it is disabled; then TBP click, then ctrl+Return. | 1 |
-| waitPosted | per poll: toast / no visible box holds the text / sending / open. The shield is switched off in the same eval. If it stays 'open' with an enabled button for 6 s: one TBP click. | 1–2 |
-
-If the post fails before any text was inserted, the browser is restarted once and the post retried. There is never a
-retry after the insert.
-
-### v1.0.16: x_post_beta fixes after the first phone run (released)
-
-What happened. The beta's first attempt hung in stray_check: the first probe eval after a browser start, on about:blank,
-didn't answer within 25 s. That failure was before typing, so the tool restarted the browser (36 s) and retried. The
-reported timings were the retry's own. In the retry, insert_text said "ok" because the editor's DOM held the 15 chars.
-X's Draft.js state probably never got them, so the Post button stayed disabled. `clickSubmit` then spent its 5 s
-"disabled" loop, a TBP click (≤ 15 s) and ctrl+Return (≤ 10 s), which ran into the 30 s phase cap. No eval was stuck.
-Nothing was posted, which the user confirmed: the button was disabled and Draft had no text for ctrl+Return.
-There was no retry after the insert (`failedBeforeTyping` is cleared before insert_text).
-
-Probable reason Draft missed the text: every TBP eval runs with the DevTools console window holding the OS focus. The
-JS `focus()` sets `activeElement`, but Draft never gets a real focus event. x_post's path activates the main window
-(TBP click + refocus, and `editor_type`'s windowactivate) before its insertText.
-
-Fixes, beta only:
-- "registered" means the editor holds the text and the Post button is enabled, and every attempt logs both. Before
-  insertText, the bridge `key` End gives the page window real focus. If the text is still not registered: one re-check,
-  then window focus + paste event, then clear + keystrokes (bridge `editor_type`). Otherwise it fails with "post button
-  disabled, text not registered … Nothing was posted."
-- Submit: a disabled button is never clicked; after one re-check it fails cleanly. An enabled one gets
-  `setTimeout(()=>b.click(),0)`, so the eval returns at once and posted is polled in separate short evals.
-- A probe that doesn't answer within 12 s is skipped (cancel + wait for idle) instead of failing and restarting.
-- On any failure after the compose page was opened, the beta cleans up: bridge `cancel`, wait until idle, empty and
-  close the composer, discard a "Save post?" sheet (never Save), shield off, keyboard nav home.
-- On a retry, the result also carries `first_attempt` (its timings and steps), and failures report `text_inserted`.
-
 ## v1.0.17
 
-- **x_post_beta rewritten** as x_post 1:1 with exactly one difference. `XPostBetaAutomation` is a copy of the
-  `SocialAutomation` class, and `XPostBetaTool` copies x_post's tool body and `guarded`. Its typeIntoEditor skips the
-  bridge's human-paced `editor_type` keystrokes and goes straight to x_post's insertText fallback, with the same
-  verification. The v1.0.15/16 beta logic is gone: JS-first clicks, quick stray probe, registered/button checks and
-  failure cleanup. XPostBetaCopyTest checks three things: the class equals SocialAutomation's except typeIntoEditor;
-  the tool body and guard equal x_post's; and a run makes the same bridge calls, steps and timings minus `editor_type`.
-  To change x_post later, re-copy its class into the beta.
-- **reset_browser tool** (on by default): the same as Settings > Internal browser setup > Reset browser. It starts
-  BrowserOpsManager's background reset (or waits for one already running), waits up to 5 min, and returns
-  ok/error, the message, the log tail on failure, and seconds. The prompt says to use it once when browser tools hang
-  or fail repeatedly.
 - **Colorful chat avatars:** a stable tonal color hashed from the chat id, and a topic/type/initial glyph.
 
 ## v1.0.18
 
-- **Prefer curl / web_fetch over the internal browser.** The system prompt tells the agent to use `web_fetch` (plain
-  OkHttp GET/HEAD) or `termux_run` + curl for public APIs, static HTML and pages that don't need JS/login. The internal
-  browser (`web_*`, `x_*`, `fb_*`) is only for login/session, clicking, JS-rendered pages, CAPTCHA, or sites that block
-  plain HTTP. X posting rules and `reset_browser` stay.
 - **Crypto tools (Coinbase Exchange).** Revolut's public developer APIs (Business / Merchant / Open Banking) expose
   accounts, payments and fiat FX — there is **no** crypto trading, order book, candles or spot-order endpoint. Retail
   crypto in the Revolut app has no documented API. Farrow therefore uses **Coinbase Exchange** for:
@@ -671,3 +311,17 @@ Fixes, beta only:
     `crypto_balance`, `crypto_order_status`.
   - Live trading (OFF by default under Tools): `crypto_place_order`, `crypto_cancel_order` — require `confirm=true` and
     an explicit user request with size/pair.
+
+## Unreleased
+
+- **Internal browser removed.** The Termux/Firefox/Termux Browser Pilot browser and everything built on it are gone:
+  the `tbp_bridge.py` asset and X/Facebook selector files, `BridgeClient`, setup wizard and auto-start, `BrowserOpsManager`
+  and its service, X/Facebook login, WebView/cookie session import, session-expiry pause and Re-login, the
+  `web_scrape`/`web_click`/`web_type`/`web_session`/`web_screenshot`, `x_*`, `x_post_beta`, `fb_*`, `reset_browser` and
+  `termux_run` tools, the Termux package installer on the Tools page, browser prefs (language, load images, show
+  Termux, clear WebView cookies), the Termux permission, the localhost cleartext exception and the Jsoup and
+  androidx.browser dependencies. `web_fetch` (plain HTTP), crypto, Shizuku `run_shell`, screen, Git, memory and chart
+  tools stay. The system prompt still prefers English sources.
+- **Tasks screen removed** from Settings.
+- Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
+  x_post_beta were removed with it.

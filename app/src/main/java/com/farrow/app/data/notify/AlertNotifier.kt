@@ -15,7 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** System notifications for things that need the user (session expired, setup needed). */
+/** System notifications for things that need the user (finished tasks, setup needed). */
 @Singleton
 class AlertNotifier @Inject constructor(@ApplicationContext private val context: Context) {
 
@@ -23,7 +23,7 @@ class AlertNotifier @Inject constructor(@ApplicationContext private val context:
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         if (nm.getNotificationChannel(CHANNEL_ALERTS) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL_ALERTS, "Action needed", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Session expired / re-login and setup alerts"
+                description = "Finished tasks and setup alerts"
             })
         }
     }

@@ -7,13 +7,9 @@ import androidx.room.Room
 import com.farrow.app.BuildConfig
 import com.farrow.app.agent.AgentRunner
 import com.farrow.app.agent.tools.*
-import com.farrow.app.data.browser.BridgeClient
-import com.farrow.app.data.browser.FallbackBrowser
 import com.farrow.app.data.git.GitManager
 import com.farrow.app.data.local.*
 import com.farrow.app.shizuku.ShellExecutor
-import com.farrow.app.data.social.SelectorStore
-import com.farrow.app.data.social.SessionGuard
 import com.farrow.app.data.network.*
 import com.farrow.app.data.repository.*
 import com.farrow.app.data.secure.SecureApiKeyRepository
@@ -103,47 +99,23 @@ object AppModule {
     @Provides @Singleton
     fun provideToolRegistry(
         sandbox: WorkspaceSandbox,
-        bridge: BridgeClient,
-        fallbackBrowser: FallbackBrowser,
-        selectors: SelectorStore,
-        sessionGuard: SessionGuard,
         shell: ShellExecutor,
         git: GitManager,
         toolPrefs: com.farrow.app.data.tools.ToolPrefs,
         mcp: com.farrow.app.data.mcp.McpManager,
         memory: com.farrow.app.data.memory.MemoryRepository,
         @ApplicationContext context: Context,
-        client: com.farrow.app.data.network.OpenRouterClient,
-        settings: com.farrow.app.domain.repository.SettingsRepository,
-        vision: com.farrow.app.data.network.ModelCapabilities,
-        appPrefs: com.farrow.app.data.prefs.AppPrefs,
-        browserOps: com.farrow.app.data.browser.BrowserOpsManager,
         cryptoClient: com.farrow.app.data.crypto.CoinbaseExchangeClient,
         cryptoCreds: com.farrow.app.data.crypto.CryptoCredentials,
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
-            // Phase 4: internal browser (Termux Browser Pilot bridge, HTTP+Jsoup fallback)
-            WebScrapeTool(bridge, fallbackBrowser, { url -> com.farrow.app.agent.tools.SiteScopes.textScopeFor(url, selectors) }) { !appPrefs.loadImages.value },
+            // Plain HTTP GET/HEAD (OkHttp, no browser)
             WebFetchTool(),
-            WebClickTool(bridge) { !appPrefs.loadImages.value }, WebTypeTool(bridge) { !appPrefs.loadImages.value }, WebSessionTool(bridge),
-            // reset_browser: Settings > Internal browser setup > Reset browser, from the agent (background op, awaited)
-            com.farrow.app.agent.tools.ResetBrowserTool(browserOps::resetBrowser, browserOps.state),
-            WebScreenshotTool(bridge, File(context.filesDir, "screenshots"), com.farrow.app.data.browser.AndroidImageEncoder(),
-                activeModelSeesImages = {
-                    val m = client.lastModel.value ?: settings.currentModels().firstOrNull()
-                    m != null && vision.supportsImages(m)
-                }),
         ) +
-            // Phase 5: X.com (x_status, x_post, x_scrape)
-            SocialToolFactory("x", SelectorStore.X, selectors, bridge, sessionGuard).tools(postMaxChars = 280) +
-            // x_post_beta (off by default, Tools page "Beta: faster X posting"): x_post 1:1 with instant typing
-            listOf(com.farrow.app.agent.tools.XPostBetaTool(selectors, bridge, sessionGuard)) +
-            // Phase 9: Facebook (fb_status, fb_post, fb_scrape) — same engine, lower priority/minimal
-            SocialToolFactory("fb", SelectorStore.FACEBOOK, selectors, bridge, sessionGuard).tools(postMaxChars = 5_000) +
-            // Phase 6: Shizuku shell, JGit, Accessibility
+            // Shizuku shell, JGit, Accessibility
             listOf(
-                RunShellTool(shell, sandbox), TermuxRunTool(bridge),
+                RunShellTool(shell, sandbox),
                 GitStatusTool(git), GitCommitTool(git), GitCloneTool(git), GitPushTool(git),
                 ScreenReadTool(), ScreenTapTool(), ScreenSwipeTool(), ScreenTypeTool(), ScreenGlobalActionTool(),
                 // v0.9.16: persistent memory

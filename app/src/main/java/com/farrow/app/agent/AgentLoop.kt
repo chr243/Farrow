@@ -4,7 +4,6 @@ import com.farrow.app.agent.context.ContextManager
 import com.farrow.app.agent.tools.FencedToolCallParser
 import com.farrow.app.agent.tools.ToolRegistry
 import com.farrow.app.data.network.*
-import com.farrow.app.data.social.SessionGuard
 import com.farrow.app.domain.model.*
 import com.farrow.app.domain.repository.NotificationRepository
 import com.farrow.app.domain.repository.SettingsRepository
@@ -43,10 +42,8 @@ class AgentLoop internal constructor(
     private val notifications: NotificationRepository,
     private val model: suspend (messages: List<ApiMessage>, tools: kotlinx.serialization.json.JsonArray?, taskId: Long, onStatus: suspend (String) -> Unit) -> ChatOutcome,
     private val summarize: suspend (taskId: Long, systemPrompt: String, onStatus: suspend (String) -> Unit) -> Unit,
-    private val consumeExpiredSession: (taskId: Long) -> String?,
     private val notifyOnFinish: () -> Boolean,
     private val systemNotify: (taskId: Long, title: String, body: String) -> Unit,
-    private val browserLanguage: () -> String = { com.farrow.app.data.browser.BrowserLanguage.DEFAULT },
     /** v0.9.16: persistent memory block (instructions + up to ~20 memories, ~1.5k tokens). */
     private val memoryPrompt: suspend (taskId: Long) -> String = { "" },
 ) {
@@ -57,7 +54,6 @@ class AgentLoop internal constructor(
         registry: ToolRegistry,
         context: ContextManager,
         notifications: NotificationRepository,
-        sessionGuard: SessionGuard,
         prefs: com.farrow.app.data.prefs.AppPrefs,
         alerts: com.farrow.app.data.notify.AlertNotifier,
         memory: com.farrow.app.data.memory.MemoryRepository,
@@ -65,14 +61,12 @@ class AgentLoop internal constructor(
         tasks, settings, registry, notifications,
         model = { m, t, id, st -> client.complete(m, t, id, st) },
         summarize = { id, sp, st -> context.maybeSummarize(id, sp, st) },
-        consumeExpiredSession = sessionGuard::consumePending,
         notifyOnFinish = { prefs.notifyOnFinish.value },
         systemNotify = { id, title, body -> alerts.notify(FINISH_NOTIFICATION_BASE + (id % 10_000).toInt(), title, body, id) },
-        browserLanguage = { prefs.browserLanguage.value },
         memoryPrompt = { id -> try { memory.promptBlock(id) } catch (e: Exception) { "" } },
     )
 
-    private suspend fun fullSystemPrompt(taskId: Long): String = systemPrompt(browserLanguage()) + memoryPrompt(taskId).let { if (it.isBlank()) "" else "\n\n" + com.farrow.app.data.network.MemoryRedaction.wrap(it) }
+    private suspend fun fullSystemPrompt(taskId: Long): String = systemPrompt() + memoryPrompt(taskId).let { if (it.isBlank()) "" else "\n\n" + com.farrow.app.data.network.MemoryRedaction.wrap(it) }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
@@ -228,13 +222,6 @@ class AgentLoop internal constructor(
                         intermediateResults = cp.intermediateResults + results,
                     )
                     saveCheckpoint(taskId, cp)
-                    // Phase 5/9: a social tool hit a login wall -> pause until the user re-logs in.
-                    consumeExpiredSession(taskId)?.let { site ->
-                        tasks.pause(taskId, TaskStatus.PAUSED, "Session expired on $site – re-login needed", null,
-                            PauseReason.SESSION_EXPIRED, 0)
-                        status(taskId, "🔐 Paused: $site session expired. Tap Re-login, then Continue.", null)
-                        return RunResult.Stopped
-                    }
                 }
             }
         }
@@ -347,13 +334,6 @@ class AgentLoop internal constructor(
                 }
             }
         }
-        // web_screenshot: attach the JPEG to this request when the model can see images (stripped per model otherwise).
-        val trailing = live.filter { it.kind == MessageKind.NORMAL }.takeLastWhile { it.role == MessageRole.TOOL }
-        com.farrow.app.agent.tools.ScreenshotAttach.pending(trailing.map { it.toolName to it.content }).mapNotNull { p ->
-            runCatching { java.io.File(p).readBytes() }.getOrNull()?.let(com.farrow.app.agent.tools.ScreenshotAttach::dataUrl)
-        }.takeIf { it.isNotEmpty() }?.let { urls ->
-            out += ApiMessage("user", "Screenshot from web_screenshot (current page of the internal browser):", images = urls)
-        }
         return out
     }
 
@@ -372,49 +352,32 @@ class AgentLoop internal constructor(
             and wait for the result. When the task is finished, reply with a concise final answer (Markdown allowed) and no tool call.
         """.trimIndent()
 
-        /** Which tools control what — the agent kept asking for accessibility permission to click in its own browser. */
+        /** Which tools control what (shown with [SYSTEM_PROMPT]). */
         val TOOL_GROUPS = """
             Tool groups:
-            - Fetching public info (prefer these first): web_fetch (plain HTTP GET/HEAD, no browser) or termux_run with curl
-              for APIs, static HTML, downloads and anything that does not need JavaScript or a login. Prefer curl/web_fetch
-              over the internal browser whenever the page answers without JS.
-            - Internal browser (Firefox via Termux Browser Pilot, invisible, not on the phone screen): web_scrape,
-              web_click, web_type, web_session, web_screenshot, and the site tools x_status / x_post / x_scrape, fb_*.
-              Use ONLY when Firefox is necessary: login/session cookies, clicking or typing on a page, JS-rendered
-              content, CAPTCHA, or sites that block plain HTTP. They need NO accessibility permission.
-              X rules (strict): new posts ALWAYS with x_post. NEVER use web_click / web_type on X composers or the Post
-              button: they are refused. Reading a post's thread: x_scrape kind=replies. If x_post fails, report its error
-              and steps to the user instead of improvising clicks. x_post_beta (x_post with instant typing, off by default):
-              use x_post unless the user turned x_post_beta on in Tools or asks for the beta; then post with x_post_beta.
-              reset_browser: when browser tools (web_*, x_*) hang or fail repeatedly, call reset_browser once (it restarts the
-              internal browser and waits until it is back), then retry; don't loop resets.
+            - Fetching public info: web_fetch (plain HTTP GET/HEAD, no browser, no JavaScript) for APIs, static HTML and
+              public pages. There is no internal browser: pages that need JavaScript or a login can't be opened; say so.
             - Crypto (Coinbase Exchange; Revolut has no public crypto trading API): crypto_markets, crypto_ticker,
               crypto_candles, crypto_orderbook (public, no key); crypto_balance, crypto_order_status (need API key in
               Settings); crypto_backtest (local SMA crossover on public candles). Live trading tools crypto_place_order and
               crypto_cancel_order are OFF by default — only use them when the user explicitly asks to trade with a size and
               pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
-              controlling OTHER Android apps on the phone's display; they cannot see or click the internal browser.
-              Never ask the user for accessibility permission for a web task.
-            - Device: run_shell (Shizuku), termux_run (Termux packages, including curl). Files: read_file, write_file,
-              list_dir. Git: git_*.
+              controlling OTHER Android apps on the phone's display.
+            - Device: run_shell (Shizuku). Files: read_file, write_file, list_dir. Git: git_*.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
               and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
             - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown
               table (header row + one row per item) — the chat renders tables. Numeric comparisons (e.g. prices, ratings,
               values over time, shares, backtest equity) with the chart tool (bar/line/pie/scatter), then a short summary in text.
-            System note (built in): clicking, typing and logging in on websites happens in the internal browser with the
-            web_* / x_* tools — accessibility is never required for that. Prefer web_fetch/curl for read-only public pages.
         """.trimIndent()
 
-        /** [SYSTEM_PROMPT] + the source-language rule for the "Browser language" setting (default English). */
-        fun systemPrompt(lang: String): String {
-            val l = com.farrow.app.data.browser.BrowserLanguage.of(lang)
-            return SYSTEM_PROMPT + "\n" + TOOL_GROUPS + "\n" + if (l.code == "en")
-                "Prefer English-language sources and search in English (e.g. https://html.duckduckgo.com/html/?q=<query>&kl=us-en), " +
-                    "even if the user is in France, unless the user asks for another language. Reply in the user's language."
-            else "Prefer ${l.label} (${l.code}) sources, falling back to English. Reply in the user's language."
-        }
+        /** Source-language rule (the user browses in English). */
+        const val ENGLISH_SOURCES = "Prefer English-language sources and search in English (e.g. https://html.duckduckgo.com/html/?q=<query>&kl=us-en), " +
+            "even if the user is in France, unless the user asks for another language. Reply in the user's language."
+
+        /** [SYSTEM_PROMPT] + [TOOL_GROUPS] + the English-sources rule. */
+        fun systemPrompt(): String = SYSTEM_PROMPT + "\n" + TOOL_GROUPS + "\n" + ENGLISH_SOURCES
     }
 }
 

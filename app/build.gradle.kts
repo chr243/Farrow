@@ -109,8 +109,6 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.jsoup)
-    implementation(libs.androidx.browser)
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
     implementation(libs.jgit)

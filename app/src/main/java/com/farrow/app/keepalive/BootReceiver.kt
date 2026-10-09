@@ -16,7 +16,6 @@ import javax.inject.Inject
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var scheduler: AgentScheduler
     @Inject lateinit var keepAlive: KeepAliveController
-    @Inject lateinit var bridgeAutoStarter: com.farrow.app.data.browser.BridgeAutoStarter
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
@@ -28,10 +27,7 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 // Only tasks that were mid-run are restarted now (the keep-alive service follows them); paused ones keep
                 // their scheduled resume. Nothing runs (no service, no notification) when no task was mid-run.
-                val resumed = scheduler.recover()
-                if (resumed > 0 && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) {
-                    kotlinx.coroutines.withTimeoutOrNull(8_000) { runCatching { bridgeAutoStarter.startIfInstalled() } }
-                }
+                scheduler.recover()
             } finally { pending.finish() }
         }
     }

@@ -56,13 +56,13 @@ fun NotificationsScreen(onOpenChat: (Long) -> Unit, onBack: () -> Unit, vm: Noti
                 val notifyFinish by vm.prefs.notifyOnFinish.collectAsStateWithLifecycle()
                 ListItem(
                     headlineContent = { Text("Notify when a task finishes") },
-                    supportingContent = { Text("Off: only rate limits, quota warnings, failures and re-login requests notify.") },
+                    supportingContent = { Text("Off: only rate limits, quota warnings, and failures notify.") },
                     trailingContent = { Switch(checked = notifyFinish, onCheckedChange = vm.prefs::setNotifyOnFinish) },
                 )
                 HorizontalDivider()
             }
             if (items.isEmpty()) item {
-                Text("Rate-limit alerts, quota warnings, failures and re-login requests will appear here.", textAlign = TextAlign.Center,
+                Text("Rate-limit alerts, quota warnings and failures will appear here.", textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(32.dp))
             }
             items(items, key = { it.id }) { n ->

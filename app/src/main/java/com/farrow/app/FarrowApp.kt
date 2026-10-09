@@ -19,8 +19,6 @@ class FarrowApp : Application(), Configuration.Provider {
     @Inject lateinit var scheduler: AgentScheduler
     @Inject lateinit var keepAlive: KeepAliveController
     @Inject lateinit var agent: com.farrow.app.domain.repository.AgentController
-    // Injected eagerly so BridgeClient gets its auto-start hook in every process start.
-    @Inject lateinit var bridgeAutoStarter: com.farrow.app.data.browser.BridgeAutoStarter
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()

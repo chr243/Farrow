@@ -21,14 +21,13 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var quota: QuotaRepository
-    @Inject lateinit var bridgeAutoStarter: com.farrow.app.data.browser.BridgeAutoStarter
     @Inject lateinit var appPrefs: com.farrow.app.data.prefs.AppPrefs
     @Inject lateinit var chatHeads: com.farrow.app.chathead.ChatHeadController
     @Inject lateinit var updater: com.farrow.app.data.update.AppUpdater
 
     // v0.9.8 "Auto chat head on Home": onUserLeaveHint (Home/Recents) marks a leave; onStop (really in the background,
     // not rotation, not a translucent permission dialog) opens the head. Our own startActivity calls (settings,
-    // permission screens, Termux, browser) are recorded so they never trigger it.
+    // permission screens) are recorded so they never trigger it.
     private var leaveHintAt = 0L
     private var ownLaunchAt = 0L
     private var autoHeadTaskId: Long? = null
@@ -69,8 +68,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // v0.9.8: app launch — if the internal browser is fully installed, just start the bridge + daemon (never reinstalls).
-        if (savedInstanceState == null) lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { bridgeAutoStarter.startIfInstalled() } }
         // Silent update check (at most every 6 h; the gear and Settings > App update show a dot when one exists).
         if (savedInstanceState == null) lifecycleScope.launch { runCatching { updater.autoCheck() } }
         enableEdgeToEdge()

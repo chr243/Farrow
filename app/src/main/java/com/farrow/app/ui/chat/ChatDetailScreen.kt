@@ -25,10 +25,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,11 +54,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatDetailScreen(onBack: () -> Unit, onRelogin: (String) -> Unit = {}, onChatMemory: (Long) -> Unit = {}, vm: ChatViewModel = hiltViewModel()) {
+fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: ChatViewModel = hiltViewModel()) {
     val task by vm.task.collectAsStateWithLifecycle()
     val messages by vm.messages.collectAsStateWithLifecycle()
     val toolCalls by vm.toolCalls.collectAsStateWithLifecycle()
-    val expiredSite by vm.expiredSite.collectAsStateWithLifecycle()
     val generating by vm.isGenerating.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -210,9 +205,6 @@ fun ChatDetailScreen(onBack: () -> Unit, onRelogin: (String) -> Unit = {}, onCha
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(4.dp)) {
-                        expiredSite?.let { site ->
-                            Button(onClick = { onRelogin(site) }) { Text("Re-login") }
-                        }
                         FilledTonalButton(onClick = vm::forceRetry) {
                             Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp))
                             Text(if (resumeAt != null && resumeAt > now && status != TaskStatus.FAILED && status != TaskStatus.CANCELLED) "Force retry now" else "Continue")
@@ -320,7 +312,6 @@ internal fun ToolCallCard(call: ToolCallRecord) {
                 Spacer(Modifier.width(6.dp))
                 Text(if (expanded) "▲" else "▼", fontSize = 12.sp)
             }
-            screenshotPath(call)?.let { ScreenshotThumb(it) }
             if (call.name == com.farrow.app.agent.tools.ChartTool.NAME && call.status == ToolCallStatus.SUCCESS) {
                 remember(call.resultJson) { com.farrow.app.agent.tools.ChartSpecs.fromResult(call.resultJson) }
                     ?.let { (spec, png) -> com.farrow.app.ui.chart.ChartCard(spec, png) }
@@ -330,62 +321,6 @@ internal fun ToolCallCard(call: ToolCallRecord) {
                     CodeBlock("arguments", pretty(call.argumentsJson), if (call.name == "run_shell") "json" else null)
                     CodeBlock("result", pretty(call.resultJson).ifEmpty { "…running" }, null)
                 }
-            }
-        }
-    }
-}
-
-/** web_screenshot result → saved image path (if the file still exists). */
-internal fun screenshotPath(call: ToolCallRecord): String? {
-    if (call.name != com.farrow.app.agent.tools.WebScreenshotTool.NAME) return null
-    val o = call.resultJson?.let { runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
-    val p = (o?.get(com.farrow.app.agent.tools.WebScreenshotTool.IMAGE_PATH) as? kotlinx.serialization.json.JsonPrimitive)?.content
-    return p?.takeIf { java.io.File(it).exists() }
-}
-
-/** Screenshot preview in the tool card; tap for a fullscreen, zoomable view. */
-@Composable
-private fun ScreenshotThumb(path: String) {
-    var full by remember { mutableStateOf(false) }
-    var thumb by remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-    LaunchedEffect(path) {
-        thumb = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching {
-                val o = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
-                android.graphics.BitmapFactory.decodeFile(path, o)?.asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    thumb?.let { bmp ->
-        androidx.compose.foundation.Image(bmp, contentDescription = "Browser screenshot (tap to view fullscreen)",
-            contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
-            modifier = Modifier.padding(top = 8.dp).fillMaxWidth().heightIn(max = 240.dp).clip(RoundedCornerShape(8.dp))
-                .clickable { full = true })
-    }
-    if (full) {
-        var image by remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
-        LaunchedEffect(path) {
-            image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching { android.graphics.BitmapFactory.decodeFile(path)?.asImageBitmap() }.getOrNull()
-            }
-        }
-        androidx.compose.ui.window.Dialog(onDismissRequest = { full = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-            var scale by remember { mutableStateOf(1f) }
-            var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 6f); offset = if (scale == 1f) androidx.compose.ui.geometry.Offset.Zero else offset + pan
-                    }
-                }
-                .clickable { full = false }) {
-                image?.let {
-                    androidx.compose.foundation.Image(it, contentDescription = "Browser screenshot",
-                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale,
-                            translationX = offset.x, translationY = offset.y))
-                } ?: CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
         }
     }

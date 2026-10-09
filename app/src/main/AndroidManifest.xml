@@ -15,16 +15,6 @@
     <!-- Phase 8: keep-alive + resume after reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <!-- Internal browser: run setup/bridge commands in Termux (user must grant it + enable allow-external-apps). -->
-    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-
-    <queries>
-        <package android:name="com.termux" />
-        <!-- Custom Tabs fallback -->
-        <intent>
-            <action android:name="android.support.customtabs.action.CustomTabsService" />
-        </intent>
-    </queries>
 
     <application
         android:name=".FarrowApp"
@@ -52,12 +42,6 @@
         </activity>
 
         <!-- Expanded content of an Android bubble (must be embeddable, resizeable, document-per-launch). -->
-        <activity
-            android:name=".ui.social.WebLoginActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.Farrow" />
         <activity
             android:name=".chathead.BubbleActivity"
             android:allowEmbedded="true"
@@ -110,31 +94,6 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps the user's on-device AI agent running so long multi-step tasks (paused by API rate limits) can resume automatically. Enabled explicitly by the user." />
         </service>
-
-        <!-- v1.0.1: keeps X/Facebook cookie import / login / check jobs alive while the screen is closed. -->
-        <service
-            android:name=".data.social.SocialSessionService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Finishes a login the user just started (importing their X or Facebook login into the on-device browser) after they leave the screen. Runs only for the duration of that job." />
-        </service>
-
-        <!-- v1.0.7: keeps Settings > Internal browser actions (setup, start, reset, bridge update) alive off-screen. -->
-        <service
-            android:name=".data.browser.BrowserOpsService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Finishes an on-device browser setup, start or reset the user just started in Settings after they leave the screen. Runs only for the duration of that action." />
-        </service>
-
-        <!-- Termux RUN_COMMAND result callback (delivered via our own mutable PendingIntent). -->
-        <receiver
-            android:name=".data.browser.TermuxResultReceiver"
-            android:exported="false" />
 
         <receiver
             android:name=".keepalive.BootReceiver"

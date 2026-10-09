@@ -8,8 +8,8 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 /**
- * Thin HTTP GET/HEAD via OkHttp — no browser, no Termux. Prefer this (or termux_run + curl) for public pages,
- * APIs and HTML that don't need JavaScript or a login. Use web_* / x_* only when Firefox is required.
+ * Thin HTTP GET/HEAD via OkHttp — no browser. Use this for public pages,
+ * APIs and HTML that don't need JavaScript or a login.
  */
 class WebFetchTool(
     private val http: OkHttpClient = OkHttpClient.Builder()
@@ -19,8 +19,8 @@ class WebFetchTool(
         .build(),
 ) : AgentTool {
     override val name = "web_fetch"
-    override val description = "Fetch a public URL with a plain HTTP GET (or HEAD) — no browser, no JavaScript. Prefer this " +
-        "over web_scrape for APIs, static HTML, and pages that don't need a login or JS. Returns status, final URL, content type and body (truncated)."
+    override val description = "Fetch a public URL with a plain HTTP GET (or HEAD) — no browser, no JavaScript. Use it for " +
+        "APIs, static HTML, and pages that don't need a login or JS. Returns status, final URL, content type and body (truncated)."
     override val parameters = schema(listOf("url"),
         "url" to prop("string", "Absolute http(s) URL"),
         "method" to prop("string", "GET (default) or HEAD"),

@@ -23,8 +23,6 @@ junit = "4.13.2"
 robolectric = "4.14.1"
 androidxTestCore = "1.6.1"
 savedstate = "1.2.1"
-jsoup = "1.18.1"
-browser = "1.8.0"
 shizuku = "13.1.5"
 jgit = "5.13.3.202401111512-r"
 
@@ -67,8 +65,6 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 androidx-test-core = { group = "androidx.test", name = "core-ktx", version.ref = "androidxTestCore" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
-androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version.ref = "jgit" }
