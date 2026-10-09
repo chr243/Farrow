@@ -27,6 +27,9 @@ data class ToolStatus(val ready: Boolean, val text: String) {
                 "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku, accessibility & Git)")
                 else -> READY // public market data / backtest
             }
+            name == "ebook_translate" ->
+                if (env.termuxReady) ToolStatus(true, "Ready if ebook-translate is installed; needs termux-setup-storage + All files access")
+                else ToolStatus(false, "Needs Termux + ebook-translate add-on (Settings > Tools)")
             name.startsWith("selenium_") || name == "termux_python" ->
                 if (env.termuxReady) ToolStatus(true, "Ready if chromium-selenium is installed (Available to install)" +
                     if (name == "termux_python") "" else "; saving files needs termux-setup-storage in Termux")

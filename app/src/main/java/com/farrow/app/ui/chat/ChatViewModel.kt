@@ -11,12 +11,19 @@ import com.farrow.app.domain.model.Task
 import com.farrow.app.domain.model.ToolCallRecord
 import com.farrow.app.domain.repository.AgentController
 import com.farrow.app.domain.repository.TaskRepository
+import com.farrow.app.data.storage.ChatAttachment
+import com.farrow.app.data.storage.SharedFolder
 import com.farrow.app.domain.usecase.SendMessageUseCase
 import com.farrow.app.domain.usecase.StartConversationUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
+import android.net.Uri
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -28,6 +35,8 @@ class ChatViewModel @Inject constructor(
     private val startConversation: StartConversationUseCase,
     private val sendMessage: SendMessageUseCase,
     val chatHeads: ChatHeadController,
+    private val sharedFolder: SharedFolder,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
     /** 0 = a brand-new conversation that is created on the first send. */
     private val taskId = MutableStateFlow(savedState.get<Long>("taskId") ?: 0L)
@@ -41,12 +50,38 @@ class ChatViewModel @Inject constructor(
     val isGenerating: StateFlow<Boolean> = combine(taskId, agent.runningTaskIds) { id, running -> id in running }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    private val _pendingAttach = MutableStateFlow<ChatAttachment.Saved?>(null)
+    val pendingAttach: StateFlow<ChatAttachment.Saved?> = _pendingAttach.asStateFlow()
+    private val _attachError = MutableStateFlow<String?>(null)
+    val attachError: StateFlow<String?> = _attachError.asStateFlow()
+
+    fun clearAttachError() { _attachError.value = null }
+    fun clearPendingAttach() { _pendingAttach.value = null }
+
+    /** Copy a SAF-picked file into Documents/Farrow/Input and keep it until the next send. */
+    fun attach(uri: Uri) {
+        viewModelScope.launch {
+            _attachError.value = null
+            val saved = runCatching {
+                withContext(Dispatchers.IO) { ChatAttachment.saveToInput(appContext, sharedFolder, uri) }
+            }.getOrElse {
+                _attachError.value = it.message ?: "Could not attach file"
+                return@launch
+            }
+            _pendingAttach.value = saved
+        }
+    }
+
     fun send(text: String) {
+        val pending = _pendingAttach.value
         val t = text.trim()
-        if (t.isEmpty() || task.value?.archived == true) return
+        if (t.isEmpty() && pending == null) return
+        if (task.value?.archived == true) return
+        val body = if (pending != null) ChatAttachment.messagePrefix(pending) + t.ifEmpty { "Please work with the attached file." } else t
         viewModelScope.launch {
             val id = taskId.value
-            if (id == 0L) taskId.value = startConversation(t) else sendMessage(id, t)
+            if (id == 0L) taskId.value = startConversation(body) else sendMessage(id, body)
+            _pendingAttach.value = null
         }
     }
 

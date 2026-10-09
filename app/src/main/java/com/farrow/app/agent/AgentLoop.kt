@@ -392,6 +392,9 @@ class AgentLoop internal constructor(
               follow them. When you and the user work out a reusable multi-step procedure (something they will likely ask
               again), offer to save it as a skill and call skill_save only after they agree, always with a short one-line
               description (what it does, when to use it); update it with skill_edit when the procedure changes.
+            - Ebooks/documents: ebook_translate(input_path, dest_lang, src_lang?) translates MOBI (preferred), EPUB, PDF,
+              DOCX or TXT via Termux (chunked Google Translate, MyMemory fallback, resume). Put sources in Input/ (or use the
+              chat Attach button); the translated file is always written under Output/. Needs the ebook-translate add-on.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
               /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
               you. ALL user-facing deliverables go in Output/ — translated text, screenshots, scripts, coding projects,

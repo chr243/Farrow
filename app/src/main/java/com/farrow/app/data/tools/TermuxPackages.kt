@@ -22,6 +22,7 @@ object TermuxPackages {
         TermuxPackage("curl", "curl", "HTTP requests and downloads from the command line"),
         TermuxPackage("pandoc", "pandoc", "Convert documents (Markdown, HTML, DOCX, …)"),
         SELENIUM,
+        EBOOK_TRANSLATE,
     )
 
     /** Headless Chromium + chromedriver (TUR via x11-repo/tur-repo) and Python Selenium, for selenium_* and termux_python. */
@@ -37,6 +38,18 @@ object TermuxPackages {
             "${'$'}APT install python python-pip chromium 2>&1 | tail -n 10",
             "command -v chromedriver >/dev/null 2>&1 || ${'$'}APT install chromedriver 2>&1 | tail -n 5",
             "pip install -U selenium 2>&1 | tail -n 5",
+        ).joinToString("\n"),
+    )
+
+    /** Python stack for ebook_translate: deep-translator, mobi, ebooklib, pymupdf, python-docx, langdetect. */
+    val EBOOK_TRANSLATE: TermuxPackage get() = TermuxPackage(
+        pkg = "ebook-translate",
+        binary = "python3",
+        description = "Ebook/document translation (MOBI/EPUB/PDF/DOCX) for ebook_translate — pip: deep-translator, mobi, ebooklib, pymupdf, python-docx, langdetect",
+        detect = "python3 -c 'import deep_translator,ebooklib,docx,langdetect,fitz,mobi' >/dev/null 2>&1",
+        install = listOf(
+            "${'$'}APT install python python-pip 2>&1 | tail -n 5",
+            "pip install -U deep-translator mobi ebooklib pymupdf python-docx langdetect 2>&1 | tail -n 15",
         ).joinToString("\n"),
     )
 

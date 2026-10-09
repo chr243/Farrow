@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -215,18 +216,46 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                     }
                 }
             }
-            if (task?.archived != true) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
-                    placeholder = { Text(if (task == null) "Describe a new task…" else "Message Farrow…") },
-                    shape = RoundedCornerShape(24.dp), maxLines = 5,
-                )
-                Spacer(Modifier.width(6.dp))
-                FilledIconButton(
-                    onClick = { vm.send(input); input = "" },
-                    enabled = input.isNotBlank() && !generating,
-                    modifier = Modifier.size(48.dp),
-                ) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+            if (task?.archived != true) {
+                val pending by vm.pendingAttach.collectAsStateWithLifecycle()
+                val attachErr by vm.attachError.collectAsStateWithLifecycle()
+                val attachPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+                    uri?.let(vm::attach)
+                }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    pending?.let { p ->
+                        AssistChip(
+                            onClick = { },
+                            label = { Text(p.relativePath, maxLines = 1) },
+                            trailingIcon = {
+                                IconButton(onClick = vm::clearPendingAttach, modifier = Modifier.size(18.dp)) {
+                                    Icon(Icons.Filled.Close, "Remove attachment")
+                                }
+                            },
+                        )
+                    }
+                    attachErr?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = vm::clearAttachError) { Text("Dismiss") }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { attachPicker.launch(arrayOf("*/*")) }, enabled = !generating) {
+                            Icon(Icons.Filled.Add, "Attach file")
+                        }
+                        OutlinedTextField(
+                            value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
+                            placeholder = { Text(if (task == null) "Describe a new task…" else "Message Farrow…") },
+                            shape = RoundedCornerShape(24.dp), maxLines = 5,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        FilledIconButton(
+                            onClick = { vm.send(input); input = "" },
+                            enabled = (input.isNotBlank() || pending != null) && !generating,
+                            modifier = Modifier.size(48.dp),
+                        ) { Icon(Icons.AutoMirrored.Filled.Send, "Send") }
+                    }
+                }
             }
         }
     }
