@@ -407,7 +407,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   `findAndInstall`). Without the permission it says so and offers *Grant All files access*; the SAF *Pick rish file* stays
   as the fallback.
 
-## Unreleased
+## v1.0.22
 
 - **`ebook_translate`.** Termux Python helper `~/.farrow/farrow_ebook_translate.py` (`data/ebook/EbookTranslatePy`): MOBI via
   `mobi`, EPUB (`ebooklib`), PDF (`pymupdf`), DOCX (`python-docx`); chunked `deep-translator` Google → MyMemory fallback,
@@ -415,8 +415,6 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   Output always under `Documents/Farrow/Output`.
 - **Chat Attach file.** Composer **+** (SAF `OpenDocument`) copies into `Documents/Farrow/Input` (`ChatAttachment`) and
   prefixes the next send with the sandboxed path for the agent.
-
-## Unreleased (continued)
 
 - **rish → `/data/local/tmp/farrow_rish`.** After Find/Pick, Farrow stages the pair then deploys via Shizuku (base64 over
   RUN_COMMAND) into `/data/local/tmp/farrow_rish` and `chmod +x` both (not chmod 400). *Fix rish permissions* re-applies
