@@ -120,7 +120,8 @@ class WorkspaceReadTool(private val folder: SharedFolder) : AgentTool {
 class WorkspaceWriteTool(private val folder: SharedFolder) : AgentTool {
     private val sandbox = SharedFolderSandbox(folder)
     override val name = "workspace_write"
-    override val description = SHARED + "Create or edit a text file (overwrite, append or create-only), or create a folder. Parent folders are created."
+    override val description = SHARED + "Create or edit a text file (overwrite, append or create-only), or create a folder. " +
+        "Put every user-facing deliverable under Output/ (translations, reports, scripts, projects, screenshots saved as text paths, …). Parent folders are created."
     override val parameters = schema(listOf("path"),
         "path" to prop("string", "Path relative to Documents/Farrow, e.g. Output/report.md"),
         "content" to prop("string", "UTF-8 text to write (omit with directory=true)"),

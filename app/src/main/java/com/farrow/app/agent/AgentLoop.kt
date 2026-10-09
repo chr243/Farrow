@@ -375,9 +375,11 @@ class AgentLoop internal constructor(
               pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display.
-            - Device: run_shell (Shizuku, adb shell user), rish_run (same privileged shell through Shizuku's rish, if the
-              user set it up; try it when run_shell fails), termux_run (bash in Termux with the packages the user installed,
-              e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Git: git_*.
+            - Device: run_shell (Shizuku, adb shell user), rish_run (Shizuku's rish at /data/local/tmp/farrow_rish with
+              RISH_APPLICATION_ID=com.termux, if the user set it up; try it when run_shell fails), termux_run (bash in Termux
+              with the packages the user installed, e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Git: git_*.
+              With rish_run/run_shell, screencap and any other saved images/media go under
+              /storage/emulated/0/Documents/Farrow/Output (never Pictures or Download).
             - Headless Chromium (inside Termux, needs the chromium-selenium add-on): selenium_open (title, visible text,
               links), selenium_page_source (rendered HTML), selenium_screenshot (PNG to Documents/Farrow/Output). Slower than
               web_search/web_fetch — use it only for JavaScript-rendered pages or when web_fetch is blocked. Each call is a
@@ -392,9 +394,13 @@ class AgentLoop internal constructor(
               description (what it does, when to use it); update it with skill_edit when the procedure changes.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
               /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
-              you and save deliverables (reports, exports, generated files) in Output/. Paths are relative to that folder;
-              nothing outside it is reachable. Only delete what the user asked for. read_file, write_file, list_dir are a
-              private scratch workspace the user can't see.
+              you. ALL user-facing deliverables go in Output/ — translated text, screenshots, scripts, coding projects,
+              reports, exports, generated files, anything they asked for. Prefer workspace_write under Output/; when a tool
+              only writes via shell (screencap, ffmpeg, …) use the absolute path
+              /storage/emulated/0/Documents/Farrow/Output/…. Never save deliverables to Pictures, Download, DCIM or the
+              private scratch workspace. Paths for workspace_* are relative to Documents/Farrow; nothing outside it is
+              reachable. Only delete what the user asked for. read_file, write_file, list_dir are a private scratch area
+              the user can't see (scraper scripts, skill drafts) — not for finished work.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
               and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
             - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown

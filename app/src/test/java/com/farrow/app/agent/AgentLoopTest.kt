@@ -171,6 +171,8 @@ class AgentLoopTest {
         assertTrue(p.contains("termux_run") && p.contains("run_shell"))
         assertTrue(p.contains("web_search first") && p.contains("format=markdown"))
         assertTrue(p.indexOf("web_search") < p.indexOf("web_fetch"))
+        assertTrue(p.contains("ALL user-facing deliverables go in Output/") && p.contains("/data/local/tmp/farrow_rish"))
+        assertTrue(p.contains("Never save deliverables to Pictures"))
     }
 
     @Test fun `memory block is appended to the system prompt`() = runTest {

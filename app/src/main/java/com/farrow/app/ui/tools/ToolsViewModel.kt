@@ -154,7 +154,7 @@ class ToolsViewModel @Inject constructor(
                 accessibilityOn = FarrowAccessibilityService.isRunning,
                 gitToken = gitCreds.maskedToken != null,
                 storageReady = storage.access,
-                rishReady = rish.isInstalled(),
+                rishReady = rish.isStaged(),
             )
             _state.update { it.copy(tools = rows(env)) }
             detectPackages()

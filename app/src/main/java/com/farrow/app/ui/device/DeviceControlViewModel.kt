@@ -59,11 +59,22 @@ class DeviceControlViewModel @Inject constructor(
                 shizukuBindError = shizuku.lastBindError, shizukuInfo = shizuku.serverInfo(),
                 gitUser = git.username, authorName = git.authorName, authorEmail = git.authorEmail,
                 cryptoKeyMasked = crypto.maskedKey, cryptoConfigured = crypto.configured,
-                rishInstalled = rish.isInstalled(),
-                rishInfo = if (rish.isInstalled()) "${rish.script.path} + ${rish.companion?.name}" +
-                    (rish.companion?.let { c -> com.farrow.app.shizuku.RishStore.mode(c) }?.let { m -> " ($m)" } ?: "") else null)
+                rishInstalled = rish.isStaged(),
+                rishInfo = if (rish.isStaged()) "staged → ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR}" else null)
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val deployed = runCatching { rish.isDeployed(::shellExec) }.getOrDefault(false)
+            val info = when {
+                deployed -> "✅ ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR} (chmod +x)"
+                rish.isStaged() -> "Staged — needs Shizuku to copy into ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR}"
+                else -> null
+            }
+            _ui.update { it.copy(rishInstalled = deployed || rish.isStaged(), rishInfo = info) }
         }
     }
+
+    private suspend fun shellExec(command: String, timeoutMs: Long) = shell.exec(command, null, timeoutMs)
+
 
     fun requestShizukuPermission() = shizuku.requestPermission()
 
@@ -111,20 +122,32 @@ class DeviceControlViewModel @Inject constructor(
 
     fun clearCrypto() { crypto.clear(); refresh(); _ui.update { it.copy(message = "Crypto API credentials removed") } }
 
-    /** Files picked in the rish picker: copy rish and its companion (rish_shizuku.dex) into files/rish. */
+    private fun describeInstall(res: com.farrow.app.shizuku.RishStore.Result): String = when (res) {
+        is com.farrow.app.shizuku.RishStore.Result.Installed ->
+            if (res.deployed) "rish ready: ${res.scriptName} + ${res.companionName} in ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR} (chmod +x)"
+            else "rish staged (${res.scriptName} + ${res.companionName}) but not copied to ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR}: ${res.detail ?: "is Shizuku running?"}"
+        is com.farrow.app.shizuku.RishStore.Result.NeedCompanion -> "Also select ${res.name} (pick both files exported by Shizuku)"
+        is com.farrow.app.shizuku.RishStore.Result.Invalid -> res.reason
+    }
+
+    private suspend fun stageThenDeploy(stage: () -> com.farrow.app.shizuku.RishStore.Result): String {
+        val staged = stage()
+        if (staged !is com.farrow.app.shizuku.RishStore.Result.Installed) return describeInstall(staged)
+        return describeInstall(runCatching { rish.deploy(::shellExec) }.getOrElse {
+            com.farrow.app.shizuku.RishStore.Result.Installed(staged.scriptName, staged.companionName, false, it.message)
+        })
+    }
+
+    /** Files picked in the rish picker: stage, then copy into /data/local/tmp/farrow_rish and chmod +x (via Shizuku). */
     fun installRish(uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val msg = runCatching {
                 val picked = uris.mapNotNull { u -> readPicked(u)?.let { u to it } }
-                val res = rish.install(picked.map { it.second }) { name ->
-                    // Only rish picked: read its sibling directly (works with All files access).
-                    picked.firstNotNullOfOrNull { (u, p) -> if (com.farrow.app.shizuku.RishStore.isScript(p)) siblingOf(u, name) else null }
-                }
-                when (res) {
-                    is com.farrow.app.shizuku.RishStore.Result.Installed -> "rish installed: copied ${res.script.name} and ${res.companion.name} into Farrow's internal folder"
-                    is com.farrow.app.shizuku.RishStore.Result.NeedCompanion -> "Also select ${res.name} (pick both files exported by Shizuku)"
-                    is com.farrow.app.shizuku.RishStore.Result.Invalid -> res.reason
+                stageThenDeploy {
+                    rish.stage(picked.map { it.second }) { name ->
+                        picked.firstNotNullOfOrNull { (u, p) -> if (com.farrow.app.shizuku.RishStore.isScript(p)) siblingOf(u, name) else null }
+                    }
                 }
             }.getOrElse { "Could not copy rish: ${it.message}" }
             refresh()
@@ -153,7 +176,7 @@ class DeviceControlViewModel @Inject constructor(
         java.io.File(java.io.File(path).parentFile, name).takeIf { it.canRead() }?.readBytes()
     }.getOrNull()
 
-    /** "Find rish": scan Download, Documents and Documents/Farrow/Input (needs All files access), then copy both files. */
+    /** "Find rish": scan Download/Documents/Input, stage, then deploy to /data/local/tmp/farrow_rish. */
     fun findRish() {
         if (!runCatching { android.os.Environment.isExternalStorageManager() }.getOrDefault(false)) {
             _ui.update { it.copy(message = "Find rish needs All files access — grant it (Settings → Permissions), or use Pick rish file.", rishNeedsAccess = true) }
@@ -162,13 +185,13 @@ class DeviceControlViewModel @Inject constructor(
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val msg = runCatching {
                 val roots = com.farrow.app.shizuku.RishStore.searchRoots(android.os.Environment.getExternalStorageDirectory())
-                when (val r = rish.findAndInstall(roots)) {
-                    null -> "No rish + rish_shizuku.dex found in Download, Documents or Documents/Farrow/Input. Export them from Shizuku " +
+                val found = rish.findAndStage(roots)
+                    ?: return@runCatching "No rish + rish_shizuku.dex found in Download, Documents or Documents/Farrow/Input. Export them from Shizuku " +
                         "(Use Shizuku in terminal apps → Export files) into one of those folders, or use Pick rish file."
-                    is com.farrow.app.shizuku.RishStore.Result.Installed -> "Found rish — copied ${r.script.name} and ${r.companion.name} into Farrow's internal folder"
-                    is com.farrow.app.shizuku.RishStore.Result.NeedCompanion -> "Found rish but not ${r.name}"
-                    is com.farrow.app.shizuku.RishStore.Result.Invalid -> r.reason
-                }
+                if (found !is com.farrow.app.shizuku.RishStore.Result.Installed) return@runCatching describeInstall(found)
+                describeInstall(runCatching { rish.deploy(::shellExec) }.getOrElse {
+                    com.farrow.app.shizuku.RishStore.Result.Installed(found.scriptName, found.companionName, false, it.message)
+                })
             }.getOrElse { "Find rish failed: ${it.message}" }
             refresh()
             _ui.update { it.copy(message = msg, rishNeedsAccess = false) }
@@ -178,23 +201,29 @@ class DeviceControlViewModel @Inject constructor(
     fun allFilesAccessIntent(): android.content.Intent =
         com.farrow.app.data.storage.SharedFolder.accessIntent(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    /** "Fix rish permissions": chmod 400 the internal dex again (also done automatically after every copy). */
+    /** "Fix rish permissions": chmod +x both files in /data/local/tmp/farrow_rish (also done after every deploy and before rish_run). */
     fun fixRishPermissions() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val mode = runCatching { rish.fixPermissions() }.getOrNull()
+            val line = runCatching { rish.fixPermissions(::shellExec) }.getOrNull()
             refresh()
-            _ui.update { it.copy(message = if (mode == null) "rish is not set up yet" else "rish_shizuku.dex is now $mode (chmod 400)") }
+            _ui.update { it.copy(message = if (line == null) "Nothing in ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR} yet — Find or Pick rish first (needs Shizuku)" else "chmod +x applied: $line") }
         }
     }
 
-    fun removeRish() { rish.remove(); refresh(); _ui.update { it.copy(message = "rish removed") } }
+    fun removeRish() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { rish.remove(::shellExec) }
+            refresh()
+            _ui.update { it.copy(message = "rish removed") }
+        }
+    }
 
     fun testRish() {
         if (_ui.value.testing) return
         _ui.update { it.copy(testing = true, testOutput = "Running id through rish…") }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val out = runCatching { rishRunner.run("id", 15) }
-                .map { r -> "[rish] exit ${r.exitCode}\n${r.stdout.trim()}${r.stderr.trim().takeIf { it.isNotEmpty() }?.let { "\n$it" } ?: ""}" }
+                .map { r -> "[rish @ ${com.farrow.app.shizuku.RishStore.DEPLOY_DIR}] exit ${r.exitCode}\n${r.stdout.trim()}${r.stderr.trim().takeIf { it.isNotEmpty() }?.let { "\n$it" } ?: ""}" }
                 .getOrElse { "Error: ${it.message}" }
             _ui.update { it.copy(testing = false, testOutput = out.trim()) }
         }

@@ -100,7 +100,7 @@ com.farrow.app
 | `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
 | `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/FarrowSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
 | `skill_list`, `skill_get`, `skill_save`, `skill_edit`, `skill_delete` | Agent-writable skills in `files/skills/<id>/SKILL.md` (`data/skills/SkillStore`); enabled ones injected into the system prompt |
-| `rish_run` | `sh files/rish/rish -c <cmd>` with `RISH_APPLICATION_ID=com.termux`; dex kept at chmod 400 (`shizuku/RishStore`, `RishRunner`) |
+| `rish_run` | `sh files/rish/rish -c <cmd>` from `/data/local/tmp/farrow_rish` with `RISH_APPLICATION_ID=com.termux` and chmod +x (`shizuku/RishStore`, `RishRunner`) |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
 | `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
@@ -409,7 +409,10 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 
 ## Unreleased
 
-- **rish permissions.** After every copy (Pick / Find rish) `RishStore.fixPermissions()` sets `rish_shizuku.dex` to
-  chmod 400 (`r--------`, Android 14+ refuses writable dex files) and the script to 700; `rish_run` re-applies it before
-  each run. Settings → Shizuku, accessibility & Git → rish shows the dex mode and has a *Fix rish permissions* retry button.
-- **`rish_run` always sets `RISH_APPLICATION_ID=com.termux`** (instead of Farrow's package name).
+- **rish → `/data/local/tmp/farrow_rish`.** After Find/Pick, Farrow stages the pair then deploys via Shizuku (base64 over
+  RUN_COMMAND) into `/data/local/tmp/farrow_rish` and `chmod +x` both (not chmod 400). *Fix rish permissions* re-applies
+  `chmod +x` there; `rish_run` runs that path with `RISH_APPLICATION_ID=com.termux` and re-chmods before each run.
+- **Deliverables → `Documents/Farrow/Output`.** The prompt and `rish_run`/`workspace_write` descriptions require every
+  user-facing result (translations, screenshots/screencap, scripts, coding projects, reports, …) under Output/ — never
+  Pictures, Download, DCIM or the private scratch workspace.
+

@@ -89,7 +89,7 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                     Text("Shizuku's rish lets Farrow run privileged shell commands (rish_run). In Shizuku, open “Use Shizuku in " +
                         "terminal apps” → Export files into Download, Documents or Documents/Farrow/Input and tap Find rish (needs " +
                         "All files access), or pick the exported rish file (select rish_shizuku.dex too if asked). " +
-                        "Farrow copies both into its internal folder.", style = MaterialTheme.typography.bodySmall)
+                        "Farrow copies both to /data/local/tmp/farrow_rish and chmod +x (needs Shizuku).", style = MaterialTheme.typography.bodySmall)
                     Text(if (ui.rishInstalled) "✅ Installed: ${ui.rishInfo}" else "Not set up", style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Button(onClick = vm::findRish) { Text("Find rish") }

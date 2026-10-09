@@ -105,7 +105,8 @@ object AppModule {
     fun provideRishStore(@ApplicationContext context: Context) = com.farrow.app.shizuku.RishStore(File(context.filesDir, "rish"))
 
     @Provides @Singleton
-    fun provideRishRunner(store: com.farrow.app.shizuku.RishStore) = com.farrow.app.shizuku.RishRunner(store)
+    fun provideRishRunner(store: com.farrow.app.shizuku.RishStore, shell: ShellExecutor) =
+        com.farrow.app.shizuku.RishRunner(store) { cmd, ms -> shell.exec(cmd, null, ms) }
 
     /** Agent-writable skills: files/skills/<id>/SKILL.md (app-internal, not Documents). */
     @Provides @Singleton
@@ -138,7 +139,7 @@ object AppModule {
         ) +
             // Shizuku shell, Termux (RUN_COMMAND), JGit, Accessibility
             listOf(
-                RunShellTool(shell, sandbox), TermuxRunTool(termux), RishRunTool(rishStore, rishRunner),
+                RunShellTool(shell, sandbox), TermuxRunTool(termux), RishRunTool(rishStore, rishRunner, shell),
                 // Headless Chromium + Selenium inside Termux, and the agent's own Python scrapers (scripts stay in filesDir/workspace)
                 SeleniumOpenTool(termux, sharedFolder), SeleniumPageSourceTool(termux, sharedFolder),
                 SeleniumScreenshotTool(termux, sharedFolder), TermuxPythonTool(termux, sandbox),
