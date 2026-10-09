@@ -136,10 +136,19 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
     }
 }
 
+/** Lightweight ViewModel for the MCP screen (no Termux/Shizuku checks like [ToolsViewModel]). */
+@dagger.hilt.android.lifecycle.HiltViewModel
+class McpViewModel @javax.inject.Inject constructor(
+    val prefs: com.farrow.app.data.tools.ToolPrefs,
+    val mcp: com.farrow.app.data.mcp.McpManager,
+) : androidx.lifecycle.ViewModel() {
+    fun setEnabled(name: String, on: Boolean) = prefs.setEnabled(name, on)
+}
+
 /** Settings > MCP servers: remote MCP servers, their status and per-tool switches (split out of Tools). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun McpServersScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
+fun McpServersScreen(onBack: () -> Unit, vm: McpViewModel = hiltViewModel()) {
     val disabled by vm.prefs.disabled.collectAsStateWithLifecycle()
     Scaffold(topBar = {
         TopAppBar(title = { Text("MCP servers") },

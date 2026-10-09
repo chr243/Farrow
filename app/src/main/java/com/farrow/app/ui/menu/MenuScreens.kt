@@ -82,6 +82,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
                 item("MCP servers", "Remote MCP servers, their status and per-tool switches", Routes.MCP),
             ))
             SettingsGroup("Phone", listOf(
+                item("Permissions", "All files, notifications, Termux, Shizuku, accessibility, overlay, battery, app installs", Routes.PERMISSIONS),
                 item("Chat heads", "Auto / Bubbles / Overlay, permissions", Routes.CHAT_HEADS),
                 item("Background & battery", "Keep-alive service, battery optimisation, HyperOS autostart", Routes.KEEP_ALIVE),
                 item("Shizuku, accessibility & Git", "run_shell via Shizuku, screen control, Git token, crypto API key", Routes.SHIZUKU),

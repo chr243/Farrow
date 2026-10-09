@@ -381,3 +381,20 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   Settings shows status, *Test (id)* and *Remove*.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.
+
+## v1.0.20
+
+- **Crash fix: Settings → Tools and Settings → MCP servers crashed on open (v1.0.19).** Both screens used
+  `ToolsViewModel`, whose `init { refresh() }` was declared above the new `checkLock`/`_events` properties. Kotlin
+  initializes properties and init blocks in source order, and `refresh()` runs `check()` immediately on
+  `Dispatchers.Main.immediate`, so `checkLock.withLock` hit a not-yet-initialized (null) Mutex → NullPointerException.
+  The properties now sit above `init` (guarded by `ToolsViewModelInitOrderTest`), and the MCP screen has its own
+  lightweight `McpViewModel`.
+- **Settings → Permissions.** `ui/permissions/PermissionsScreen` (+ `PermissionCatalog`, unit-tested) shows every
+  permission Farrow uses with status and a Grant action: All files access (creates Documents/Farrow when granted),
+  notifications (runtime + notification settings), Termux RUN_COMMAND (or Get Termux), Shizuku (get / open / grant),
+  accessibility service, display over other apps, battery optimisation exemption and install unknown apps. Re-checked on
+  resume; a *Set up Termux…* shortcut opens Settings → Tools for the in-Termux steps.
+- **Skills index only.** The system prompt lists enabled skills as `id: name — description` (one line each, 4k chars max);
+  the agent loads the full SKILL.md with `skill_get`. `skill_save` requires a one-line description (≤160 chars) and
+  `skill_edit` can't blank it.
