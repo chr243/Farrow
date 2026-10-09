@@ -46,10 +46,13 @@ object TermuxPackages {
         pkg = "ebook-translate",
         binary = "python3",
         description = "Ebook/document translation (MOBI/EPUB/PDF/DOCX) for ebook_translate — pip: deep-translator, mobi, ebooklib, pymupdf, python-docx, langdetect",
-        detect = "python3 -c 'import deep_translator,ebooklib,docx,langdetect,fitz,mobi' >/dev/null 2>&1",
+        detect = "python3 -c 'import deep_translator,ebooklib,docx,langdetect,fitz,mobi' >/dev/null 2>&1 && " +
+            "[ -s '${com.farrow.app.data.ebook.EbookTranslatePy.FILE}' ]",
         install = listOf(
             "${'$'}APT install python python-pip 2>&1 | tail -n 5",
             "pip install -U deep-translator mobi ebooklib pymupdf python-docx langdetect 2>&1 | tail -n 15",
+            // Deploy the translator script too (ebook_translate also rewrites it before every run).
+            com.farrow.app.data.ebook.EbookTranslatePy.installCommand(),
         ).joinToString("\n"),
     )
 

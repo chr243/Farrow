@@ -8,7 +8,8 @@ import java.util.Base64
  * language check, resume via a sidecar `.farrow-translate.json`, output under Documents/Farrow/Output.
  */
 object EbookTranslatePy {
-    const val DIR = "~/.farrow"
+    /** Absolute Termux paths: a quoted "~/…" is never tilde-expanded by bash (v1.0.22 bug: script "missing"). */
+    const val DIR = com.farrow.app.data.termux.TermuxManager.TERMUX_HOME + "/.farrow"
     const val FILE = "$DIR/farrow_ebook_translate.py"
     const val MARKER = "FARROW_JSON="
 
@@ -278,6 +279,8 @@ if __name__ == "__main__":
     sys.exit(main())
 """.trimStart()
 
+    /** Writes the script into Termux and fails loudly (FARROW_JSON error, exit 4) if it isn't there afterwards. */
     fun installCommand(): String =
-        "mkdir -p $DIR && echo " + Base64.getEncoder().encodeToString(SOURCE.toByteArray()) + " | base64 -d > $FILE"
+        "mkdir -p '$DIR' && echo " + Base64.getEncoder().encodeToString(SOURCE.toByteArray()) + " | base64 -d > '$FILE'\n" +
+            "if [ ! -s '$FILE' ]; then echo '$MARKER{\"ok\":false,\"error\":\"Could not write $FILE in Termux\"}'; exit 4; fi"
 }

@@ -30,7 +30,7 @@ class SeleniumToolsTest {
 
     /** Runs the command with the local bash (HOME = temp dir), like Termux would. */
     private fun localBash(home: File, extraPath: String? = null) = FakeTermux { cmd, tag ->
-        val pb = ProcessBuilder("bash", "-c", cmd).directory(home)
+        val pb = ProcessBuilder("bash", "-c", cmd.replace(com.farrow.app.data.termux.TermuxManager.TERMUX_HOME, home.path)).directory(home)
         pb.environment()["HOME"] = home.path
         pb.environment()["TMPDIR"] = File(home, "tmp").apply { mkdirs() }.path
         extraPath?.let { pb.environment()["PATH"] = it + ":" + pb.environment()["PATH"] }
@@ -55,8 +55,10 @@ class SeleniumToolsTest {
         assertEquals("T", r["title"]?.jsonPrimitive?.content)
         assertTrue(r.containsKey("untrusted"))
         val cmd = t.commands.single()
-        assertTrue(cmd.startsWith("mkdir -p ~/.farrow && echo "))
-        assertTrue(cmd.contains("python3 ~/.farrow/farrow_selenium.py 'open' 'https://example.com/a?b='\\''c'\\''' '--wait' '2' '--wait-for' '#main'"))
+        val h = com.farrow.app.data.termux.TermuxManager.TERMUX_HOME
+        assertTrue(cmd.startsWith("mkdir -p '$h/.farrow' && echo "))
+        assertFalse(cmd.contains("~/.farrow"))
+        assertTrue(cmd.contains("python3 $h/.farrow/farrow_selenium.py 'open' 'https://example.com/a?b='\\''c'\\''' '--wait' '2' '--wait-for' '#main'"))
         assertTrue(cmd.contains("'--save' '${SharedFolder.DISPLAY_PATH}/Output/page.html'"))
         assertTrue(cmd.contains("termux-setup-storage"))
     }

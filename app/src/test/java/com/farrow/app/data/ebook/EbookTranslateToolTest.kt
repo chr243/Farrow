@@ -52,10 +52,42 @@ class EbookTranslateToolTest {
             put("input_path", "Input/book.mobi"); put("dest_lang", "fr")
         })).jsonObject
         assertEquals(true, r["ok"]?.jsonPrimitive?.boolean)
-        assertTrue(t.cmds.single().contains("farrow_ebook_translate.py"))
+        val cmd = t.cmds.single()
+        // v1.0.22 bug: the script path was passed as a quoted "~/.farrow/…", which bash never expands.
+        assertFalse(cmd.contains("~/.farrow"))
+        assertTrue(cmd.contains("python3 '${EbookTranslatePy.FILE}'"))
+        assertTrue(cmd.indexOf("base64 -d > '${EbookTranslatePy.FILE}'") in 0 until cmd.indexOf("python3 '"))
         assertTrue(t.cmds.single().contains("Documents/Farrow/Input/book.mobi"))
         assertTrue(t.cmds.single().contains("Documents/Farrow/Output/book.fr.txt"))
         assertTrue(t.cmds.single().contains("'--dest' 'fr'"))
+    }
+
+    /** Runs the real deploy + script with local bash/python3 (Termux home mapped to a temp dir). */
+    @Test fun deployWritesScriptAndItRuns() = runTest {
+        val home = File(base, "home").apply { mkdirs() }
+        File(folder.input, "note.txt").writeText("Hello")
+        val t = FakeTermux { cmd ->
+            val mapped = cmd.replace(com.farrow.app.data.termux.TermuxManager.TERMUX_HOME, home.path)
+                .replace(SharedFolder.DISPLAY_PATH, folder.root.path)
+            val p = ProcessBuilder("bash", "-c", mapped).start()
+            val out = p.inputStream.bufferedReader().readText(); val err = p.errorStream.bufferedReader().readText()
+            TermuxResult("x", out, err, p.waitFor(), -1, null)
+        }
+        val r = Json.parseToJsonElement(EbookTranslateTool(t, folder).execute(buildJsonObject {
+            put("input_path", "Input/note.txt"); put("dest_lang", "fr"); put("timeout_seconds", 60)
+        })).jsonObject
+        assertTrue(File(home, ".farrow/farrow_ebook_translate.py").length() > 1000)
+        // The script ran: either it translated (network + deep_translator present) or it reported missing packages.
+        assertTrue(r.toString(), r["ok"]?.jsonPrimitive?.boolean == true ||
+            r["error"]?.jsonPrimitive?.content?.contains("Missing Python packages") == true ||
+            r["error"]?.jsonPrimitive?.content?.contains("translate failed") == true)
+        assertFalse(r.toString().contains("No such file"))
+    }
+
+    @Test fun addOnInstallAlsoDeploysScript() {
+        val s = TermuxPackages.installScript(TermuxPackages.ALL.first { it.pkg == "ebook-translate" })
+        assertTrue(s.contains("base64 -d > '${EbookTranslatePy.FILE}'"))
+        assertTrue(TermuxPackages.ALL.first { it.pkg == "ebook-translate" }.detect.contains(EbookTranslatePy.FILE))
     }
 
     @Test fun rejectsEscapeAndMissing() = runTest {

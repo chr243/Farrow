@@ -25,6 +25,7 @@ import com.farrow.app.ui.components.CopyButton
 import com.farrow.app.ui.components.CopyableText
 
 /** Settings > Shizuku, accessibility & Git: setup for run_shell, screen_* and git_* tools. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltViewModel()) {
     val shizuku by vm.shizukuState.collectAsStateWithLifecycle()
@@ -67,7 +68,7 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                     backend.errors.forEach { (k, v) -> Text("• $k: $v", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     if (backend.errors.isNotEmpty()) CopyButton(backend.errors.entries.joinToString("\n") { "${it.key}: ${it.value}" }, label = "Copy errors")
                     ui.shizukuBindError?.let { CopyableText("Last bind error: $it", color = MaterialTheme.colorScheme.error) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         when (shizuku) {
                             ShizukuState.NOT_INSTALLED -> Button(onClick = {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")))
@@ -79,8 +80,8 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                             ShizukuState.READY -> Button(onClick = vm::testShell, enabled = !ui.testing) { Text(if (ui.testing) "Testing…" else "Test (id)") }
                         }
                         OutlinedButton(onClick = vm::diagnoseShizuku, enabled = !ui.testing && shizuku == ShizukuState.READY) { Text("Diagnose") }
-                        TextButton(onClick = vm::refresh) { Text("Re-check") }
-                        if (ui.testing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        OutlinedButton(onClick = vm::refresh) { Text("Re-check") }
+                        if (ui.testing) CircularProgressIndicator(Modifier.size(20.dp).align(Alignment.CenterVertically), strokeWidth = 2.dp)
                     }
                     ui.testOutput?.let { CopyableText(it) }
                 }
@@ -91,14 +92,14 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                         "All files access), or pick the exported rish file (select rish_shizuku.dex too if asked). " +
                         "Farrow copies both to /data/local/tmp/farrow_rish and chmod +x (needs Shizuku).", style = MaterialTheme.typography.bodySmall)
                     Text(if (ui.rishInstalled) "✅ Installed: ${ui.rishInfo}" else "Not set up", style = MaterialTheme.typography.bodyMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Button(onClick = vm::findRish) { Text("Find rish") }
                         OutlinedButton(onClick = { rishPicker.launch(arrayOf("*/*")) }) { Text(if (ui.rishInstalled) "Pick again" else "Pick rish file") }
                     }
-                    if (ui.rishInstalled) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (ui.rishInstalled) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         OutlinedButton(onClick = vm::testRish, enabled = !ui.testing) { Text("Test (id)") }
                         OutlinedButton(onClick = vm::fixRishPermissions) { Text("Fix rish permissions") }
-                        TextButton(onClick = vm::removeRish) { Text("Remove") }
+                        OutlinedButton(onClick = vm::removeRish) { Text("Remove") }
                     }
                     if (ui.rishNeedsAccess) TextButton(onClick = { runCatching { context.startActivity(vm.allFilesAccessIntent()) } }) {
                         Text("Grant All files access")

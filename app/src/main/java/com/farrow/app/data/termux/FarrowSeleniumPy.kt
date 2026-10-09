@@ -9,7 +9,8 @@ import java.util.Base64
  * `FARROW_JSON=<json>` line.
  */
 object FarrowSeleniumPy {
-    const val DIR = "~/.farrow"
+    /** Absolute (quoted "~/…" arguments are not tilde-expanded). */
+    const val DIR = TermuxManager.TERMUX_HOME + "/.farrow"
     const val FILE = "$DIR/farrow_selenium.py"
     const val MARKER = "FARROW_JSON="
 
@@ -133,5 +134,5 @@ if __name__ == "__main__":
 
     /** Shell that (re)writes the helper into Termux. */
     fun installCommand(): String =
-        "mkdir -p $DIR && echo " + Base64.getEncoder().encodeToString(SOURCE.toByteArray()) + " | base64 -d > $FILE"
+        "mkdir -p '$DIR' && echo " + Base64.getEncoder().encodeToString(SOURCE.toByteArray()) + " | base64 -d > '$FILE'"
 }
