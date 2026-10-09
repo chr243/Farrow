@@ -111,8 +111,8 @@ object AppModule {
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
-            // Plain HTTP GET/HEAD (OkHttp, no browser)
-            WebFetchTool(),
+            // Default web search (keyless multi-engine, port of hec-ovi/websearch-skill) + fetch a known URL (raw or Markdown)
+            WebSearchTool(), WebFetchTool(),
         ) +
             // Shizuku shell, Termux (RUN_COMMAND), JGit, Accessibility
             listOf(

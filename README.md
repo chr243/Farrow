@@ -12,7 +12,8 @@
 
 - **Messenger-style chat UI** (Kotlin, Jetpack Compose, Material 3) with chat heads / Android Bubbles and a quota indicator.
 - **Free-model agent loop:** tool calling on OpenRouter free models and Kilo, priority list, automatic fallback across models and API keys, backoff and auto-resume after rate limits.
-- **Web fetching:** `web_fetch`, a plain HTTP GET/HEAD (no browser, no JavaScript) for public pages and APIs.
+- **Web search (default):** `web_search`, a keyless multi-engine search ported from [hec-ovi/websearch-skill](https://github.com/hec-ovi/websearch-skill) (MIT): DuckDuckGo (html, with lite fallback), Brave, Bing, Mojeek, Yahoo and Wikipedia queried in parallel over plain HTTP, redirect links unwrapped (`duckduckgo.com/l/?uddg=`, Bing `ck/a`, Yahoo `/RU=`), URLs canonicalised and deduplicated, then ranked with de-correlated reciprocal-rank fusion. No browser, so it is fast and avoids most captchas; a blocked engine just drops out.
+- **Web fetching:** `web_fetch`, a plain HTTP GET/HEAD (no browser, no JavaScript) for a known URL or API. `format=markdown` returns a clean Markdown extract of the page, paginated by tokens (`page`, `page_size_tokens`, cached), wrapped in an untrusted-content fence, with block/captcha detection.
 - **Crypto:** Coinbase Exchange market data, a local backtest and optional live trading (`crypto_place_order` / `crypto_cancel_order` are off by default; the API key is stored only in EncryptedSharedPreferences).
 - **Device control:** `run_shell` via Shizuku (shell uid), `screen_*` tools via an Accessibility service, and `termux_run` (bash in Termux through its RUN_COMMAND service) with optional Termux packages (ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc, …) installable from Settings → Tools.
 - **Git:** clone / status / commit / push with JGit inside the app workspace.

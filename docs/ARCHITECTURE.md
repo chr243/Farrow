@@ -97,7 +97,8 @@ com.farrow.app
 | Tool | Status |
 |---|---|
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
-| `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript) |
+| `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
+| `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
 | `memory_*`, `chart` | Persistent memory (v0.9.16) and native charts (v1.0.12) |
 | `run_shell` | Phase 6: Shizuku UserService (`sh -c` as uid 2000) |
@@ -251,7 +252,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 
 ## Known limitations
 - (v0.9.0) Everything after Phase 2 compiles, and its 25 JVM unit tests pass, but it **has not been tested on a device**. The Shizuku, accessibility and JGit paths are only exercised at runtime.
-- There is no in-app browser: `web_fetch` runs no JavaScript and can't log in, so JS-only or login-walled pages can't be read.
+- There is no in-app browser: `web_search`/`web_fetch` run no JavaScript and can't log in, so JS-only or login-walled pages can't be read.
 - JGit 5.x doesn't support shallow clones. `run_shell` runs as the shell uid, which can't read the app's private workspace.
 - The keep-alive notification can't be fully hidden (Android rule).
 - (Phase 3) If a crash happens halfway through running a step's tools, the tool calls that didn't run are dropped and the model is asked again.
@@ -328,5 +329,14 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   (installed / *Run commands in Termux* permission with a Grant button / allow-external-apps command to copy) and the
   "Available to install" package list (ffmpeg, imagemagick, yt-dlp, git, nodejs, jq, curl, pandoc; app-scoped
   `TermuxPackageJobs`). Needs `com.termux.permission.RUN_COMMAND` and a `com.termux` package query.
+- **`web_search` (default web tool).** Port of [hec-ovi/websearch-skill](https://github.com/hec-ovi/websearch-skill)
+  (MIT, Hector Oviedo) in `data/websearch/`: `Engines.kt` (DuckDuckGo html POST with lite fallback on the anomaly page,
+  Brave, Bing, Mojeek, Yahoo, Wikipedia opensearch + intro), `SearchCore.kt` (`Canonical` URL normalisation and
+  redirect unwrapping for `duckduckgo.com/l/?uddg=`, Bing `ck/a?u=a1…`, Yahoo `/RU=…/RK=`; `Fusion` dedup with provenance
+  and de-correlated weighted RRF, k=60, Bing-backed DDG/Yahoo/Bing vote once, +10 % per extra independent group),
+  `WebSearcher.kt` (engines in parallel, 8 s per engine, per-engine status/warnings), `PageReader.kt` (Markdown
+  extraction, ≈4 chars/token pagination, random-nonce untrusted fence, block detection). `web_fetch` gained
+  `format=markdown`, `page`, `page_size_tokens` and a 20-entry cache. Jsoup is back as a dependency for HTML parsing.
+  The prompt tells the agent to use `web_search` first, then `web_fetch format=markdown` on the best 2–3 hits.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

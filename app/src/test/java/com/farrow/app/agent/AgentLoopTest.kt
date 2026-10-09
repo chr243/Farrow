@@ -169,6 +169,8 @@ class AgentLoopTest {
         for (gone in listOf("web_scrape", "web_click", "web_type", "web_session", "web_screenshot", "x_post", "x_scrape", "fb_",
             "reset_browser", "Firefox", "tbp")) assertFalse(gone, p.contains(gone))
         assertTrue(p.contains("termux_run") && p.contains("run_shell"))
+        assertTrue(p.contains("web_search first") && p.contains("format=markdown"))
+        assertTrue(p.indexOf("web_search") < p.indexOf("web_fetch"))
     }
 
     @Test fun `memory block is appended to the system prompt`() = runTest {

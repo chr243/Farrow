@@ -15,7 +15,7 @@ data class ToolStatus(val ready: Boolean, val text: String) {
 
         fun of(name: String, env: ToolEnv): ToolStatus = when {
             name in setOf("read_file", "write_file", "list_dir") -> READY
-            name == "web_fetch" -> READY
+            name == "web_fetch" || name == "web_search" -> READY
             name.startsWith("crypto_") -> when (name) {
                 "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings)")
                 "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku, accessibility & Git)")

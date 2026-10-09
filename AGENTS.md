@@ -1,6 +1,6 @@
 # AGENTS.md — Farrow
 
-Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: plain HTTP fetching (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), screen control via an Accessibility service, JGit, sandboxed file tools, memory and an MCP client. There is no backend server; everything runs on the device.
+Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), screen control via an Accessibility service, JGit, sandboxed file tools, memory and an MCP client. There is no backend server; everything runs on the device.
 
 ## Repo map
 
@@ -109,7 +109,7 @@ If you touched Shizuku, Accessibility or chat heads, also test on a real device 
 - [ ] `versionCode`/`versionName` bumped in `app/build.gradle.kts`; APK is named `Farrow-v<versionName>-debug.apk`.
 - [ ] If the Room schema changed: migration added and `app/schemas/` committed.
 - [ ] Fresh install on a device: onboarding, add API key, send a chat, a tool call runs.
-- [ ] `web_fetch` returns a public page.
+- [ ] `web_search` returns fused results, and `web_fetch format=markdown` returns a public page.
 - [ ] Shizuku **Test (id)** returns `uid=2000(shell)`.
 - [ ] No secrets in the diff (see command above); `git ls-files | grep -E 'local.properties|\.jks|\.keystore'` is empty.
 - [ ] GitHub release created with the APK attached; README, METADATA.md and docs/ARCHITECTURE.md are up to date.
