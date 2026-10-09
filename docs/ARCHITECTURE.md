@@ -423,3 +423,13 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   user-facing result (translations, screenshots/screencap, scripts, coding projects, reports, …) under Output/ — never
   Pictures, Download, DCIM or the private scratch workspace.
 
+
+## v1.0.23
+
+- **Fix: `ebook_translate` said the script was missing.** The helper path was `~/.farrow/farrow_ebook_translate.py` passed
+  as a single-quoted argument, and bash never expands `~` inside quotes, so python3 looked for a literal `~` folder. The
+  helpers (ebook + selenium) now use the absolute Termux home (`/data/data/com.termux/files/home/.farrow/…`); the deploy
+  step checks the file exists and returns a clear error if not, and the `ebook-translate` add-on also deploys it.
+- **Settings → Shizuku:** Re-check and rish Remove are proper outlined buttons; button rows wrap (FlowRow).
+- **Chat avatars:** only the circle colors changed — mid-tone circles in light theme (≥2:1 vs surface), brighter circles in
+  dark theme (≥2.6:1), letters still ≥4.5:1.
