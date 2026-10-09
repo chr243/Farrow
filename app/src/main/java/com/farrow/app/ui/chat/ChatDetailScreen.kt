@@ -66,6 +66,8 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
     val visible = remember(messages) {
         messages.filter { it.role != MessageRole.TOOL && !(it.role == MessageRole.SYSTEM && it.kind == MessageKind.NORMAL) }
     }
+    // Consecutive termux_run (& co.) calls fold into one expandable row.
+    val rows = remember(visible, callsByMessage) { ToolStacks.rows(visible, callsByMessage) }
 
     // ---- chat head / bubble launch flow (POST_NOTIFICATIONS on 13+, overlay permission dialog)
     val context = LocalContext.current
@@ -116,7 +118,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
 
     LaunchedEffect(messages.size) {
         vm.markOpened()
-        if (visible.isNotEmpty()) listState.animateScrollToItem(visible.size)
+        if (visible.isNotEmpty()) listState.animateScrollToItem(rows.size)
     }
 
     Scaffold(
@@ -164,14 +166,15 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                             modifier = Modifier.fillMaxWidth().padding(top = 48.dp))
                     }
                 }
-                items(visible, key = { it.id }) { m ->
+                items(rows, key = { it.key }) { row ->
+                    val m = row.message
                     when {
                         m.kind == MessageKind.STATUS -> StatusLine(m)
                         m.kind == MessageKind.SUMMARY -> SummaryCard(m)
                         m.role == MessageRole.USER -> UserBubble(m.content.orEmpty())
                         m.role == MessageRole.ASSISTANT -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (!m.content.isNullOrBlank()) AgentBubble(m.content, m.model)
-                            callsByMessage[m.id].orEmpty().forEach { ToolCallCard(it) }
+                            row.groups.forEach { ToolCallGroup(it) }
                         }
                     }
                 }

@@ -49,7 +49,8 @@ import com.farrow.app.domain.model.ToolCallRecord
 import com.farrow.app.ui.chat.AgentBubble
 import com.farrow.app.ui.chat.StatusLine
 import com.farrow.app.ui.chat.SummaryCard
-import com.farrow.app.ui.chat.ToolCallCard
+import com.farrow.app.ui.chat.ToolCallGroup
+import com.farrow.app.ui.chat.ToolStacks
 import com.farrow.app.ui.chat.UserBubble
 import com.farrow.app.ui.components.TaskAvatar
 
@@ -77,9 +78,11 @@ fun CompactChatPanel(
     val visible = remember(messages) {
         messages.filter { it.role != MessageRole.TOOL && !(it.role == MessageRole.SYSTEM && it.kind == MessageKind.NORMAL) }
     }
+    // Consecutive termux_run (& co.) calls fold into one expandable row.
+    val rows = remember(visible, callsByMessage) { ToolStacks.rows(visible, callsByMessage) }
     LaunchedEffect(messages.size) {
         onSeen()
-        if (visible.isNotEmpty()) listState.scrollToItem(visible.lastIndex)
+        if (visible.isNotEmpty()) listState.scrollToItem(rows.lastIndex.coerceAtLeast(0))
     }
 
     Surface(
@@ -110,7 +113,8 @@ fun CompactChatPanel(
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(visible, key = { it.id }) { m ->
+                items(rows, key = { it.key }) { row ->
+                    val m = row.message
                     when {
                         m.kind == MessageKind.STATUS -> StatusLine(m)
                         m.kind == MessageKind.SUMMARY -> SummaryCard(m)
@@ -118,7 +122,7 @@ fun CompactChatPanel(
                         m.role == MessageRole.ASSISTANT -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             val content = m.content
                             if (!content.isNullOrBlank()) AgentBubble(content, m.model)
-                            callsByMessage[m.id].orEmpty().forEach { ToolCallCard(it) }
+                            row.groups.forEach { ToolCallGroup(it) }
                         }
                     }
                 }
