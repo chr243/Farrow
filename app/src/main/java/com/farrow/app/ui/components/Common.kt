@@ -55,7 +55,7 @@ fun TaskAvatar(type: TaskType, status: TaskStatus?, size: Dp = 52.dp, ring: Bool
         Box(
             Modifier.fillMaxSize()
                 .then(if (ring) Modifier.border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp) else Modifier)
-                .clip(CircleShape).background(type.color().copy(alpha = 0.15f)),
+                .clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) { Text(type.emoji(), fontSize = (size.value * 0.42f).sp) }
         status?.dotColor()?.let { c ->

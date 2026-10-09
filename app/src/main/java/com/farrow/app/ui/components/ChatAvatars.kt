@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+import com.materialkolor.hct.Hct
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -21,33 +23,39 @@ import com.farrow.app.domain.model.Task
 import com.farrow.app.domain.model.TaskType
 
 /**
- * Varied chat avatars (after v1.0.16): a stable soft tonal color hashed from the chat id, and a glyph picked from the
+ * Varied chat avatars (after v1.0.16): a stable shade of the theme green hashed from the chat id, and a glyph picked from the
  * chat's topic (keywords in the title/first prompt), else its type, else the title's first letter or emoji.
  * Pure logic here, unit-tested; [TaskAvatar] (Task overload) draws it.
  */
 object ChatAvatarStyle {
-    /**
-     * One pair per theme: circle background + letter color. v1.0.23: circles are mid-tone (light theme, ≥2:1 against the
-     * light surface) and brighter (dark theme, ≥2.6:1 against the dark surface) so they stand out; letters stay ≥4.5:1.
-     */
-    data class Tone(val light: Long, val onLight: Long, val dark: Long, val onDark: Long)
+    /** One circle shade: background + letter color (ARGB). */
+    data class Shade(val bg: Int, val fg: Int)
 
-    val PALETTE = listOf(
-        Tone(0xFF99B6E6, 0xFF0B2E6B, 0xFF2958A3, 0xFFD3E3FD), // blue
-        Tone(0xFF32C8AA, 0xFF00382F, 0xFF196657, 0xFFB8EFE4), // teal
-        Tone(0xFF59CC33, 0xFF173A0E, 0xFF2D6619, 0xFFCDEBC0), // green
-        Tone(0xFFB0BC2F, 0xFF2E3300, 0xFF585E17, 0xFFE3E8B2), // olive
-        Tone(0xFFD5B058, 0xFF3F2A00, 0xFF6E551C, 0xFFFCE0A8), // amber
-        Tone(0xFFE0A985, 0xFF4A1F00, 0xFF874A22, 0xFFFFD7BF), // orange
-        Tone(0xFFE8A1AD, 0xFF4D0E1D, 0xFFA3293D, 0xFFFFD6DC), // rose
-        Tone(0xFFE79DD0, 0xFF431339, 0xFF9B2778, 0xFFF7D4EE), // pink
-        Tone(0xFFBDA9EA, 0xFF2A1260, 0xFF6437CD, 0xFFE3D9FF), // purple
-        Tone(0xFFAAB5CF, 0xFF1C2433, 0xFF48587F, 0xFFD9DFEE), // slate
-        Tone(0xFF74BFDC, 0xFF003549, 0xFF1F607A, 0xFFC6E7F5), // cyan
-    )
+    /**
+     * v1.0.24: circles use ONLY shades of the app theme's green — the scheme's primary hue, and tertiary's hue when it is
+     * within 30° of primary (else primary nudged +10°) — across a wide tone ladder, so light and dark circles differ a lot.
+     * Light theme runs tone 88 → 24, dark theme tone 24 → 82. Letters: tone 10 on circles ≥ tone 52, white below.
+     */
+    val LIGHT_TONES = doubleArrayOf(88.0, 76.0, 66.0, 56.0, 46.0, 38.0, 30.0, 24.0)
+    val DARK_TONES = doubleArrayOf(24.0, 32.0, 40.0, 48.0, 56.0, 64.0, 72.0, 82.0)
+    val SHADE_COUNT = LIGHT_TONES.size
+
+    fun shades(primary: Int, tertiary: Int, dark: Boolean): List<Shade> {
+        val p = Hct.fromInt(primary)
+        val t = Hct.fromInt(tertiary)
+        val diff = Math.abs(((t.hue - p.hue) % 360.0 + 540.0) % 360.0 - 180.0)
+        val altHue = if (diff <= 30.0) t.hue else (p.hue + 10.0) % 360.0
+        val chroma = maxOf(p.chroma, 36.0)
+        return (if (dark) DARK_TONES else LIGHT_TONES).mapIndexed { i, tone ->
+            val hue = if (i % 2 == 0) p.hue else altHue
+            val bg = Hct.from(hue, chroma, tone).toInt()
+            val fg = Hct.from(hue, minOf(chroma, 24.0), if (tone >= 52.0) 10.0 else 100.0).toInt()
+            Shade(bg, fg)
+        }
+    }
 
     /** Stable palette slot for a chat id (SplitMix64 finaliser, so neighbouring ids get different colors). */
-    fun colorIndex(id: Long, n: Int = PALETTE.size): Int {
+    fun colorIndex(id: Long, n: Int = SHADE_COUNT): Int {
         var z = id + -0x61c8864680b583ebL
         z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
         z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
@@ -105,18 +113,20 @@ object ChatAvatarStyle {
 @Composable
 fun TaskAvatar(task: Task, size: Dp = 52.dp, ring: Boolean = false) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val tone = ChatAvatarStyle.PALETTE[remember(task.id) { ChatAvatarStyle.colorIndex(task.id) }]
+    val cs = MaterialTheme.colorScheme
+    val shades = remember(cs.primary, cs.tertiary, dark) { ChatAvatarStyle.shades(cs.primary.toArgb(), cs.tertiary.toArgb(), dark) }
+    val shade = shades[remember(task.id) { ChatAvatarStyle.colorIndex(task.id) }]
     val glyph = remember(task.title, task.prompt, task.type) { ChatAvatarStyle.glyph(task.title, task.prompt, task.type) }
     Box(Modifier.size(size)) {
         Box(
             Modifier.fillMaxSize()
                 .then(if (ring) Modifier.border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp) else Modifier)
-                .clip(CircleShape).background(Color(if (dark) tone.dark else tone.light)),
+                .clip(CircleShape).background(Color(shade.bg)),
             contentAlignment = Alignment.Center,
         ) {
             if (ChatAvatarStyle.isLetter(glyph)) {
                 Text(glyph, fontSize = (size.value * 0.40f).sp, fontWeight = FontWeight.SemiBold,
-                    color = Color(if (dark) tone.onDark else tone.onLight))
+                    color = Color(shade.fg))
             } else Text(glyph, fontSize = (size.value * 0.42f).sp)
         }
         task.status.dotColor()?.let { c ->
