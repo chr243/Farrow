@@ -188,7 +188,7 @@ class AgentLoopTest {
         val dir = java.nio.file.Files.createTempDirectory("skills").toFile()
         val store = com.farrow.app.data.skills.SkillStore(dir)
         store.save("Weekly report", "Build the weekly report", "1. Fetch prices\n2. Chart them")
-        val off = store.save("Old way", "", "SECRET-OLD-STEPS")
+        val off = store.save("Old way", "Superseded", "SECRET-OLD-STEPS")
         store.setEnabled(off.id, false)
         val tasks = FakeTasks()
         val sent = mutableListOf<List<ApiMessage>>()
@@ -198,9 +198,11 @@ class AgentLoopTest {
             skillsPrompt = { store.promptBlock() })
         loop.run(1)
         val sys = sent[0][0].content!!
-        assertTrue(sys.contains("## Saved skills") && sys.contains("2. Chart them"))
+        assertTrue(sys.contains("## Saved skills") && sys.contains("- weekly-report: Weekly report — Build the weekly report"))
+        assertFalse(sys.contains("2. Chart them")) // index only; the body is loaded with skill_get
         assertFalse(sys.contains("SECRET-OLD-STEPS") || sys.contains("old-way"))
-        assertTrue(AgentLoop.systemPrompt().contains("offer to save it as a") && AgentLoop.systemPrompt().contains("skill_save"))
+        assertTrue(AgentLoop.systemPrompt().contains("offer to save it as a") && AgentLoop.systemPrompt().contains("skill_save")
+            && AgentLoop.systemPrompt().contains("call skill_get to load its full steps"))
         dir.deleteRecursively()
     }
 

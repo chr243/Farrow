@@ -385,10 +385,11 @@ class AgentLoop internal constructor(
               private workspace (e.g. scrapers/name.py; `from farrow_selenium import make_driver` gives a headless driver,
               always call driver.quit()) and run it with termux_python; save scraped data to os.environ["FARROW_OUTPUT"].
               Keep scraper scripts in the private workspace, not in Documents/Farrow.
-            - Skills: skill_list, skill_get, skill_save, skill_edit, skill_delete. Enabled skills appear below under "Saved
-              skills"; follow one when the task matches it, and load any listed-only skill with skill_get. When you and the
-              user work out a reusable multi-step procedure (something they will likely ask again), offer to save it as a
-              skill and call skill_save only after they agree; update it with skill_edit when the procedure changes.
+            - Skills: skill_list, skill_get, skill_save, skill_edit, skill_delete. "Saved skills" below is only an index (name +
+              one-line description) of enabled skills; when a task matches one, call skill_get to load its full steps, then
+              follow them. When you and the user work out a reusable multi-step procedure (something they will likely ask
+              again), offer to save it as a skill and call skill_save only after they agree, always with a short one-line
+              description (what it does, when to use it); update it with skill_edit when the procedure changes.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
               /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
               you and save deliverables (reports, exports, generated files) in Output/. Paths are relative to that folder;

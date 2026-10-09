@@ -362,8 +362,8 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Skills.** `data/skills/SkillStore` keeps agent-written procedures in app-internal `files/skills/<id>/SKILL.md`
   (front matter `name`/`description`/`enabled` + Markdown body; id = slug of the name; max 100 skills, 20k chars each).
   Tools `skill_save` (only after the user agrees), `skill_edit` (fields or unique find/replace), `skill_delete`,
-  `skill_list`, `skill_get`. `AgentLoop` appends `SkillStore.promptBlock()` (index of enabled skills + full text within
-  12k chars; the rest listed for `skill_get`) before the memory block; disabled skills are never sent. Settings → Agent
+  `skill_list`, `skill_get`. `AgentLoop` appends `SkillStore.promptBlock()` (index only: id, name and one-line description of
+  each enabled skill; bodies are loaded with `skill_get`) before the memory block; disabled skills are never sent. Settings → Agent
   tools → Skills lists skills (tap to read), with an enable switch and Delete. The prompt tells the agent to offer saving
   a reusable multi-step procedure as a skill.
 - **Set up Termux (one tap).** Settings → Tools → Termux has a *Set up Termux* button driven by

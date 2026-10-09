@@ -17,8 +17,8 @@ data class Skill(
 
 /**
  * Agent-writable skills in app-internal storage: `files/skills/<id>/SKILL.md` with a small front matter
- * (`name`, `description`, `enabled`) and a Markdown body. Enabled skills are injected into the system prompt
- * ([promptBlock]); disabled ones are kept but never sent to the model.
+ * (`name`, `description`, `enabled`) and a Markdown body. Only an index (name + one-line description) of enabled skills
+ * goes into the system prompt ([promptBlock]); bodies are loaded on demand with skill_get. Disabled skills are never sent.
  */
 class SkillStore(root: File) {
     val root: File = root.apply { mkdirs() }.canonicalFile
@@ -33,6 +33,9 @@ class SkillStore(root: File) {
     /** Creates a skill; the id is a slug of [name] (suffixed -2, -3… when [overwrite] is false and it exists). */
     fun save(name: String, description: String, body: String, overwrite: Boolean = false): Skill = synchronized(lock) {
         val n = clean(name, MAX_NAME).ifEmpty { throw IllegalArgumentException("name is required") }
+        val d = clean(description, MAX_DESCRIPTION).ifEmpty {
+            throw IllegalArgumentException("description is required: one short line (what it does, when to use it), shown in the prompt index")
+        }
         val b = body.trim().ifEmpty { throw IllegalArgumentException("body is required") }
         require(b.length <= MAX_BODY) { "body is longer than $MAX_BODY characters" }
         require(overwrite || list().size < MAX_SKILLS) { "too many skills (max $MAX_SKILLS); delete or edit one" }
@@ -40,7 +43,7 @@ class SkillStore(root: File) {
         var id = base
         if (!overwrite) { var i = 2; while (dirOf(id).exists()) id = "$base-${i++}" }
         val prev = if (overwrite) read(id) else null
-        val s = Skill(id, n, clean(description, MAX_DESCRIPTION), b, prev?.enabled ?: true, System.currentTimeMillis())
+        val s = Skill(id, n, d, b, prev?.enabled ?: true, System.currentTimeMillis())
         write(s); refresh(); s
     }
 
@@ -58,7 +61,7 @@ class SkillStore(root: File) {
         require(b.length <= MAX_BODY) { "body is longer than $MAX_BODY characters" }
         val s = cur.copy(
             name = name?.let { clean(it, MAX_NAME) }?.ifEmpty { null } ?: cur.name,
-            description = description?.let { clean(it, MAX_DESCRIPTION) } ?: cur.description,
+            description = description?.let { clean(it, MAX_DESCRIPTION).ifEmpty { throw IllegalArgumentException("description can't be empty") } } ?: cur.description,
             body = b, updatedAt = System.currentTimeMillis())
         write(s); refresh(); s
     }
@@ -74,20 +77,20 @@ class SkillStore(root: File) {
     }
 
     /**
-     * System-prompt block: an index of all enabled skills plus their full text while it fits [maxChars];
-     * the rest are listed only (load them with skill_get). Empty when nothing is enabled.
+     * System-prompt block: only an index of enabled skills — id, name and one-line description each. The full SKILL.md
+     * stays on disk and is loaded with skill_get. Empty when nothing is enabled; capped at [maxChars].
      */
     fun promptBlock(maxChars: Int = DEFAULT_PROMPT_CHARS): String {
         val on = list().filter { it.enabled }
         if (on.isEmpty()) return ""
-        val sb = StringBuilder("## Saved skills (enabled)\nReusable procedures saved with the user. Follow a skill when the task matches it.\n")
-        on.forEach { sb.append("- ").append(it.id).append(": ").append(it.name).append(if (it.description.isBlank()) "" else " — " + it.description).append('\n') }
-        val omitted = mutableListOf<String>()
-        on.forEach { s ->
-            val full = "\n### Skill: ${s.name} (${s.id})\n${s.body}\n"
-            if (sb.length + full.length <= maxChars) sb.append(full) else omitted += s.id
+        val sb = StringBuilder("## Saved skills (enabled)\nIndex only — call skill_get with the id to load the full steps before following a skill.\n")
+        var shown = 0
+        for (s in on) {
+            val line = "- ${s.id}: ${s.name} — ${s.description.ifBlank { "(no description)" }.take(INDEX_DESCRIPTION)}\n"
+            if (sb.length + line.length > maxChars) break
+            sb.append(line); shown++
         }
-        if (omitted.isNotEmpty()) sb.append("\n(Not shown in full to save space — load with skill_get when needed: ${omitted.joinToString()})\n")
+        if (shown < on.size) sb.append("(${on.size - shown} more — see skill_list)\n")
         return sb.toString().trimEnd()
     }
 
@@ -119,10 +122,12 @@ class SkillStore(root: File) {
     companion object {
         const val FILE = "SKILL.md"
         const val MAX_NAME = 80
-        const val MAX_DESCRIPTION = 300
+        /** Descriptions are one short line (the prompt index shows up to [INDEX_DESCRIPTION] chars). */
+        const val MAX_DESCRIPTION = 160
+        const val INDEX_DESCRIPTION = 160
         const val MAX_BODY = 20_000
         const val MAX_SKILLS = 100
-        const val DEFAULT_PROMPT_CHARS = 12_000
+        const val DEFAULT_PROMPT_CHARS = 4_000
         private val ID = Regex("[a-z0-9][a-z0-9-]{0,63}")
 
         fun slug(name: String): String =
