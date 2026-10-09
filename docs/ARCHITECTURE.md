@@ -317,7 +317,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   - Live trading (OFF by default under Tools): `crypto_place_order`, `crypto_cancel_order` — require `confirm=true` and
     an explicit user request with size/pair.
 
-## Unreleased
+## v1.0.19
 
 - **Internal browser removed.** The Termux/Firefox/Termux Browser Pilot browser and everything built on it are gone:
   the `tbp_bridge.py` asset and X/Facebook selector files, `BridgeClient`, setup wizard and auto-start, `BrowserOpsManager`
