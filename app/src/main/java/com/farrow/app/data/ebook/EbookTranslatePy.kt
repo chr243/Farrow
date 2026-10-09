@@ -246,6 +246,68 @@ def estimate(n_chunks, n_chapters, start_chapter=0):
     return int(lo), int(mid), int(hi), pauses
 
 
+# --- Language codes -------------------------------------------------------------------------------------------
+# Each engine wants a different code style: googletrans takes bare/lowercase codes from googletrans.LANGUAGES
+# ("fr", "zh-cn", "pt"; NOT "pt-BR"/"en-US"/"nb"), MyMemory (deep-translator) only accepts regional codes
+# ("fr-FR", "zh-CN", "pt-BR"; bare "fr" raises LanguageNotSupported) and langdetect returns its own ("zh-cn", "he",
+# "tl", "no"). The user's code is passed through untouched, so each engine normalises it here.
+ALIASES = {"iw": "he", "jw": "jv", "tl": "fil", "nb": "no", "nn": "no", "zh": "zh-cn"}
+MM_PREFERRED = {"en": "en-GB", "pt": "pt-PT", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "zh": "zh-CN", "ar": "ar-SA",
+                "no": "nb-NO", "he": "he-IL", "fil": "fil-PH", "sr": "sr-Latn-RS", "ta": "ta-IN"}
+
+
+def lang_family(code):
+    c = (code or "").strip().lower().replace("_", "-")
+    c = ALIASES.get(c, c)
+    if c in ("zh-tw", "zh-hk", "zh-mo"):
+        return "zh-tw"
+    if c.startswith("zh"):
+        return "zh-cn"
+    return ALIASES.get(c.split("-")[0], c.split("-")[0])
+
+
+def google_code(code):
+    if code in ("", None, "auto"):
+        return "auto"
+    from googletrans import LANGUAGES
+    c = code.strip().lower().replace("_", "-")
+    if c in LANGUAGES:
+        return c
+    fam = lang_family(c)
+    for k in (fam, {"he": "iw", "jv": "jw", "fil": "tl"}.get(fam, fam)):
+        if k in LANGUAGES:
+            return k
+    return c
+
+
+def mymemory_code(code):
+    from deep_translator.constants import MY_MEMORY_LANGUAGES_TO_CODES as M
+    codes = list(M.values())
+    c = code.strip().replace("_", "-")
+    for k in codes:
+        if k.lower() == c.lower():
+            return k
+    fam = lang_family(c)
+    if fam == "zh-tw":
+        return "zh-TW"
+    if fam in MM_PREFERRED:
+        return MM_PREFERRED[fam]
+    for k in codes:
+        if k.lower().split("-")[0] == fam:
+            return k
+    raise ValueError("MyMemory does not support language %r" % code)
+
+
+def guess_source(text, src):
+    if src not in ("", None, "auto"):
+        return src
+    try:
+        from langdetect import detect
+        return detect(text[:2000])
+    except Exception:
+        return "en"
+
+
 class Engines:
     def __init__(self):
         self.loop = None
@@ -260,7 +322,7 @@ class Engines:
                 self.gt = Translator(user_agent=USER_AGENT)
             except TypeError:
                 self.gt = Translator()
-        r = self.gt.translate(text, src=("auto" if src in ("", "auto") else src), dest=dest)
+        r = self.gt.translate(text, src=google_code(src), dest=google_code(dest))
         if asyncio.iscoroutine(r):   # googletrans >= 4.0.2 is async; old 4.0.0rc1 was sync
             r = self.loop.run_until_complete(r)
         if not r or not getattr(r, "text", None):
@@ -269,7 +331,9 @@ class Engines:
 
     def _mymemory(self, text, src, dest):
         from deep_translator import MyMemoryTranslator
-        s = "en-GB" if src in ("", "auto") else src
+        # Was: source hard-coded to "en-GB" for auto and the bare target ("fr") passed as-is, which MyMemory rejects.
+        s = mymemory_code(guess_source(text, src))
+        d = mymemory_code(dest)
         pieces, cur = [], ""
         for w in re.split(r"(\s+)", text):
             if len(cur) + len(w) > MYMEMORY_MAX and cur:
@@ -283,7 +347,7 @@ class Engines:
         for i, p in enumerate(pieces):
             if not p.strip():
                 res.append(p); continue
-            res.append(MyMemoryTranslator(source=s, target=dest).translate(p) or "")
+            res.append(MyMemoryTranslator(source=s, target=d).translate(p) or "")
             if i + 1 < len(pieces):
                 time.sleep(random.uniform(*DELAY))
         return " ".join(x.strip() for x in res)
@@ -331,9 +395,8 @@ def verify_lang(text, dest):
     try:
         from langdetect import detect
         got = detect(text[:2000]).lower()
-        d = dest.lower()
-        ok = got == d or got.split("-")[0] == d.split("-")[0]
-        return ok, got
+        # Compare language families (zh-CN≈zh-cn, pt-BR≈pt, iw≈he, tl≈fil, nb≈no), not raw strings.
+        return lang_family(got) == lang_family(dest), got
     except Exception as e:
         return True, "unverified:%s" % e
 

@@ -109,6 +109,10 @@ class EbookTranslateToolTest {
         assertTrue(maxes, a <= 4000 && b <= 4000 && c < 5000)
         assertEquals("4000 0.3 4 5.0 10.0 500 10", py("print(m.CHUNK, m.DELAY[0], m.BATCH_CHAPTERS, *m.BATCH_PAUSE, m.MYMEMORY_MAX, m.BACKOFF_429[0])"))
         assertTrue(py("print(m.USER_AGENT)").startsWith("Mozilla/5.0"))
+        // Language codes: families match across engines/langdetect (zh-CN≈zh-cn, pt-BR≈pt, iw≈he, tl≈fil, nb≈no).
+        assertEquals("zh-cn zh-tw pt he fil no fr", py("print(*[m.lang_family(c) for c in ['zh-CN','zh-TW','pt-BR','iw','tl','nb','fr']])"))
+        // MyMemory must never get a hard-coded English source or a bare target again.
+        assertFalse(EbookTranslatePy.SOURCE.contains("s = \"en-GB\" if src"))
         // Plain-text fallback: a "mobi" that the reader cannot open still yields text.
         val fake = File(base, "broken.mobi").apply { writeText("<html><body><h1>Chapter 1</h1><p>" + "Il était une fois un roi. ".repeat(30) + "</p></body></html>") }
         assertTrue(py("print(len(m.extract(m.Path('${fake.path}'), 'mobi')) > 0, bool(m.FALLBACK_USED))") == "True True")
