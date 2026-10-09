@@ -173,6 +173,16 @@ private fun TermuxSetupCard(t: TermuxSetup, onInstall: () -> Unit, onGrant: () -
                 }
                 com.farrow.app.ui.components.CopyButton(com.farrow.app.data.termux.TermuxManager.ALLOW_EXTERNAL_APPS_CMD)
             }
+            SetupLine("4. Storage access for Termux (optional)", t.storage == true) {}
+            if (t.answering == true && t.storage != true) {
+                Text("For selenium_* and your scrapers to save into Documents/Farrow/Output, run this once in Termux and allow storage:",
+                    style = MaterialTheme.typography.bodySmall)
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+                    Text("termux-setup-storage", fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+                }
+                com.farrow.app.ui.components.CopyButton("termux-setup-storage")
+            }
         }
     }
 }

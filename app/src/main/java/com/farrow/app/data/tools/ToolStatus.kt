@@ -25,6 +25,10 @@ data class ToolStatus(val ready: Boolean, val text: String) {
                 "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku, accessibility & Git)")
                 else -> READY // public market data / backtest
             }
+            name.startsWith("selenium_") || name == "termux_python" ->
+                if (env.termuxReady) ToolStatus(true, "Ready if chromium-selenium is installed (Available to install)" +
+                    if (name == "termux_python") "" else "; saving files needs termux-setup-storage in Termux")
+                else ToolStatus(false, "Needs Termux + the chromium-selenium add-on (Settings > Tools)")
             name == "termux_run" -> if (env.termuxReady) ToolStatus(true, "Ready if allow-external-apps is on in Termux")
                 else ToolStatus(false, "Needs Termux and the Run commands permission (Settings > Tools > Termux)")
             name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku, accessibility & Git)")

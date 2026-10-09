@@ -371,6 +371,13 @@ class AgentLoop internal constructor(
               controlling OTHER Android apps on the phone's display.
             - Device: run_shell (Shizuku, adb shell user), termux_run (bash in Termux with the packages the user installed,
               e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Git: git_*.
+            - Headless Chromium (inside Termux, needs the chromium-selenium add-on): selenium_open (title, visible text,
+              links), selenium_page_source (rendered HTML), selenium_screenshot (PNG to Documents/Farrow/Output). Slower than
+              web_search/web_fetch — use it only for JavaScript-rendered pages or when web_fetch is blocked. Each call is a
+              fresh browser (no login, no session). For repeatable or multi-page scraping write your own Python scraper in the
+              private workspace (e.g. scrapers/name.py; `from farrow_selenium import make_driver` gives a headless driver,
+              always call driver.quit()) and run it with termux_python; save scraped data to os.environ["FARROW_OUTPUT"].
+              Keep scraper scripts in the private workspace, not in Documents/Farrow.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
               /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
               you and save deliverables (reports, exports, generated files) in Output/. Paths are relative to that folder;

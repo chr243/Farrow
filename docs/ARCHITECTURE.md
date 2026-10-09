@@ -98,6 +98,7 @@ com.farrow.app
 |---|---|
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
 | `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
+| `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/FarrowSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
 | `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
@@ -346,5 +347,15 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   `workspace_read` (offset/max_bytes, binary detection), `workspace_write` (overwrite/append/create, directory=true) and
   `workspace_delete` (recursive=true for non-empty folders, root refused, Input/Output recreated) go through
   `SharedFolderSandbox`. `read_file`/`write_file`/`list_dir` stay the private `filesDir/workspace` scratch area.
+- **Headless Chromium + Selenium in Termux.** New "Available to install" entry `chromium-selenium` (custom install:
+  `x11-repo tur-repo`, `python python-pip chromium` [+ `chromedriver` if not bundled], `pip install -U selenium`; detected by
+  chromium + chromedriver + `import selenium`). `TermuxPackage` gained `detect`/`install`; the detect query also reports
+  whether Termux can write shared storage (Termux card step 4: `termux-setup-storage`). Before each call Farrow writes the
+  helper `~/.farrow/farrow_selenium.py` (base64 over RUN_COMMAND): `make_driver()` (headless=new, no-sandbox, en-US) and a CLI
+  (`open`/`source`/`shot`) printing one `FARROW_JSON=` line. Tools: `selenium_open`, `selenium_page_source`,
+  `selenium_screenshot` (fresh browser per call; `save_as` only inside Documents/Farrow, written by Termux) and
+  `termux_python` (script from the private workspace — scrapers never live in Documents — shipped to `$TMPDIR`, run in
+  `~/farrow-work` with `FARROW_OUTPUT`/`FARROW_INPUT` and the helper on `PYTHONPATH`, max 600 s). Verified end to end on the
+  build box with headless Chrome (`SeleniumToolsTest.localBashEndToEnd`, opt-in via `FARROW_LOCAL_BASH=1`).
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

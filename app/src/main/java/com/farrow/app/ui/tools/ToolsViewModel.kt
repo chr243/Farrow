@@ -29,7 +29,13 @@ enum class PkgState { UNKNOWN, INSTALLED, NOT_INSTALLED, INSTALLING, FAILED }
 data class PkgRow(val pkg: TermuxPackage, val state: PkgState, val detail: String? = null)
 
 /** Termux setup as seen from the app (allow-external-apps can only be observed by a command answering). */
-data class TermuxSetup(val installed: Boolean = false, val permission: Boolean = false, val answering: Boolean? = null)
+data class TermuxSetup(
+    val installed: Boolean = false,
+    val permission: Boolean = false,
+    val answering: Boolean? = null,
+    /** Termux can write shared storage (termux-setup-storage), needed for selenium_* / scrapers saving to Documents/Farrow. */
+    val storage: Boolean? = null,
+)
 
 /** Documents/Farrow as seen from the app: All files access granted and the folders present. */
 data class StorageSetup(val access: Boolean = false, val exists: Boolean = false)
@@ -99,7 +105,8 @@ class ToolsViewModel @Inject constructor(
         if (!t.permission) return setNote("Grant the Run commands in Termux permission (Termux card above) first.")
         val r = termux.runAndWait(TermuxPackages.detectQuery(), "pkgs-${System.nanoTime()}", 10_000, label = "Farrow status")
         val found = r?.let { TermuxPackages.parseDetect(it.stdout) }
-        _state.update { it.copy(termux = it.termux.copy(answering = found != null)) }
+        val storage = r?.let { TermuxPackages.parseKeys(it.stdout)["STORAGE"] == "1" }
+        _state.update { it.copy(termux = it.termux.copy(answering = found != null, storage = storage)) }
         if (found == null) return setNote("Termux did not answer — paste the allow-external-apps command (Termux card above) into Termux once.")
         _state.update { s ->
             s.copy(packagesNote = null, packages = s.packages.map { row ->

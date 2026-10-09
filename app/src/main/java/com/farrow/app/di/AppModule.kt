@@ -125,6 +125,9 @@ object AppModule {
             // Shizuku shell, Termux (RUN_COMMAND), JGit, Accessibility
             listOf(
                 RunShellTool(shell, sandbox), TermuxRunTool(termux),
+                // Headless Chromium + Selenium inside Termux, and the agent's own Python scrapers (scripts stay in filesDir/workspace)
+                SeleniumOpenTool(termux, sharedFolder), SeleniumPageSourceTool(termux, sharedFolder),
+                SeleniumScreenshotTool(termux, sharedFolder), TermuxPythonTool(termux, sandbox),
                 GitStatusTool(git), GitCommitTool(git), GitCloneTool(git), GitPushTool(git),
                 ScreenReadTool(), ScreenTapTool(), ScreenSwipeTool(), ScreenTypeTool(), ScreenGlobalActionTool(),
                 // v0.9.16: persistent memory

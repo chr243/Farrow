@@ -1,7 +1,15 @@
 package com.farrow.app.data.tools
 
 /** Optional Termux packages the agent can use through the termux_run tool (installed with pkg in the background). */
-data class TermuxPackage(val pkg: String, val binary: String, val description: String)
+data class TermuxPackage(
+    val pkg: String,
+    val binary: String,
+    val description: String,
+    /** Shell test that succeeds when installed (default: [binary] on PATH). */
+    val detect: String = "command -v $binary >/dev/null 2>&1",
+    /** Custom install commands (run after [TermuxPackages.aptPrelude]); null = `apt-get install <pkg>`. */
+    val install: String? = null,
+)
 
 object TermuxPackages {
     val ALL = listOf(
@@ -13,12 +21,32 @@ object TermuxPackages {
         TermuxPackage("jq", "jq", "Filter and transform JSON on the command line"),
         TermuxPackage("curl", "curl", "HTTP requests and downloads from the command line"),
         TermuxPackage("pandoc", "pandoc", "Convert documents (Markdown, HTML, DOCX, …)"),
+        SELENIUM,
     )
 
-    /** Background query: P_<pkg>=1/0 per package, then PROBE=ok. */
+    /** Headless Chromium + chromedriver (TUR via x11-repo/tur-repo) and Python Selenium, for selenium_* and termux_python. */
+    val SELENIUM: TermuxPackage get() = TermuxPackage(
+        pkg = "chromium-selenium",
+        binary = "chromedriver",
+        description = "Headless Chromium + Selenium (Python) for selenium_* tools and your own scrapers (large, ~300 MB)",
+        detect = "{ command -v chromium-browser >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1; } && " +
+            "command -v chromedriver >/dev/null 2>&1 && python3 -c 'import selenium' >/dev/null 2>&1",
+        install = listOf(
+            "${'$'}APT install x11-repo tur-repo 2>&1 | tail -n 5",
+            "(apt-get update -q >/dev/null 2>&1 || true)",
+            "${'$'}APT install python python-pip chromium 2>&1 | tail -n 10",
+            "command -v chromedriver >/dev/null 2>&1 || ${'$'}APT install chromedriver 2>&1 | tail -n 5",
+            "pip install -U selenium 2>&1 | tail -n 5",
+        ).joinToString("\n"),
+    )
+
+    /** Shared storage written by Termux scrapers (needs `termux-setup-storage` once inside Termux). */
+    const val STORAGE_PROBE_DIR = "/storage/emulated/0/Documents"
+
+    /** Background query: P_<pkg>=1/0 per package, STORAGE=1/0 (Termux can write shared storage), then PROBE=ok. */
     fun detectQuery(list: List<TermuxPackage> = ALL): String =
-        list.joinToString(" ") { "if command -v ${it.binary} >/dev/null 2>&1; then echo P_${key(it.pkg)}=1; else echo P_${key(it.pkg)}=0; fi;" } +
-            " echo PROBE=ok"
+        list.joinToString(" ") { "if ${it.detect}; then echo P_${key(it.pkg)}=1; else echo P_${key(it.pkg)}=0; fi;" } +
+            " if [ -w $STORAGE_PROBE_DIR ]; then echo STORAGE=1; else echo STORAGE=0; fi; echo PROBE=ok"
 
     fun parseDetect(stdout: String, list: List<TermuxPackage> = ALL): Map<String, Boolean>? {
         val k = parseKeys(stdout)
@@ -34,8 +62,8 @@ object TermuxPackages {
     /** Background install (no Termux window): waits for other apt runs, installs, prints INSTALLED=1/0 and RESULT=<exit>. */
     fun installScript(p: TermuxPackage): String = aptPrelude() + "\n" +
         "farrow_wait_apt >/dev/null 2>&1 || true\n(apt-get update -q >/dev/null 2>&1 || true)\n" +
-        "${'$'}APT install ${p.pkg} 2>&1 | tail -n 20; rc=${'$'}{PIPESTATUS[0]}\n" +
-        "command -v ${p.binary} >/dev/null 2>&1 && echo INSTALLED=1 || echo INSTALLED=0\necho RESULT=${'$'}rc"
+        (p.install?.let { "$it\nrc=${'$'}?\n" } ?: "${'$'}APT install ${p.pkg} 2>&1 | tail -n 20; rc=${'$'}{PIPESTATUS[0]}\n") +
+        "if ${p.detect}; then echo INSTALLED=1; else echo INSTALLED=0; fi\necho RESULT=${'$'}rc"
 
     /** Non-interactive apt + a helper that waits (≤ [maxSeconds]) for other apt/dpkg runs, then repairs dpkg. */
     fun aptPrelude(maxSeconds: Int = 120): String = """
