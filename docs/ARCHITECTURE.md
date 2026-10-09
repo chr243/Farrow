@@ -99,6 +99,7 @@ com.farrow.app
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
 | `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
 | `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/FarrowSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
+| `skill_list`, `skill_get`, `skill_save`, `skill_edit`, `skill_delete` | Agent-writable skills in `files/skills/<id>/SKILL.md` (`data/skills/SkillStore`); enabled ones injected into the system prompt |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
 | `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
@@ -357,5 +358,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   `termux_python` (script from the private workspace — scrapers never live in Documents — shipped to `$TMPDIR`, run in
   `~/farrow-work` with `FARROW_OUTPUT`/`FARROW_INPUT` and the helper on `PYTHONPATH`, max 600 s). Verified end to end on the
   build box with headless Chrome (`SeleniumToolsTest.localBashEndToEnd`, opt-in via `FARROW_LOCAL_BASH=1`).
+- **Skills.** `data/skills/SkillStore` keeps agent-written procedures in app-internal `files/skills/<id>/SKILL.md`
+  (front matter `name`/`description`/`enabled` + Markdown body; id = slug of the name; max 100 skills, 20k chars each).
+  Tools `skill_save` (only after the user agrees), `skill_edit` (fields or unique find/replace), `skill_delete`,
+  `skill_list`, `skill_get`. `AgentLoop` appends `SkillStore.promptBlock()` (index of enabled skills + full text within
+  12k chars; the rest listed for `skill_get`) before the memory block; disabled skills are never sent. Settings → Agent
+  tools → Skills lists skills (tap to read), with an enable switch and Delete. The prompt tells the agent to offer saving
+  a reusable multi-step procedure as a skill.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.

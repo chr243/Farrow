@@ -41,6 +41,7 @@ object Routes {
     const val CHAT_HEADS = "settings/chatheads"
     const val KEEP_ALIVE = "settings/keepalive"
     const val TOOLS = "settings/tools"
+    const val SKILLS = "settings/skills"
     const val THEME = "settings/theme"
     const val ARCHIVE = "settings/archive"
     const val MEMORY = "settings/memory?chat={chat}"
@@ -112,6 +113,7 @@ fun FarrowRoot(
             composable(Routes.KEEP_ALIVE) { KeepAliveScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MCP) { com.farrow.app.ui.tools.McpServersScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.TOOLS) { com.farrow.app.ui.tools.ToolsScreen(onBack = { nav.popBackStack() }) }
+            composable(Routes.SKILLS) { com.farrow.app.ui.skills.SkillsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MEMORY, arguments = listOf(navArgument("chat") { type = NavType.LongType; defaultValue = -1L })) {
                 com.farrow.app.ui.memory.MemoryScreen(onBack = { nav.popBackStack() })
             }

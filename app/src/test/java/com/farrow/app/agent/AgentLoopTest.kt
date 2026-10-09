@@ -184,6 +184,26 @@ class AgentLoopTest {
         assertTrue(sent[0][0].content!!.contains("[#1] The user is called Chris."))
     }
 
+    @Test fun `enabled skills are appended to the system prompt and the prompt offers to save skills`() = runTest {
+        val dir = java.nio.file.Files.createTempDirectory("skills").toFile()
+        val store = com.farrow.app.data.skills.SkillStore(dir)
+        store.save("Weekly report", "Build the weekly report", "1. Fetch prices\n2. Chart them")
+        val off = store.save("Old way", "", "SECRET-OLD-STEPS")
+        store.setEnabled(off.id, false)
+        val tasks = FakeTasks()
+        val sent = mutableListOf<List<ApiMessage>>()
+        val loop = AgentLoop(tasks, FakeSettings(5), ToolRegistry(emptyList()), FakeNotifications(),
+            model = { m: List<ApiMessage>, _: JsonArray?, _: Long, _: suspend (String) -> Unit -> sent += m; reply("ok") },
+            summarize = { _, _, _ -> }, notifyOnFinish = { false }, systemNotify = { _, _, _ -> },
+            skillsPrompt = { store.promptBlock() })
+        loop.run(1)
+        val sys = sent[0][0].content!!
+        assertTrue(sys.contains("## Saved skills") && sys.contains("2. Chart them"))
+        assertFalse(sys.contains("SECRET-OLD-STEPS") || sys.contains("old-way"))
+        assertTrue(AgentLoop.systemPrompt().contains("offer to save it as a") && AgentLoop.systemPrompt().contains("skill_save"))
+        dir.deleteRecursively()
+    }
+
     @Test fun `max steps posts a system message and pauses`() = runTest {
         val h = Harness(listOf(reply(null, listOf(ParsedToolCall("c", "boom", "{}")), finish = "tool_calls")), maxSteps = 3)
         assertEquals(RunResult.Stopped, h.loop.run(1))

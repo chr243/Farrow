@@ -100,8 +100,13 @@ object AppModule {
     @Provides @Singleton
     fun provideSharedFolder(): com.farrow.app.data.storage.SharedFolder = com.farrow.app.data.storage.SharedFolder.android()
 
+    /** Agent-writable skills: files/skills/<id>/SKILL.md (app-internal, not Documents). */
+    @Provides @Singleton
+    fun provideSkillStore(@ApplicationContext context: Context) = com.farrow.app.data.skills.SkillStore(File(context.filesDir, "skills"))
+
     @Provides @Singleton
     fun provideToolRegistry(
+        skills: com.farrow.app.data.skills.SkillStore,
         sandbox: WorkspaceSandbox,
         sharedFolder: com.farrow.app.data.storage.SharedFolder,
         shell: ShellExecutor,
@@ -132,6 +137,8 @@ object AppModule {
                 ScreenReadTool(), ScreenTapTool(), ScreenSwipeTool(), ScreenTypeTool(), ScreenGlobalActionTool(),
                 // v0.9.16: persistent memory
                 MemorySaveTool(memory), MemorySearchTool(memory), MemoryDeleteTool(memory),
+                // Agent-writable skills (reusable procedures; enabled ones are injected into the system prompt)
+                SkillListTool(skills), SkillGetTool(skills), SkillSaveTool(skills), SkillEditTool(skills), SkillDeleteTool(skills),
                 // v1.0.12: native charts in the chat (+ PNG export for sharing)
                 ChartTool(File(context.filesDir, "charts"), com.farrow.app.ui.chart.AndroidChartPng()),
             ) +

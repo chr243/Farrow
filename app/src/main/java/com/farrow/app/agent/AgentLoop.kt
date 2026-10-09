@@ -46,6 +46,8 @@ class AgentLoop internal constructor(
     private val systemNotify: (taskId: Long, title: String, body: String) -> Unit,
     /** v0.9.16: persistent memory block (instructions + up to ~20 memories, ~1.5k tokens). */
     private val memoryPrompt: suspend (taskId: Long) -> String = { "" },
+    /** Enabled skills: index + full text (disabled skills are never sent). */
+    private val skillsPrompt: suspend () -> String = { "" },
 ) {
     @Inject constructor(
         tasks: TaskRepository,
@@ -57,6 +59,7 @@ class AgentLoop internal constructor(
         prefs: com.farrow.app.data.prefs.AppPrefs,
         alerts: com.farrow.app.data.notify.AlertNotifier,
         memory: com.farrow.app.data.memory.MemoryRepository,
+        skills: com.farrow.app.data.skills.SkillStore,
     ) : this(
         tasks, settings, registry, notifications,
         model = { m, t, id, st -> client.complete(m, t, id, st) },
@@ -64,9 +67,12 @@ class AgentLoop internal constructor(
         notifyOnFinish = { prefs.notifyOnFinish.value },
         systemNotify = { id, title, body -> alerts.notify(FINISH_NOTIFICATION_BASE + (id % 10_000).toInt(), title, body, id) },
         memoryPrompt = { id -> try { memory.promptBlock(id) } catch (e: Exception) { "" } },
+        skillsPrompt = { try { skills.promptBlock() } catch (e: Exception) { "" } },
     )
 
-    private suspend fun fullSystemPrompt(taskId: Long): String = systemPrompt() + memoryPrompt(taskId).let { if (it.isBlank()) "" else "\n\n" + com.farrow.app.data.network.MemoryRedaction.wrap(it) }
+    private suspend fun fullSystemPrompt(taskId: Long): String = systemPrompt() +
+        skillsPrompt().let { if (it.isBlank()) "" else "\n\n" + it } +
+        memoryPrompt(taskId).let { if (it.isBlank()) "" else "\n\n" + com.farrow.app.data.network.MemoryRedaction.wrap(it) }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
@@ -378,6 +384,10 @@ class AgentLoop internal constructor(
               private workspace (e.g. scrapers/name.py; `from farrow_selenium import make_driver` gives a headless driver,
               always call driver.quit()) and run it with termux_python; save scraped data to os.environ["FARROW_OUTPUT"].
               Keep scraper scripts in the private workspace, not in Documents/Farrow.
+            - Skills: skill_list, skill_get, skill_save, skill_edit, skill_delete. Enabled skills appear below under "Saved
+              skills"; follow one when the task matches it, and load any listed-only skill with skill_get. When you and the
+              user work out a reusable multi-step procedure (something they will likely ask again), offer to save it as a
+              skill and call skill_save only after they agree; update it with skill_edit when the procedure changes.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
               /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
               you and save deliverables (reports, exports, generated files) in Output/. Paths are relative to that folder;

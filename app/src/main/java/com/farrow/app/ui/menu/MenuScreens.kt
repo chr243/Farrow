@@ -78,6 +78,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
             ))
             SettingsGroup("Agent tools", listOf(
                 item("Tools", "Built-in agent tools (status, on/off), Documents/Farrow folder access, Termux setup and add-ons", Routes.TOOLS),
+                item("Skills", "Procedures the agent saved: enable/disable (only enabled ones go into the prompt), view, delete", Routes.SKILLS),
                 item("MCP servers", "Remote MCP servers, their status and per-tool switches", Routes.MCP),
             ))
             SettingsGroup("Phone", listOf(
