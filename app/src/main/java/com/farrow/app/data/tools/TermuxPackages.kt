@@ -41,16 +41,16 @@ object TermuxPackages {
         ).joinToString("\n"),
     )
 
-    /** Python stack for ebook_translate: deep-translator, mobi, ebooklib, pymupdf, python-docx, langdetect. */
+    /** Python stack for ebook_translate: googletrans>=4.0.2, deep-translator (MyMemory), mobi, ebooklib, python-docx, langdetect + poppler. */
     val EBOOK_TRANSLATE: TermuxPackage get() = TermuxPackage(
         pkg = "ebook-translate",
         binary = "python3",
-        description = "Ebook/document translation (MOBI/EPUB/PDF/DOCX) for ebook_translate — pip: deep-translator, mobi, ebooklib, pymupdf, python-docx, langdetect",
-        detect = "python3 -c 'import deep_translator,ebooklib,docx,langdetect,fitz,mobi' >/dev/null 2>&1 && " +
+        description = "Ebook/document translation (MOBI/EPUB/PDF/DOCX) for ebook_translate — pip: googletrans>=4.0.2, deep-translator, mobi, ebooklib, python-docx, langdetect; apt: poppler (installed automatically on first use too)",
+        detect = "python3 -c 'import googletrans,deep_translator,ebooklib,docx,langdetect,mobi' >/dev/null 2>&1 && " +
             "[ -s '${com.farrow.app.data.ebook.EbookTranslatePy.FILE}' ]",
         install = listOf(
-            "${'$'}APT install python python-pip 2>&1 | tail -n 5",
-            "pip install -U deep-translator mobi ebooklib pymupdf python-docx langdetect 2>&1 | tail -n 15",
+            "${'$'}APT install python python-pip poppler 2>&1 | tail -n 5",
+            "pip install -U ${com.farrow.app.data.ebook.EbookTranslatePy.PIP_CORE} mobi ebooklib python-docx 2>&1 | tail -n 15",
             // Deploy the translator script too (ebook_translate also rewrites it before every run).
             com.farrow.app.data.ebook.EbookTranslatePy.installCommand(),
         ).joinToString("\n"),

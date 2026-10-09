@@ -18,9 +18,11 @@ class EbookTranslateTool(
 
     override val name = "ebook_translate"
     override val description = "Translate an ebook or document with Termux Python (MOBI preferred, also EPUB/PDF/DOCX/TXT). " +
-        "Chunked Google Translate with MyMemory fallback, language check, and resume if interrupted. " +
-        "input_path is under Documents/Farrow (e.g. Input/book.mobi). The result is always written under Output/. " +
-        "Needs the ebook-translate Termux add-on and termux-setup-storage. Timeout default 3600 s (max 7200)."
+        "googletrans (browser User-Agent) in <=4000-char chunks, ~0.3 s between requests, backoff on Too many requests, a 5-10 s pause every 4 chapters, " +
+        "MyMemory fallback, language check, resume if interrupted. input_path is under Documents/Farrow (e.g. Input/book.mobi); " +
+        "the result is always written under Output/. TWO STEPS: call first WITHOUT confirmed → returns chapters, chunks and an " +
+        "estimated time (installs the Python packages on first use). Tell the user the ETA and ask them to confirm; only after " +
+        "they agree call again with confirmed=true (pass suggested_timeout_seconds as timeout_seconds). Needs Termux + termux-setup-storage."
     override val parameters = schema(listOf("input_path", "dest_lang"),
         "input_path" to prop("string", "Path relative to Documents/Farrow, e.g. Input/novel.mobi"),
         "src_lang" to prop("string", "Source language code (default auto)"),
@@ -28,7 +30,9 @@ class EbookTranslateTool(
         "output_name" to prop("string", "Optional file name under Output/ (default: <stem>.<dest>.txt or .docx)"),
         "format" to prop("string", "Force format: mobi, epub, pdf, docx, txt"),
         "resume" to prop("boolean", "Resume a previous run if a state file exists (default true)"),
-        "timeout_seconds" to prop("integer", "Timeout in seconds (default 3600, max 7200)"))
+        "confirmed" to prop("boolean", "false/omitted = estimate only; true = the user confirmed the ETA, translate now"),
+        "timeout_seconds" to prop("integer", "Max seconds for the translation (default 7200 = max; returns as soon as it finishes). " +
+            "If the book needs longer, re-run with resume=true to continue"))
 
     override suspend fun execute(args: JsonObject): String {
         if (!termux.isInstalled()) return errorJson("Termux is not installed. Set it up in Settings > Tools.")
@@ -47,7 +51,8 @@ class EbookTranslateTool(
             .let { if (it.startsWith("Output/")) it else "Output/$it" }
         val output = try { sandbox.resolve(outRel) } catch (e: SecurityException) { return errorJson(e.message ?: "Path not allowed") }
         if (output == sandbox.root || sandbox.relativePath(output) == "Output") return errorJson("output_name must be a file under Output/")
-        val timeout = (args.int("timeout_seconds") ?: 3600).coerceIn(60, 7200)
+        val confirmed = args.bool("confirmed") == true
+        val timeout = (args.int("timeout_seconds") ?: MAX_TIMEOUT).coerceIn(60, MAX_TIMEOUT)
         val resume = args.bool("resume") != false
         val fmt = args.str("format")?.trim()?.lowercase()
         val absIn = "${SharedFolder.DISPLAY_PATH}/${sandbox.relativePath(input)}"
@@ -57,14 +62,19 @@ class EbookTranslateTool(
             add("--output"); add(absOut)
             if (fmt != null) { add("--format"); add(fmt) }
             if (!resume) add("--no-resume")
+            if (!confirmed) add("--estimate")
         }
+        val setupFmt = fmt ?: FORMATS[input.extension.lowercase()]
         val storageGuard = "mkdir -p ${TermuxRunTool.shellQuote(File(absOut).parent)} 2>/dev/null; " +
             "if [ ! -w ${TermuxRunTool.shellQuote(SharedFolder.DISPLAY_PATH + "/Output")} ]; then " +
             "echo '${EbookTranslatePy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Farrow/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
-        val cmd = EbookTranslatePy.installCommand() + "\n" + storageGuard +
-            "timeout -k 30 $timeout python3 " + cli.joinToString(" ") { TermuxRunTool.shellQuote(it) }
-        val r = termux.runAndWait(cmd, "ebook-${System.nanoTime()}", (timeout + 45) * 1_000L, label = "Farrow: ebook_translate")
-            ?: return errorJson("Termux did not answer within ${timeout + 45} s. Check allow-external-apps / Set up Termux.")
+        val python = "python3 " + cli.joinToString(" ") { TermuxRunTool.shellQuote(it) }
+        val cmd = EbookTranslatePy.installCommand() + "\n" + EbookTranslatePy.setupCommand(setupFmt) + "\n" + storageGuard +
+            TermuxRunTool.capped(python, if (confirmed) timeout else ESTIMATE_TIMEOUT, grace = 30)
+        // Setup (first run: apt + pip, each capped at 900 s) happens before the capped python step.
+        val wait = (if (confirmed) timeout + 300 else ESTIMATE_TIMEOUT + SETUP_ALLOWANCE) + 45
+        val r = termux.runAndWait(cmd, "ebook-${System.nanoTime()}", wait * 1_000L, label = "Farrow: ebook_translate")
+            ?: return errorJson("Termux did not answer within $wait s. Check allow-external-apps / Set up Termux.")
         val line = r.stdout.lineSequence().lastOrNull { it.startsWith(EbookTranslatePy.MARKER) }
         if (line == null) {
             val hint = when {
@@ -79,10 +89,46 @@ class EbookTranslateTool(
                 put("stderr", r.stderr.takeLast(3_000)); put("stdout", r.stdout.takeLast(2_000))
             }.toString()
         }
-        return line.removePrefix(EbookTranslatePy.MARKER)
+        val json = line.removePrefix(EbookTranslatePy.MARKER)
+        if (confirmed) return json
+        val o = runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull() ?: return json
+        if (o["ok"]?.jsonPrimitive?.booleanOrNull != true) return json
+        return withConfirmation(o).toString()
     }
 
-    private companion object {
+    /** Adds the human ETA, a suggested timeout and the "ask the user first" instruction to the --estimate result. */
+    internal fun withConfirmation(o: JsonObject): JsonObject {
+        val mid = o["eta_seconds"]?.jsonPrimitive?.longOrNull ?: 0
+        val lo = o["eta_min_seconds"]?.jsonPrimitive?.longOrNull ?: mid
+        val hi = o["eta_max_seconds"]?.jsonPrimitive?.longOrNull ?: mid
+        val suggested = (hi * 5 / 4 + 120).coerceIn(300, MAX_TIMEOUT.toLong())
+        val runs = ((hi * 5 / 4 + 120 + MAX_TIMEOUT - 1) / MAX_TIMEOUT).coerceAtLeast(1)
+        return buildJsonObject {
+            o.forEach { (k, v) -> put(k, v) }
+            put("needs_confirmation", true)
+            put("eta", "${formatDuration(mid)} (range ${formatDuration(lo)}–${formatDuration(hi)})")
+            put("suggested_timeout_seconds", suggested)
+            put("message", "Nothing translated yet. Tell the user: ${o["chapters"]} chapters, ${o["remaining"]} chunks to translate" +
+                (if ((o["done"]?.jsonPrimitive?.intOrNull ?: 0) > 0) " (resuming after ${o["done"]} done)" else "") +
+                ", estimated ${formatDuration(mid)} (${formatDuration(lo)}–${formatDuration(hi)}) because of the rate-limit pauses; " +
+                (if (runs > 1) "that is longer than one run (2 h max), so it will need about $runs runs with resume=true; " else "") +
+                "the chat will wait while it runs. Ask them to confirm, then call ebook_translate again with the same " +
+                "arguments plus confirmed=true and timeout_seconds=$suggested.")
+        }
+    }
+
+    internal companion object {
         val LANG = Regex("^[A-Za-z]{2,3}(-[A-Za-z]{2,4})?$")
+        const val MAX_TIMEOUT = 7200
+        const val ESTIMATE_TIMEOUT = 300
+        const val SETUP_ALLOWANCE = 1900
+        val FORMATS = mapOf("mobi" to "mobi", "azw" to "mobi", "azw3" to "mobi", "epub" to "epub", "pdf" to "pdf",
+            "docx" to "docx", "txt" to "txt", "md" to "txt", "markdown" to "txt")
+
+        fun formatDuration(s: Long): String = when {
+            s < 60 -> "${s}s"
+            s < 3600 -> "${(s + 30) / 60} min"
+            else -> "${s / 3600} h ${(s % 3600 + 30) / 60} min"
+        }
     }
 }
