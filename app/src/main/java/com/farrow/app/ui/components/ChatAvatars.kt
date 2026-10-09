@@ -26,21 +26,24 @@ import com.farrow.app.domain.model.TaskType
  * Pure logic here, unit-tested; [TaskAvatar] (Task overload) draws it.
  */
 object ChatAvatarStyle {
-    /** One tonal pair per theme: container background + on-container text (letters). Material 3 tone ~90/10 and ~30/90. */
+    /**
+     * One pair per theme: circle background + letter color. v1.0.23: circles are mid-tone (light theme, ≥2:1 against the
+     * light surface) and brighter (dark theme, ≥2.6:1 against the dark surface) so they stand out; letters stay ≥4.5:1.
+     */
     data class Tone(val light: Long, val onLight: Long, val dark: Long, val onDark: Long)
 
     val PALETTE = listOf(
-        Tone(0xFFD3E3FD, 0xFF0B2E6B, 0xFF27406B, 0xFFD3E3FD), // blue
-        Tone(0xFFC4EEE6, 0xFF00382F, 0xFF1F4C45, 0xFFB8EFE4), // teal
-        Tone(0xFFD3EDC8, 0xFF173A0E, 0xFF2E4A26, 0xFFCDEBC0), // green
-        Tone(0xFFE6EBB8, 0xFF2E3300, 0xFF464B1F, 0xFFE3E8B2), // olive
-        Tone(0xFFFCE3B0, 0xFF3F2A00, 0xFF5A4317, 0xFFFCE0A8), // amber
-        Tone(0xFFFFDCC6, 0xFF4A1F00, 0xFF63391F, 0xFFFFD7BF), // orange
-        Tone(0xFFFFD9DE, 0xFF4D0E1D, 0xFF66303A, 0xFFFFD6DC), // rose
-        Tone(0xFFF8D8F0, 0xFF431339, 0xFF5C2E52, 0xFFF7D4EE), // pink
-        Tone(0xFFE6DCFF, 0xFF2A1260, 0xFF45386B, 0xFFE3D9FF), // purple
-        Tone(0xFFDCE1F0, 0xFF1C2433, 0xFF3A4253, 0xFFD9DFEE), // slate
-        Tone(0xFFCDE9F6, 0xFF003549, 0xFF234A5C, 0xFFC6E7F5), // cyan
+        Tone(0xFF99B6E6, 0xFF0B2E6B, 0xFF2958A3, 0xFFD3E3FD), // blue
+        Tone(0xFF32C8AA, 0xFF00382F, 0xFF196657, 0xFFB8EFE4), // teal
+        Tone(0xFF59CC33, 0xFF173A0E, 0xFF2D6619, 0xFFCDEBC0), // green
+        Tone(0xFFB0BC2F, 0xFF2E3300, 0xFF585E17, 0xFFE3E8B2), // olive
+        Tone(0xFFD5B058, 0xFF3F2A00, 0xFF6E551C, 0xFFFCE0A8), // amber
+        Tone(0xFFE0A985, 0xFF4A1F00, 0xFF874A22, 0xFFFFD7BF), // orange
+        Tone(0xFFE8A1AD, 0xFF4D0E1D, 0xFFA3293D, 0xFFFFD6DC), // rose
+        Tone(0xFFE79DD0, 0xFF431339, 0xFF9B2778, 0xFFF7D4EE), // pink
+        Tone(0xFFBDA9EA, 0xFF2A1260, 0xFF6437CD, 0xFFE3D9FF), // purple
+        Tone(0xFFAAB5CF, 0xFF1C2433, 0xFF48587F, 0xFFD9DFEE), // slate
+        Tone(0xFF74BFDC, 0xFF003549, 0xFF1F607A, 0xFFC6E7F5), // cyan
     )
 
     /** Stable palette slot for a chat id (SplitMix64 finaliser, so neighbouring ids get different colors). */

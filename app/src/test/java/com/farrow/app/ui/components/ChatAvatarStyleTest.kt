@@ -24,10 +24,11 @@ class ChatAvatarStyleTest {
         }
         fun contrast(a: Long, b: Long) = (maxOf(lum(a), lum(b)) + 0.05) / (minOf(lum(a), lum(b)) + 0.05)
         ChatAvatarStyle.PALETTE.forEach { t ->
-            assertTrue("light $t", contrast(t.light, t.onLight) >= 7.0)
+            assertTrue("light $t", contrast(t.light, t.onLight) >= 4.5)
             assertTrue("dark $t", contrast(t.dark, t.onDark) >= 4.5)
-            assertTrue("light bg is soft", lum(t.light) > 0.55)
-            assertTrue("dark bg is deep", lum(t.dark) < 0.1)
+            // v1.0.23: circles stand out from the theme surface (light #FFFBFE / dark #141218).
+            assertTrue("light circle vs surface $t", contrast(t.light, 0xFFFFFBFE) >= 2.0)
+            assertTrue("dark circle vs surface $t", contrast(t.dark, 0xFF141218) >= 2.6)
         }
     }
 
