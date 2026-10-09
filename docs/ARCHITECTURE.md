@@ -449,3 +449,11 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   asks the user to confirm; `confirmed=true` runs it. Python packages install automatically on first use. Absolute
   /storage/emulated/0/Documents/Farrow paths.
 - **Chat avatars:** circles use only shades of the theme green, with a wide light/dark tone range.
+
+## v1.0.25
+
+- **Fix: ebook_translate language codes.** The user's code went unchanged to three engines with different formats:
+  MyMemory got a hard-coded `en-GB` source for `auto` and bare targets (`fr`) that it rejects, googletrans rejected
+  regional codes (`pt-BR`, `en-US`, `nb`), and the language check compared raw strings (`iw` vs `he`). Codes are now
+  normalised per engine (`google_code`, `mymemory_code`), `auto` sources are detected per chunk for MyMemory, and the
+  check compares language families.
