@@ -90,7 +90,7 @@ class SeleniumToolsTest {
         assertEquals("print(6*7)", File(base, "files/workspace/scrapers/s.py").readText())
         val cmd = t.commands.single()
         assertTrue(cmd.contains("FARROW_OUTPUT=${SharedFolder.DISPLAY_PATH}/Output"))
-        assertTrue(cmd.endsWith("python3 \"\${TMPDIR:-\$PREFIX/tmp}/farrow-scripts\"/s.py 'a b'"))
+        assertTrue(cmd, cmd.contains("timeout -k 5 300 python3 \"\${TMPDIR:-\$PREFIX/tmp}/farrow-scripts\"/s.py 'a b' </dev/null"))
         assertTrue(obj(TermuxPythonTool(t, sb).execute(buildJsonObject { put("path", "../x.py"); put("code", "1") })).containsKey("error"))
         assertTrue(obj(TermuxPythonTool(t, sb).execute(buildJsonObject { put("path", "x.sh"); put("code", "1") })).containsKey("error"))
     }

@@ -38,7 +38,8 @@ class TermuxRunToolTest {
         assertEquals("hi\n", o["stdout"]!!.jsonPrimitive.content)
         assertEquals("warn", o["stderr"]!!.jsonPrimitive.content)
         val (cmd, timeoutMs) = t.commands.single()
-        assertEquals("mkdir -p ~/farrow-work && cd ~/farrow-work && timeout -k 5 30 bash -lc 'echo '\\''hi'\\'''", cmd)
+        assertTrue(cmd, cmd.contains("timeout -k 5 30 bash -lc 'echo '\\''hi'\\''' </dev/null"))
+        assertTrue(cmd.startsWith("mkdir -p ~/farrow-work && cd ~/farrow-work"))
         assertEquals(45_000L, timeoutMs)
     }
 
@@ -75,5 +76,33 @@ class TermuxRunToolTest {
         val p = jobs.jobs.value["pandoc"]!!
         assertFalse(p.ok || p.running); assertTrue(p.detail!!.contains("Unable to locate package"))
         assertTrue(t.commands.first().first.contains("install jq"))
+    }
+    /** Like Termux: read stdout/stderr to EOF, then take the exit code. HOME → temp so ~/farrow-work is harmless. */
+    private fun runLikeTermux(script: String): Triple<String, String, Int> {
+        val home = java.nio.file.Files.createTempDirectory("tx").toFile()
+        val pb = ProcessBuilder("bash", "-c", script)
+        pb.environment()["HOME"] = home.path
+        val p = pb.start()
+        val err = StringBuilder()
+        val t = Thread { err.append(p.errorStream.bufferedReader().readText()) }.apply { start() }
+        val out = p.inputStream.bufferedReader().readText(); t.join()
+        val rc = p.waitFor(); home.deleteRecursively()
+        return Triple(out, err.toString(), rc)
+    }
+
+    /** v1.0.23 bug: a background job (or a daemon from the login profile) kept the pipes open → full-timeout waits. */
+    @Test fun `returns as soon as the command ends even if it leaves a background job holding the pipes`() {
+        val t0 = System.nanoTime()
+        val (out, err, rc) = runLikeTermux(TermuxRunTool.script("sleep 30 & echo hi; echo oops >&2", 20))
+        val secs = (System.nanoTime() - t0) / 1e9
+        assertTrue("took $secs s", secs < 8)
+        assertEquals("hi\n", out); assertEquals("oops\n", err); assertEquals(0, rc)
+        assertEquals(3, runLikeTermux(TermuxRunTool.script("exit 3", 20)).third)
+    }
+
+    @Test fun `timeout is still a hard cap with exit 124`() {
+        val t0 = System.nanoTime()
+        assertEquals(124, runLikeTermux(TermuxRunTool.script("sleep 30", 1)).third)
+        assertTrue((System.nanoTime() - t0) / 1e9 < 10)
     }
 }

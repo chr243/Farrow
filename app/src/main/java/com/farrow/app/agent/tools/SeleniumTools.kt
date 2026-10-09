@@ -36,7 +36,7 @@ abstract class TermuxSeleniumBase(protected val termux: TermuxRunner, protected 
         } ?: ""
         val cmd = FarrowSeleniumPy.installCommand() + "\n" + storageCheck +
             "cd ~/farrow-work 2>/dev/null || { mkdir -p ~/farrow-work && cd ~/farrow-work; }\n" +
-            "timeout -k 5 $timeoutS python3 ${FarrowSeleniumPy.FILE} " + cliArgs.joinToString(" ") { TermuxRunTool.shellQuote(it) }
+            TermuxRunTool.capped("python3 ${FarrowSeleniumPy.FILE} " + cliArgs.joinToString(" ") { TermuxRunTool.shellQuote(it) }, timeoutS)
         val r = termux.runAndWait(cmd, "sel-${System.nanoTime()}", (timeoutS + 20) * 1_000L, label = "Farrow: $name")
             ?: return errorJson("Termux did not answer within ${timeoutS + 20} s. Check allow-external-apps in Termux. $SETUP")
         val line = r.stdout.lineSequence().lastOrNull { it.startsWith(FarrowSeleniumPy.MARKER) }
@@ -181,7 +181,7 @@ class TermuxPythonTool(
                 "echo " + Base64.getEncoder().encodeToString(script) + " | base64 -d > $tmp/$safeName\n" +
                 "export FARROW_OUTPUT=${SharedFolder.DISPLAY_PATH}/Output FARROW_INPUT=${SharedFolder.DISPLAY_PATH}/Input " +
                 "PYTHONPATH=${FarrowSeleniumPy.DIR}${'$'}{PYTHONPATH:+:${'$'}PYTHONPATH}\n" +
-                "timeout -k 5 $timeoutS python3 $tmp/$safeName " + argv.joinToString(" ") { TermuxRunTool.shellQuote(it) }
+                TermuxRunTool.capped("python3 $tmp/$safeName " + argv.joinToString(" ") { TermuxRunTool.shellQuote(it) }, timeoutS)
         }
     }
 }
