@@ -121,7 +121,7 @@ installing. Either way the tool returns `{"ok":false,"needs_install_confirmation
 are not gated. Best effort: obfuscated installs can slip past the scanner; the system prompt rule still forbids them.
 
 ### Context management
-Tokens are estimated as chars/4. When the live history goes over 60% of the context budget (default 16K tokens, configurable), the oldest turns are summarized with the same model priority list. The summary is stored as a `SUMMARY` message, and the originals are flagged `summarized`, so they stay visible in the UI but are no longer sent. The kept window never starts with an orphaned tool result.
+Tokens are estimated as chars/4. When the live history goes over 60% of the context budget (default 262K tokens, configurable), the oldest turns are summarized with the same model priority list. The summary is stored as a `SUMMARY` message, and the originals are flagged `summarized`, so they stay visible in the UI but are no longer sent. The kept window never starts with an orphaned tool result.
 
 ### Default model priority
 Tried top to bottom (Menu → Model priority to change):

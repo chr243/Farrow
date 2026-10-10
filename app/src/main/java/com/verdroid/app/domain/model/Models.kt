@@ -126,7 +126,7 @@ data class LimitSettings(
     val requestsPerDay: Int = 1000,
     val modelCooldownSeconds: Int = 60,
     val lowQuotaThreshold: Int = 100,
-    val contextBudgetTokens: Int = 16_000,
+    val contextBudgetTokens: Int = 262_000,
     val maxSteps: Int = 25,
 )
 
