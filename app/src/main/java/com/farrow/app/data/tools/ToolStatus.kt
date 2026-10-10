@@ -23,8 +23,8 @@ data class ToolStatus(val ready: Boolean, val text: String) {
                 else ToolStatus(false, "Needs All files access for Documents/Farrow (Settings > Tools > Shared folder)")
             name == "web_fetch" || name == "web_search" -> READY
             name.startsWith("crypto_") -> when (name) {
-                "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings)")
-                "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku & Git)")
+                "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings > Tools)")
+                "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Tools > Coinbase Exchange key)")
                 else -> READY // public market data / backtest
             }
             name == "ebook_translate" ->

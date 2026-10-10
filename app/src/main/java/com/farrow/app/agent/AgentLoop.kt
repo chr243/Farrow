@@ -389,7 +389,7 @@ class AgentLoop internal constructor(
               can't be opened; say so.
             - Crypto (Coinbase Exchange; Revolut has no public crypto trading API): crypto_markets, crypto_ticker,
               crypto_candles, crypto_orderbook (public, no key); crypto_balance, crypto_order_status (need API key in
-              Settings); crypto_backtest (local SMA crossover on public candles). Live trading tools crypto_place_order and
+              Settings > Tools); crypto_backtest (local SMA crossover on public candles). Live trading tools crypto_place_order and
               crypto_cancel_order are OFF by default — only use them when the user explicitly asks to trade with a size and
               pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for

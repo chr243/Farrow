@@ -131,7 +131,32 @@ fun ToolsScreen(onBack: () -> Unit, vm: ToolsViewModel = hiltViewModel()) {
                     },
                 )
             }
+            item {
+                Text("Coinbase Exchange key", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp))
+                CryptoKeyCard(state.cryptoKeyMasked, state.cryptoConfigured, vm::saveCrypto, vm::clearCrypto)
+            }
             item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+/** Optional API key for crypto_balance / crypto_order_status / live orders. Market data needs no key. */
+@Composable
+private fun CryptoKeyCard(masked: String?, configured: Boolean, onSave: (String, String, String) -> Unit, onClear: () -> Unit) {
+    var key by remember { mutableStateOf("") }
+    var secret by remember { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }
+    val hidden = androidx.compose.ui.text.input.PasswordVisualTransformation()
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Only for crypto balances and orders. Key: ${masked ?: "not set"} · encrypted.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true, visualTransformation = hidden, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(secret, { secret = it }, label = { Text("API secret") }, singleLine = true, visualTransformation = hidden, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(pass, { pass = it }, label = { Text("Passphrase") }, singleLine = true, visualTransformation = hidden, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onSave(key, secret, pass); key = ""; secret = ""; pass = "" },
+                enabled = key.isNotBlank() || secret.isNotBlank() || pass.isNotBlank()) { Text("Save") }
+            if (configured) OutlinedButton(onClick = onClear) { Text("Remove") }
         }
     }
 }

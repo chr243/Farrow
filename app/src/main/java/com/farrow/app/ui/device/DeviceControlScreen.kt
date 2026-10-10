@@ -23,7 +23,7 @@ import com.farrow.app.ui.components.BackScaffold
 import com.farrow.app.ui.components.CopyButton
 import com.farrow.app.ui.components.CopyableText
 
-/** Settings > Shizuku & Git: setup for run_shell, rish_run, git_* and crypto tools. */
+/** Settings > Shizuku & Git: setup for run_shell, rish_run and git_* tools. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltViewModel()) {
@@ -33,9 +33,6 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var token by remember { mutableStateOf("") }
-    var cryptoKey by remember { mutableStateOf("") }
-    var cryptoSecret by remember { mutableStateOf("") }
-    var cryptoPass by remember { mutableStateOf("") }
     var user by remember(ui.gitUser) { mutableStateOf(ui.gitUser) }
     var name by remember(ui.authorName) { mutableStateOf(ui.authorName) }
     var email by remember(ui.authorEmail) { mutableStateOf(ui.authorEmail) }
@@ -121,24 +118,6 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                     }
                 }
 
-                Section("Crypto exchange (Coinbase Exchange)") {
-                    Text("Revolut has no public crypto trading API. Market data tools work without a key; balances and live " +
-                        "orders need a Coinbase Exchange API key (View + Trade). Live place/cancel stay off under Tools until you enable them. " +
-                        "Key: ${ui.cryptoKeyMasked ?: "not set"} · encrypted.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(cryptoKey, { cryptoKey = it }, label = { Text("API key") }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(cryptoSecret, { cryptoSecret = it }, label = { Text("API secret") }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(cryptoPass, { cryptoPass = it }, label = { Text("Passphrase") }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = {
-                            vm.saveCrypto(cryptoKey, cryptoSecret, cryptoPass)
-                            cryptoKey = ""; cryptoSecret = ""; cryptoPass = ""
-                        }) { Text("Save") }
-                        if (ui.cryptoConfigured) OutlinedButton(onClick = vm::clearCrypto) { Text("Remove") }
-                    }
-                }
             }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
         }

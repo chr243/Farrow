@@ -101,7 +101,7 @@ class CoinbaseExchangeClient(
 
     companion object {
         const val DEFAULT_BASE = "https://api.exchange.coinbase.com"
-        const val NO_KEYS = "Coinbase Exchange API key not set. Open Settings > Shizuku & Git → Crypto exchange, or use public market tools without a key."
+        const val NO_KEYS = "Coinbase Exchange API key not set. Open Settings > Tools > Coinbase Exchange key, or use public market tools without a key."
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         /** CB-ACCESS-SIGN = base64(HMAC-SHA256(base64-decoded secret, timestamp + method + path + body)). */

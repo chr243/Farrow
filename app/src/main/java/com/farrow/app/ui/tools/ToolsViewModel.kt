@@ -52,6 +52,9 @@ data class ToolsState(
     val setupActive: Boolean = false,
     val setupStep: com.farrow.app.data.termux.TermuxSetupStep? = null,
     val setupMessage: String? = null,
+    /** Coinbase Exchange API key (crypto_balance / crypto_order_status / live orders), masked. */
+    val cryptoKeyMasked: String? = null,
+    val cryptoConfigured: Boolean = false,
 )
 
 /** One-shot UI actions of the Set up Termux flow (need an Activity: intents, permission dialog, clipboard). */
@@ -74,6 +77,7 @@ class ToolsViewModel @Inject constructor(
     val mcp: com.farrow.app.data.mcp.McpManager,
     val sharedFolder: com.farrow.app.data.storage.SharedFolder,
     private val rish: com.farrow.app.shizuku.RishStore,
+    private val crypto: com.farrow.app.data.crypto.CryptoCredentials,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ToolsState(tools = rows(ToolEnv())))
     val state: StateFlow<ToolsState> = _state.asStateFlow()
@@ -95,6 +99,7 @@ class ToolsViewModel @Inject constructor(
     fun setEnabled(name: String, on: Boolean) = prefs.setEnabled(name, on)
 
     fun refresh() {
+        loadCrypto()
         if (_state.value.checking) return
         viewModelScope.launch { check() }
     }
@@ -161,6 +166,18 @@ class ToolsViewModel @Inject constructor(
             _state.update { it.copy(checking = false) }
         }
     }
+
+    private fun loadCrypto() = _state.update { it.copy(cryptoKeyMasked = crypto.maskedKey, cryptoConfigured = crypto.configured) }
+
+    /** Save the Coinbase Exchange key; blank fields keep the stored value. */
+    fun saveCrypto(key: String, secret: String, passphrase: String) {
+        if (key.isNotBlank()) crypto.apiKey = key
+        if (secret.isNotBlank()) crypto.apiSecret = secret
+        if (passphrase.isNotBlank()) crypto.passphrase = passphrase
+        loadCrypto()
+    }
+
+    fun clearCrypto() { crypto.clear(); loadCrypto() }
 
     /** Result of the RUN_COMMAND runtime permission request from the Termux card. */
     fun onPermissionResult() = onReturned()

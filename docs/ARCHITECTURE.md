@@ -323,7 +323,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   crypto in the Revolut app has no documented API. Farrow therefore uses **Coinbase Exchange** for:
   - Public (no key): `crypto_markets`, `crypto_ticker`, `crypto_candles`, `crypto_orderbook`, `crypto_backtest` (local
     SMA crossover → return %, max drawdown, win rate, equity chart payload).
-  - Authenticated (API key + secret + passphrase in EncryptedSharedPreferences, Settings > Shizuku… > Crypto exchange):
+  - Authenticated (API key + secret + passphrase in EncryptedSharedPreferences, Settings > Tools > Coinbase Exchange key):
     `crypto_balance`, `crypto_order_status`.
   - Live trading (OFF by default under Tools): `crypto_place_order`, `crypto_cancel_order` — require `confirm=true` and
     an explicit user request with size/pair.
