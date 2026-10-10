@@ -508,3 +508,9 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   Phone → Permissions) and the crypto exchange card are gone. The Coinbase Exchange key lives in Settings → Tools.
 - **README / repo description:** old screenshots removed; METADATA and GitHub About no longer mention the removed
   in-app browser (Firefox) or X/Facebook tools.
+
+## v1.0.30
+
+- **Screen transitions:** opening a chat, Settings or any Settings page now fades in with a short slide from the
+  right (~260 ms); the previous screen fades out and drifts slightly left. Back runs the same motion in reverse.
+  One shared `NavMotion` in `VerdroidRoot.kt` replaces the old instant (`None`) transitions.
