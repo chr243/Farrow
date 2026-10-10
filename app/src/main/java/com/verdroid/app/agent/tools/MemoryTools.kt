@@ -10,7 +10,9 @@ class MemorySaveTool(private val store: MemoryStore) : AgentTool {
     override val name = "memory_save"
     override val description = "Save to memory. scope=\"global\" (default, long-term): a lasting fact about the user or their preferences, " +
         "kept across chats. scope=\"chat\" (short-term): this chat's scratchpad for task progress, decisions and findings, always " +
-        "shown in this chat's prompt and deleted with the chat. One short self-contained sentence; no secrets. Duplicates are merged."
+        "shown in this chat's prompt and deleted with the chat. For the current task (given or just announced, even with TBD " +
+        "details) use scope=\"chat\", tags [\"task\"], text \"Task: <goal, key constraints>\". One short self-contained " +
+        "sentence; no secrets. Duplicates are merged."
     override val parameters = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

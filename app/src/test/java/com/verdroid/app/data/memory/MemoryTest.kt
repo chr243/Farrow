@@ -95,6 +95,9 @@ class MemoryTest {
         assertTrue(block.contains("Short-term (scope=\"chat\")") && block.contains("Long-term (scope=\"global\""))
         assertTrue(block.contains("[#100] Name is Chris") && block.contains("[#60] Step 60") && block.contains("older ones trimmed"))
         assertFalse(block.contains("Other chat note")); assertFalse(block.contains("[#1] Step 1:"))
+        // Task note: saved when a task is given or just announced; skipped only for a single fully answered question.
+        assertTrue(block.contains("announces what you'll work on together") && block.contains("Task: <goal")
+            && block.contains("Skip this only for a single question you fully answer in this reply."))
         assertTrue(MemoryText.promptBlock(all, autoSave = true, chatId = 9).contains("Short-term memory of this chat: empty."))
         assertFalse(MemoryText.promptBlock(all, autoSave = true, chatId = null).contains("Step 60"))
         // Duplicates only within the same scope.
