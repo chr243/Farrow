@@ -2,12 +2,6 @@
 
 **An on-device AI agent for Android that actually does things:** it searches the web and fetches pages and APIs over HTTP, runs bash and Python in Termux (optionally with headless Chromium + Selenium), runs shell commands through Shizuku or rish, drives apps with Accessibility, translates ebooks, works with files in `Documents/Verdroid` and Git, and reads crypto market data, all on **free OpenRouter / Kilo models** with automatic model and key fallback and rate-limit recovery. No server and no cloud backend: your keys stay encrypted on your phone.
 
-<p align="center">
-  <img src="docs/images/chat-list.jpg" alt="Verdroid chat list" width="300">
-  &nbsp;&nbsp;
-  <img src="docs/images/settings.jpg" alt="Verdroid settings" width="300">
-</p>
-
 ## Features
 
 - **Messenger-style chat UI** (Kotlin, Jetpack Compose, Material 3) with chat heads / Android Bubbles and a quota indicator. Chat avatars are circles in shades of the theme green (lighter/darker per chat, theme-aware light/dark). Tool calls show as expandable cards; consecutive shell calls (`termux_run`, `termux_python`, `rish_run`, `run_shell`) stack into one expandable "termux_run ×N" row.
