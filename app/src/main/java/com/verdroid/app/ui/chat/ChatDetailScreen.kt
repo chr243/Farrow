@@ -140,7 +140,8 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                     }
                 },
                 actions = {
-                    if (task != null) {
+                    // Shown on brand-new chats too (task == null until the first send); presets picked there are kept.
+                    run {
                         // No chat-head button (v0.9.18): the chat head starts automatically; settings in Settings > Chat heads.
                         var overflow by remember { mutableStateOf(false) }
                         var showPresets by remember { mutableStateOf(false) }
@@ -154,7 +155,10 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                             }
                             DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
                                 DropdownMenuItem(text = { Text("Chat memory (short-term)") }, onClick = {
-                                    overflow = false; task?.id?.let(onChatMemory)
+                                    overflow = false
+                                    val id = task?.id
+                                    if (id != null) onChatMemory(id)
+                                    else Toast.makeText(context, "Chat memory is empty until the first message.", Toast.LENGTH_SHORT).show()
                                 })
                                 DropdownMenuItem(text = { Text("Tool presets") }, onClick = {
                                     overflow = false; showPresets = true

@@ -74,6 +74,9 @@ class ChatToolPresets @Inject constructor(@ApplicationContext context: Context) 
     fun setEnabled(taskId: Long, preset: ToolPreset, enabled: Boolean) =
         save(taskId, if (enabled) off(taskId) - preset else off(taskId) + preset)
 
+    /** Replaces the whole "off" set for a chat (used to keep presets picked before the chat's first message). */
+    fun set(taskId: Long, off: Set<ToolPreset>) = save(taskId, off)
+
     /** "All" switch: everything on, or every preset off. */
     fun setAll(taskId: Long, enabled: Boolean) = save(taskId, if (enabled) emptySet() else ToolPreset.entries.toSet())
 

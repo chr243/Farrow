@@ -51,15 +51,24 @@ class ChatViewModel @Inject constructor(
     val isGenerating: StateFlow<Boolean> = combine(taskId, agent.runningTaskIds) { id, running -> id in running }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    /** Presets switched off on a brand-new chat (taskId 0), saved to the chat when the first message creates it. */
+    private val draftPresetsOff = MutableStateFlow<Set<com.verdroid.app.data.tools.ToolPreset>>(emptySet())
+
     /** Tool presets switched off for this chat (empty = All on, the default). */
     val presetsOff: StateFlow<Set<com.verdroid.app.data.tools.ToolPreset>> =
-        taskId.flatMapLatest { if (it == 0L) flowOf(emptySet()) else presets.observe(it) }
+        taskId.flatMapLatest { if (it == 0L) draftPresetsOff else presets.observe(it) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     fun setPreset(preset: com.verdroid.app.data.tools.ToolPreset, enabled: Boolean) {
-        taskId.value.takeIf { it != 0L }?.let { presets.setEnabled(it, preset, enabled) }
+        val id = taskId.value
+        if (id == 0L) draftPresetsOff.update { if (enabled) it - preset else it + preset }
+        else presets.setEnabled(id, preset, enabled)
     }
-    fun setAllPresets(enabled: Boolean) { taskId.value.takeIf { it != 0L }?.let { presets.setAll(it, enabled) } }
+    fun setAllPresets(enabled: Boolean) {
+        val id = taskId.value
+        if (id == 0L) draftPresetsOff.value = if (enabled) emptySet() else com.verdroid.app.data.tools.ToolPreset.entries.toSet()
+        else presets.setAll(id, enabled)
+    }
 
     private val _pendingAttach = MutableStateFlow<ChatAttachment.Saved?>(null)
     val pendingAttach: StateFlow<ChatAttachment.Saved?> = _pendingAttach.asStateFlow()
@@ -103,7 +112,11 @@ class ChatViewModel @Inject constructor(
         val body = if (pending != null) ChatAttachment.messagePrefix(pending) + t.ifEmpty { ChatAttachment.DEFAULT_PROMPT } else t
         viewModelScope.launch {
             val id = taskId.value
-            if (id == 0L) taskId.value = startConversation(body) else sendMessage(id, body)
+            if (id == 0L) {
+                val draft = draftPresetsOff.value
+                taskId.value = startConversation(body) { newId -> if (draft.isNotEmpty()) presets.set(newId, draft) }
+                draftPresetsOff.value = emptySet()
+            } else sendMessage(id, body)
             _pendingAttach.value = null
         }
     }

@@ -26,10 +26,14 @@ class StartConversationUseCase @Inject constructor(
     private val tasks: TaskRepository,
     private val agent: AgentController,
 ) {
-    /** Creates a task from the first prompt, stores the user message and starts the agent loop. */
-    suspend operator fun invoke(prompt: String): Long {
+    /**
+     * Creates a task from the first prompt, stores the user message and starts the agent loop. [beforeStart] runs with
+     * the new id before the agent starts (e.g. to persist tool presets picked on the still-empty chat).
+     */
+    suspend operator fun invoke(prompt: String, beforeStart: (Long) -> Unit = {}): Long {
         val id = tasks.createTask(titleFrom(prompt), prompt, TaskType.infer(prompt))
         tasks.addMessage(userMessage(id, prompt))
+        beforeStart(id)
         agent.start(id)
         return id
     }
