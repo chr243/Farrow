@@ -203,6 +203,9 @@ private fun ArchivableRow(c: Conversation, onOpen: () -> Unit, onArchive: () -> 
     }
 }
 
+/** Chat list row avatar diameter (Messenger-like). */
+val CHAT_ROW_AVATAR = 64.dp
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun ConversationRow(c: Conversation, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
@@ -210,7 +213,8 @@ fun ConversationRow(c: Conversation, onLongClick: (() -> Unit)? = null, onClick:
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TaskAvatar(c.task)
+        // Messenger-sized avatar: 64 dp (was the 52 dp default, ~23% larger).
+        TaskAvatar(c.task, size = CHAT_ROW_AVATAR)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(c.task.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
