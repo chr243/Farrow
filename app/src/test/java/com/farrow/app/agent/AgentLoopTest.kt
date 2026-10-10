@@ -243,4 +243,29 @@ class AgentLoopTest {
         assertEquals(listOf(NotificationType.COMPLETED), h.notifications.added)
         assertEquals(1, h.systemNotified)
     }
+
+    @Test fun `attached images go to the model as image parts (latest two only)`() = runTest {
+        val tasks = FakeTasks()
+        fun user(text: String) = ChatMessage(0, 1, MessageRole.USER, text, MessageKind.NORMAL, null, null, null, null, false, null, 0)
+        tasks.addMessage(user(AttachmentText.prefix("Input/a.png", 10) + "first"))
+        tasks.addMessage(user(AttachmentText.prefix("Input/b.jpg", 10) + "second"))
+        tasks.addMessage(user(AttachmentText.prefix("Input/book.mobi", 10) + "not an image"))
+        tasks.addMessage(user(AttachmentText.prefix("Input/c.webp", 10) + AttachmentText.DEFAULT_PROMPT))
+        val asked = mutableListOf<String>()
+        val loop = AgentLoop(tasks, FakeSettings(5), ToolRegistry(emptyList()), FakeNotifications(),
+            model = { _: List<ApiMessage>, _: JsonArray?, _: Long, _: suspend (String) -> Unit -> reply("ok") },
+            summarize = { _, _, _ -> }, notifyOnFinish = { false }, systemNotify = { _, _, _ -> },
+            imageData = { p -> asked += p; "data:image/jpeg;base64,AAAA" })
+        val users = loop.buildApiMessages(1).filter { it.role == "user" }
+        assertEquals(listOf("Input/b.jpg", "Input/c.webp"), asked)
+        assertNull(users[0].images)                       // older image: text only
+        assertEquals(listOf("data:image/jpeg;base64,AAAA"), users[1].images)
+        assertNull(users[2].images)                       // .mobi is not an image
+        assertTrue(users[3].images!!.isNotEmpty() && users[3].content!!.contains("look at it directly"))
+        assertTrue(users[3].content!!.startsWith("Attached file: Input/c.webp")) // model still gets the path
+        // Wire format: text + image_url parts.
+        val wire = kotlinx.serialization.json.Json.encodeToString(com.farrow.app.data.network.ApiMessageWire, users[3])
+        assertTrue(wire.contains("\"image_url\"") && wire.contains("\"type\":\"text\""))
+        assertTrue(AgentLoop.systemPrompt().contains("Look at the image itself"))
+    }
 }

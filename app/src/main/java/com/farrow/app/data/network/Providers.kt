@@ -149,7 +149,7 @@ object MemoryRedaction {
 
 /** Images for models that can't see them: dropped, with a short note in the text. */
 object ImageStrip {
-    const val NOTE = "(A screenshot was taken but this model can't see images; use the URL, title, text and clickable elements from the tool result.)"
+    const val NOTE = "(An image was included here, but this model can't see images; rely on the text, file name/path and tool results instead, and tell the user a vision model is needed to look at it.)"
     fun strip(messages: List<ApiMessage>): List<ApiMessage> = messages.map { m ->
         if (m.images.isNullOrEmpty()) m else m.copy(images = null, content = listOfNotNull(m.content?.takeIf { it.isNotBlank() }, NOTE).joinToString("\n"))
     }

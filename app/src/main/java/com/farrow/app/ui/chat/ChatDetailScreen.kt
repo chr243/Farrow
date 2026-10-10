@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -230,7 +231,10 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                     pending?.let { p ->
                         AssistChip(
                             onClick = { },
-                            label = { Text(p.relativePath, maxLines = 1) },
+                            label = { Text(p.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            leadingIcon = if (com.farrow.app.domain.model.AttachmentText.isImageName(p.displayName)) {
+                                { AttachmentThumb(p.relativePath, 24.dp) }
+                            } else null,
                             trailingIcon = {
                                 IconButton(onClick = vm::clearPendingAttach, modifier = Modifier.size(18.dp)) {
                                     Icon(Icons.Filled.Close, "Remove attachment")
@@ -270,7 +274,7 @@ internal fun UserBubble(text: String) {
     val d = remember(text) { com.farrow.app.data.storage.ChatAttachment.forDisplay(text) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val b = com.farrow.app.ui.theme.LocalBubbleColors.current
-        if (d.fileName != null) AttachmentChip(d.fileName, d.bytes)
+        if (d.fileName != null) AttachmentChip(d.fileName, d.bytes, d.path.takeIf { d.isImage })
         if (d.text.isNotBlank() || d.fileName == null) {
             Surface(color = b.user, shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp), modifier = Modifier.widthIn(max = 300.dp)) {
                 SelectionContainer { Text(d.text.trim(), color = b.onUser, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
@@ -280,11 +284,12 @@ internal fun UserBubble(text: String) {
 }
 
 @Composable
-private fun AttachmentChip(name: String, bytes: Long?) {
+private fun AttachmentChip(name: String, bytes: Long?, imagePath: String?) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         shape = RoundedCornerShape(14.dp), modifier = Modifier.widthIn(max = 300.dp)) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("📎", fontSize = 14.sp); Spacer(Modifier.width(8.dp))
+            if (imagePath != null) AttachmentThumb(imagePath, 48.dp) else Text("📎", fontSize = 14.sp)
+            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f, fill = false)) {
                 Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -392,5 +397,26 @@ private fun CodeBlock(label: String, code: String, language: String?) {
                     color = MaterialTheme.colorScheme.onSurface)
             }
         }
+    }
+}
+
+/** Thumbnail of an attached image under Documents/Farrow ([relativePath] e.g. Input/photo.jpg); 🖼️ until/if it can't load. */
+@Composable
+internal fun AttachmentThumb(relativePath: String, size: androidx.compose.ui.unit.Dp) {
+    var bmp by remember(relativePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(relativePath) {
+        bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                com.farrow.app.data.storage.AttachmentImages.thumbnail(
+                    java.io.File(com.farrow.app.data.storage.SharedFolder.DISPLAY_PATH, relativePath), 256)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    Box(Modifier.size(size).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center) {
+        val b = bmp
+        if (b != null) androidx.compose.foundation.Image(b, contentDescription = "Attached image",
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        else Text("🖼️", fontSize = (size.value * 0.45f).sp)
     }
 }

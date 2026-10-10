@@ -48,6 +48,8 @@ class AgentLoop internal constructor(
     private val memoryPrompt: suspend (taskId: Long) -> String = { "" },
     /** Enabled skills: index + full text (disabled skills are never sent). */
     private val skillsPrompt: suspend () -> String = { "" },
+    /** Attached image (path under Documents/Farrow) → data URL for vision models; null if unreadable. */
+    private val imageData: suspend (relativePath: String) -> String? = { null },
 ) {
     @Inject constructor(
         tasks: TaskRepository,
@@ -60,6 +62,7 @@ class AgentLoop internal constructor(
         alerts: com.farrow.app.data.notify.AlertNotifier,
         memory: com.farrow.app.data.memory.MemoryRepository,
         skills: com.farrow.app.data.skills.SkillStore,
+        sharedFolder: com.farrow.app.data.storage.SharedFolder,
     ) : this(
         tasks, settings, registry, notifications,
         model = { m, t, id, st -> client.complete(m, t, id, st) },
@@ -68,6 +71,11 @@ class AgentLoop internal constructor(
         systemNotify = { id, title, body -> alerts.notify(FINISH_NOTIFICATION_BASE + (id % 10_000).toInt(), title, body, id) },
         memoryPrompt = { id -> try { memory.promptBlock(id) } catch (e: Exception) { "" } },
         skillsPrompt = { try { skills.promptBlock() } catch (e: Exception) { "" } },
+        imageData = { rel ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.farrow.app.data.storage.AttachmentImages.dataUrl(sharedFolder, rel)
+            }
+        },
     )
 
     private suspend fun fullSystemPrompt(taskId: Long): String = systemPrompt() +
@@ -320,9 +328,18 @@ class AgentLoop internal constructor(
         live.filter { it.kind == MessageKind.SUMMARY }.forEach {
             out += ApiMessage("system", "Summary of the earlier conversation:\n${it.content}")
         }
-        for (m in live.filter { it.kind == MessageKind.NORMAL }) {
+        val normal = live.filter { it.kind == MessageKind.NORMAL }
+        // Vision: attached images go out as image parts, only for the latest MAX_IMAGE_TURNS image messages (tokens).
+        val imageIds = normal.filter { it.role == MessageRole.USER && AttachmentText.forDisplay(it.content.orEmpty()).isImage }
+            .takeLast(MAX_IMAGE_TURNS).map { it.id }.toSet()
+        for (m in normal) {
             when (m.role) {
-                MessageRole.USER -> out += ApiMessage("user", m.content.orEmpty())
+                MessageRole.USER -> {
+                    val text = m.content.orEmpty()
+                    val img = if (m.id in imageIds) AttachmentText.forDisplay(text).path?.let { imageData(it) } else null
+                    out += if (img != null) ApiMessage("user", text + "\n\n(The attached image is included below; look at it directly.)", images = listOf(img))
+                    else ApiMessage("user", text)
+                }
                 MessageRole.SYSTEM -> out += ApiMessage("system", m.content.orEmpty())
                 MessageRole.ASSISTANT -> {
                     val calls = m.toolCallsJson?.let { runCatching { json.decodeFromString<List<ApiToolCall>>(it) }.getOrNull() }
@@ -345,6 +362,8 @@ class AgentLoop internal constructor(
 
     companion object {
         private const val MAX_LENGTH_CONTINUATIONS = 3
+        /** Only the latest image attachments are re-sent each step (vision tokens are expensive on free tiers). */
+        const val MAX_IMAGE_TURNS = 2
         private const val FINISH_NOTIFICATION_BASE = 52_000
         const val DAILY_QUOTA_MESSAGE = "⏸️ Paused: Daily free quota exhausted. Resuming at 00:00 UTC."
         val SYSTEM_PROMPT = """
@@ -398,6 +417,10 @@ class AgentLoop internal constructor(
               and ask them to confirm; call again with confirmed=true and the suggested timeout only after they agree.
               Python packages install automatically on first use. Put sources in Input/ (or the chat Attach button); the
               translated file is always written under Output/.
+            - Images: when the user attaches a jpg/png/webp/gif, it is sent to you as an image together with its
+              Input/ path (on vision-capable models). Look at the image itself and answer from what you see; don't
+              claim you can't see it. If you only get a note that this model can't see images, say so and suggest
+              putting a vision model first in Settings → Models, or work with the file via tools.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
               /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
               you. ALL user-facing deliverables go in Output/ — translated text, screenshots, scripts, coding projects,

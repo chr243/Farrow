@@ -15,7 +15,14 @@ object AttachmentText {
     fun prefix(relativePath: String, bytes: Long): String =
         "Attached file: $relativePath ($bytes bytes). It is under Documents/Farrow — use workspace_* or ebook_translate on that path. Deliverables go in Output/.\n\n"
 
-    data class Display(val fileName: String?, val bytes: Long?, val text: String)
+    /** [path] is the attachment's path relative to Documents/Farrow (e.g. Input/photo.jpg). */
+    data class Display(val fileName: String?, val bytes: Long?, val text: String, val path: String? = null) {
+        val isImage: Boolean get() = fileName != null && isImageName(fileName)
+    }
+
+    private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "gif")
+    /** Images the chat sends to vision models (and shows as thumbnails). */
+    fun isImageName(name: String): Boolean = name.substringAfterLast('.', "").lowercase() in IMAGE_EXT
 
     private val PREFIX_RE = Regex("^\\s*Attached file: (.+?) \\((\\d+) bytes\\)\\. It is under Documents/Farrow[^\\n]*(\\n\\n?|$)")
     /** A stored title made from the raw prefix by the old titleFrom (first 6 words, maybe with "…"). */
@@ -26,7 +33,7 @@ object AttachmentText {
         val m = PREFIX_RE.find(content) ?: return Display(null, null, content)
         val rest = content.substring(m.range.last + 1)
         return Display(m.groupValues[1].substringAfterLast('/'), m.groupValues[2].toLongOrNull(),
-            if (rest.trim() == DEFAULT_PROMPT) "" else rest)
+            if (rest.trim() == DEFAULT_PROMPT) "" else rest, m.groupValues[1])
     }
 
     /** One-line text for previews/notifications: the user's text, else "📎 <file name>". */
