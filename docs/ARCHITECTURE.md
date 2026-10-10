@@ -497,3 +497,14 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **No auto-translate on attach:** an attachment without instructions no longer implies translation. The attachment
   hint is neutral; the agent asks what to do and suggests options by file type (translate last). `ebook_translate`
   runs only when the user asks for a translation.
+
+## v1.0.29
+
+- **Verdroid rebrand:** app name Verdroid, package/applicationId `com.verdroid.app` (installs as a new app; re-grant
+  permissions and re-enter keys), shared folder `Documents/Verdroid`, Termux helpers under `~/.verdroid`, APK
+  `Verdroid-v<version>-<buildType>.apk`, repo `chr243/Verdroid`. New leaf + circuit launcher icon (adaptive + legacy,
+  notification and chat-head logo).
+- **Shizuku & Git tab cleanup:** tab and top bar are named **Shizuku & Git**; the accessibility card (now only under
+  Phone → Permissions) and the crypto exchange card are gone. The Coinbase Exchange key lives in Settings → Tools.
+- **README / repo description:** old screenshots removed; METADATA and GitHub About no longer mention the removed
+  in-app browser (Firefox) or X/Facebook tools.
