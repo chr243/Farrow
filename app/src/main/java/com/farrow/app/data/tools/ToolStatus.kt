@@ -24,7 +24,7 @@ data class ToolStatus(val ready: Boolean, val text: String) {
             name == "web_fetch" || name == "web_search" -> READY
             name.startsWith("crypto_") -> when (name) {
                 "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings)")
-                "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku, accessibility & Git)")
+                "crypto_balance", "crypto_order_status" -> ToolStatus(true, "Needs a Coinbase Exchange API key (Settings > Shizuku & Git)")
                 else -> READY // public market data / backtest
             }
             name == "ebook_translate" ->
@@ -40,15 +40,15 @@ data class ToolStatus(val ready: Boolean, val text: String) {
             name == "termux_run" -> if (env.termuxReady) ToolStatus(true, "Ready if allow-external-apps is on in Termux")
                 else ToolStatus(false, "Needs Termux and the Run commands permission (Settings > Tools > Termux)")
             name == "rish_run" -> when {
-                !env.rishReady -> ToolStatus(false, "Needs Find/Pick rish in Settings > Shizuku, accessibility & Git (deploys to /data/local/tmp/farrow_rish)")
+                !env.rishReady -> ToolStatus(false, "Needs Find/Pick rish in Settings > Shizuku & Git (deploys to /data/local/tmp/farrow_rish)")
                 !env.shizukuReady -> ToolStatus(false, "rish is staged; needs Shizuku running with permission to deploy/run")
                 else -> ToolStatus(true, "Ready (runs from /data/local/tmp/farrow_rish)")
             }
-            name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku, accessibility & Git)")
+            name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku & Git)")
             name == "git_push" || name == "git_clone" -> if (env.gitToken) READY
-                else ToolStatus(true, "Ready for public repos — private ones need a Git token (Settings > Shizuku, accessibility & Git)")
+                else ToolStatus(true, "Ready for public repos — private ones need a Git token (Settings > Shizuku & Git)")
             name.startsWith("git_") -> READY
-            name.startsWith("screen_") -> if (env.accessibilityOn) READY else ToolStatus(false, "Needs the Farrow accessibility service (Settings > Shizuku, accessibility & Git)")
+            name.startsWith("screen_") -> if (env.accessibilityOn) READY else ToolStatus(false, "Needs the Farrow accessibility service (Settings > Phone > Permissions)")
             else -> READY
         }
 

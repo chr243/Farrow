@@ -2,7 +2,6 @@ package com.farrow.app.ui.device
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.farrow.app.data.a11y.FarrowAccessibilityService
 import com.farrow.app.data.crypto.CryptoCredentials
 import com.farrow.app.data.git.GitCredentialStore
 import com.farrow.app.shizuku.ShellBackendStatus
@@ -18,7 +17,6 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DeviceControlUi(
-    val accessibilityOn: Boolean = false,
     val gitTokenMasked: String? = null,
     val gitUser: String = "",
     val authorName: String = "",
@@ -55,7 +53,7 @@ class DeviceControlViewModel @Inject constructor(
     fun refresh() {
         shizuku.refresh()
         _ui.update {
-            it.copy(accessibilityOn = FarrowAccessibilityService.isRunning, gitTokenMasked = git.maskedToken,
+            it.copy(gitTokenMasked = git.maskedToken,
                 shizukuBindError = shizuku.lastBindError, shizukuInfo = shizuku.serverInfo(),
                 gitUser = git.username, authorName = git.authorName, authorEmail = git.authorEmail,
                 cryptoKeyMasked = crypto.maskedKey, cryptoConfigured = crypto.configured,

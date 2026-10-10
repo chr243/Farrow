@@ -23,7 +23,7 @@ import com.farrow.app.ui.components.BackScaffold
 import com.farrow.app.ui.components.CopyButton
 import com.farrow.app.ui.components.CopyableText
 
-/** Settings > Shizuku, accessibility & Git: setup for run_shell, screen_* and git_* tools. */
+/** Settings > Shizuku & Git: setup for run_shell, rish_run, git_* and crypto tools. */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltViewModel()) {
@@ -45,7 +45,7 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
         androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { vm.installRish(it) }
     LaunchedEffect(ui.message) { ui.message?.let { snackbar.showSnackbar(it); vm.consumeMessage() } }
 
-    BackScaffold("Shell, accessibility & Git", onBack) { padding ->
+    BackScaffold("Shizuku & Git", onBack) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Section("run_shell (Shizuku)") {
@@ -106,11 +106,6 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                     TextButton(onClick = {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/RikkaApps/Shizuku-API/tree/master/rish")))
                     }) { Text("About rish (GitHub)") }
-                }
-
-                Section("Accessibility (screen_read / tap / swipe / type)") {
-                    // The grant button lives in Settings → Phone → Permissions; this section only shows the status.
-                    Text(if (ui.accessibilityOn) "✅ Enabled" else "Off — turn on “Farrow agent control” from Settings → Phone → Permissions.")
                 }
 
                 Section("Git (git_clone / git_status / git_commit / git_push)") {

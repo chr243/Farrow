@@ -168,7 +168,7 @@ There is no bottom bar: the chat list is home and a gear opens **Settings** (Not
 
 ### Accessibility, Shizuku and Git (Phase 6)
 - **Accessibility:** `FarrowAccessibilityService` (`res/xml/accessibility_service_config.xml`, protected by `BIND_ACCESSIBILITY_SERVICE`) uses `dispatchGesture` for taps and swipes, `ACTION_SET_TEXT` on the first editable or focused node for text, and `rootInActiveWindow` for a bounded JSON tree with class, text, description, view id, bounds and the clickable/editable flags. It also supports global actions (back, home, recents, …). The user turns it on in system Accessibility settings, or on HyperOS under Additional settings → Accessibility → Downloaded apps.
-- **Shizuku** (`dev.rikka.shizuku:api`/`provider` 13.1.5, with `rikka.shizuku.ShizukuProvider` in the manifest): `ShizukuManager` tracks NOT_INSTALLED, NOT_RUNNING, PRE_V11, NO_PERMISSION and READY through binder and permission listeners. Since `Shizuku.newProcess` is private in API 13, `run_shell` binds a **UserService** (`ShellUserService`, AIDL `IShellService`) that runs `sh -c` in Shizuku's process and returns exit code, stdout and stderr as JSON, with a timeout of up to 600 s. The setup screen is at Menu → Shizuku, accessibility & Git, and includes a "Test (id)" button.
+- **Shizuku** (`dev.rikka.shizuku:api`/`provider` 13.1.5, with `rikka.shizuku.ShizukuProvider` in the manifest): `ShizukuManager` tracks NOT_INSTALLED, NOT_RUNNING, PRE_V11, NO_PERMISSION and READY through binder and permission listeners. Since `Shizuku.newProcess` is private in API 13, `run_shell` binds a **UserService** (`ShellUserService`, AIDL `IShellService`) that runs `sh -c` in Shizuku's process and returns exit code, stdout and stderr as JSON, with a timeout of up to 600 s. The setup screen is at Menu → Shizuku & Git, and includes a "Test (id)" button.
 - **JGit 5.13** (the last Java 8 line; 6.x needs APIs that only exist on Android 13+): `git_clone` (https only, shallow clones are not supported in 5.x), `git_status`, `git_commit` (stages adds and deletions, then commits with the configured author) and `git_push`. Push uses `UsernamePasswordCredentialsProvider(username, token)` with a PAT stored in EncryptedSharedPreferences (`git_secure`). Repositories are limited to the agent workspace sandbox.
 
 
@@ -384,7 +384,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   (`TermuxManager.runInTerminal`, background=false) and opens Termux. Returning to Farrow (ON_RESUME / permission result)
   re-checks and continues; a step that is still pending shows a retry hint instead of re-triggering. The manual
   per-step buttons stay as a fallback.
-- **rish picker + `rish_run`.** Settings → Shizuku, accessibility & Git → *rish*: the user picks the `rish` file exported by
+- **rish picker + `rish_run`.** Settings → Shizuku & Git → *rish*: the user picks the `rish` file exported by
   Shizuku (SAF multi-select; if only `rish` is picked, Farrow reads the sibling `rish_shizuku.dex` via All files access or asks
   for it). `RishStore` validates (shebang script / `dex\n` magic, companion name read from the script) and copies both into
   `files/rish/` (dex made read-only for Android 14+). `rish_run` runs `/system/bin/sh files/rish/rish -c <cmd>` in Farrow's
@@ -412,7 +412,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 
 ## v1.0.21
 
-- **Find rish.** Settings → Shizuku, accessibility & Git → rish has a *Find rish* button: with All files access it scans
+- **Find rish.** Settings → Shizuku & Git → rish has a *Find rish* button: with All files access it scans
   `Download`, `Documents` and `Documents/Farrow/Input` (and sub-folders, 2 levels) for a `rish` script plus the companion
   it references (`rish_shizuku.dex`), takes the newest match and copies both into `files/rish` (`RishStore.find` /
   `findAndInstall`). Without the permission it says so and offers *Grant All files access*; the SAF *Pick rish file* stays

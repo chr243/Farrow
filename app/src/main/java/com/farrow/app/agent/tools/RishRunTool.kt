@@ -26,8 +26,8 @@ class RishRunTool(
         val sh: suspend (String, Long) -> com.farrow.app.shizuku.ShellResult = { c, ms -> shell.exec(c, null, ms) }
         if (!store.isDeployed(sh)) {
             return errorJson(
-                if (store.isStaged()) "rish is staged but not deployed to ${RishStore.DEPLOY_DIR}. Open Settings > Shizuku, accessibility & Git > rish and tap Find/Pick again (needs Shizuku), or Fix rish permissions."
-                else "rish is not set up. Ask the user to Find or Pick rish in Settings > Shizuku, accessibility & Git > rish.")
+                if (store.isStaged()) "rish is staged but not deployed to ${RishStore.DEPLOY_DIR}. Open Settings > Shizuku & Git > rish and tap Find/Pick again (needs Shizuku), or Fix rish permissions."
+                else "rish is not set up. Ask the user to Find or Pick rish in Settings > Shizuku & Git > rish.")
         }
         val timeout = (args.int("timeout_seconds") ?: 60).coerceIn(1, 600)
         val r = try { runner.run(command, timeout) }
@@ -37,7 +37,7 @@ class RishRunTool(
             if (r.timedOut) put("timed_out", true)
             put("stdout", r.stdout.takeLast(30_000)); put("stderr", r.stderr.takeLast(10_000))
             if (r.exitCode != 0 && (r.stderr.contains("permission", true) || r.stderr.contains("binder", true)))
-                put("hint", "Check that Shizuku is running and authorized for com.termux, and try Fix rish permissions (Settings > Shizuku, accessibility & Git).")
+                put("hint", "Check that Shizuku is running and authorized for com.termux, and try Fix rish permissions (Settings > Shizuku & Git).")
         }.toString()
     }
 }

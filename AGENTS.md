@@ -68,7 +68,7 @@ Shizuku (needed for `run_shell`): start Shizuku from its app via **Wireless debu
 adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh
 ```
 
-`run_shell` binds a Shizuku UserService / newProcess (`shizuku/ShellExecutor.kt`). `rish_run` instead uses the `rish` + `rish_shizuku.dex` exported by Shizuku (*Use Shizuku in terminal apps*): Settings → Shizuku, accessibility & Git → rish → **Find rish** / **Pick rish file** stages them privately, then copies them through Shizuku to `/data/local/tmp/farrow_rish/` with `chmod +x` (`shizuku/RishStore.kt`). Manual check over adb:
+`run_shell` binds a Shizuku UserService / newProcess (`shizuku/ShellExecutor.kt`). `rish_run` instead uses the `rish` + `rish_shizuku.dex` exported by Shizuku (*Use Shizuku in terminal apps*): Settings → Shizuku & Git → rish → **Find rish** / **Pick rish file** stages them privately, then copies them through Shizuku to `/data/local/tmp/farrow_rish/` with `chmod +x` (`shizuku/RishStore.kt`). Manual check over adb:
 
 ```bash
 adb shell 'RISH_APPLICATION_ID=com.termux sh /data/local/tmp/farrow_rish/rish -c id'   # expect uid=2000(shell)
