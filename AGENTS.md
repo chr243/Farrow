@@ -1,6 +1,6 @@
 # AGENTS.md — Farrow
 
-Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), headless Chromium + Selenium inside Termux (`selenium_*`, `termux_python` for agent-written scrapers), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Farrow` folder (`workspace_*`, All files access), memory, agent-writable skills (`skill_*`, `files/skills/<id>/SKILL.md`, Settings → Skills) and an MCP client. There is no backend server; everything runs on the device.
+Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, shell commands through rish (`rish_run`, from `/data/local/tmp/farrow_rish`), bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), headless Chromium + Selenium inside Termux (`selenium_*`, `termux_python` for agent-written scrapers), ebook/document translation in Termux Python (`ebook_translate`, estimate → user confirms → translate), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Farrow` folder (`workspace_*`, All files access; chat **Attach file** copies into `Input/`), memory, agent-writable skills (`skill_*`, `files/skills/<id>/SKILL.md`, Settings → Skills), a Permissions screen and an MCP client. There is no in-app browser and there are no X/Facebook tools (removed in 4bcca87). There is no backend server; everything runs on the device.
 
 ## Repo map
 
@@ -17,14 +17,17 @@ Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Mate
 │       │   │   ├── FarrowApp.kt, MainActivity.kt
 │       │   │   ├── agent/        AgentLoop, AgentRunner, backoff, context/ (summarisation), tools/ (tool implementations, registry)
 │       │   │   ├── chathead/     chat heads overlay + Android Bubbles
-│       │   │   ├── data/         a11y, crypto (Coinbase Exchange), git, termux (RUN_COMMAND manager + result receiver), local (Room), mcp, memory,
-│       │   │   │                 network (OpenRouter/Kilo clients, providers, model caps), notify, prefs, repository,
-│       │   │   │                 secure (encrypted key store), settings (DataStore), tools, update, work (WorkManager)
+│       │   │   ├── data/         a11y, crypto (Coinbase Exchange), ebook (translator script for Termux), git,
+│       │   │   │                 termux (RUN_COMMAND manager, result receiver, Set up Termux flow, Selenium helper script),
+│       │   │   │                 local (Room), mcp, memory, network (OpenRouter/Kilo clients, providers, model caps), notify,
+│       │   │   │                 prefs, repository, secure (encrypted key store), settings (DataStore), skills (SkillStore),
+│       │   │   │                 storage (Documents/Farrow SharedFolder, ChatAttachment), tools (Termux add-ons, tool status),
+│       │   │   │                 update, websearch (web_search engines + fusion), work (WorkManager)
 │       │   │   ├── di/           Hilt AppModule (incl. tool registry)
 │       │   │   ├── domain/       models, repository interfaces, use cases (no Android deps)
 │       │   │   ├── keepalive/    foreground keep-alive service, boot receiver
-│       │   │   ├── shizuku/      ShizukuManager, ShellExecutor, ShellUserService
-│       │   │   └── ui/           Compose screens + ViewModels (chats, chat, menu, device, tools, theme, …)
+│       │   │   ├── shizuku/      ShizukuManager, ShellExecutor, ShellUserService, RishStore (+ RishRunner for rish_run)
+│       │   │   └── ui/           Compose screens + ViewModels (chats, chat incl. ToolStacks, menu, device, tools, permissions, skills, theme, …)
 │       │   └── res/                        resources (launcher icon = vector S-curve, colour #3D5A3A on #FBF3E6)
 │       └── test/java/com/farrow/app/       JVM unit tests (JUnit 4), mirroring the main package layout
 ├── gradle/libs.versions.toml       version catalog (AGP 8.7.3, Kotlin 2.1.0, KSP, Hilt, Room, Compose BOM)
@@ -65,13 +68,11 @@ Shizuku (needed for `run_shell`): start Shizuku from its app via **Wireless debu
 adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh
 ```
 
-To get a shell-uid shell in a terminal app for manual debugging, export `rish` from the Shizuku app (*Use Shizuku in terminal apps*), copy `rish` and `rish_shizuku.dex` to the terminal app, then:
+`run_shell` binds a Shizuku UserService / newProcess (`shizuku/ShellExecutor.kt`). `rish_run` instead uses the `rish` + `rish_shizuku.dex` exported by Shizuku (*Use Shizuku in terminal apps*): Settings → Shizuku, accessibility & Git → rish → **Find rish** / **Pick rish file** stages them privately, then copies them through Shizuku to `/data/local/tmp/farrow_rish/` with `chmod +x` (`shizuku/RishStore.kt`). Manual check over adb:
 
 ```bash
-RISH_APPLICATION_ID=<terminal app id> sh ~/rish -c id      # expect uid=2000(shell)
+adb shell 'RISH_APPLICATION_ID=com.termux sh /data/local/tmp/farrow_rish/rish -c id'   # expect uid=2000(shell)
 ```
-
-(Farrow itself does not use rish; it binds a Shizuku UserService / newProcess, see `shizuku/ShellExecutor.kt`.)
 
 ## Coding conventions
 
@@ -101,7 +102,9 @@ git status --short          # no local.properties, keystores, APKs or build outp
 git diff --cached | grep -nEi 'sk-or-[a-z0-9]{8}|ghp_[A-Za-z0-9]{20}|BEGIN (RSA|EC|OPENSSH) PRIVATE KEY' && echo 'SECRET FOUND' || echo 'no secrets'
 ```
 
-If you touched Shizuku, Accessibility or chat heads, also test on a real device (these paths are not covered by JVM tests) and say so in the PR.
+Termux tools wrap commands with `TermuxRunTool.capped(...)` (output to temp files, stdin `/dev/null`, leftovers killed) so they return as soon as the command exits; keep that wrapper when adding Termux-backed tools. `ebook_translate` chunks must stay below 5000 characters (tested).
+
+If you touched Shizuku, rish, Termux, Accessibility or chat heads, also test on a real device (these paths are not covered by JVM tests) and say so in the PR.
 
 ## Maintainer verification checklist (per release)
 
@@ -110,6 +113,8 @@ If you touched Shizuku, Accessibility or chat heads, also test on a real device 
 - [ ] If the Room schema changed: migration added and `app/schemas/` committed.
 - [ ] Fresh install on a device: onboarding, add API key, send a chat, a tool call runs.
 - [ ] `web_search` returns fused results, and `web_fetch format=markdown` returns a public page.
-- [ ] Shizuku **Test (id)** returns `uid=2000(shell)`.
+- [ ] Shizuku **Test (id)** returns `uid=2000(shell)`; rish **Test (id)** too if rish is set up.
+- [ ] `termux_run` with `echo hi` returns within a few seconds (not after `timeout_seconds`).
+- [ ] `ebook_translate` on a small file in `Input/` returns an estimate first, then translates into `Output/` after confirming.
 - [ ] No secrets in the diff (see command above); `git ls-files | grep -E 'local.properties|\.jks|\.keystore'` is empty.
 - [ ] GitHub release created with the APK attached; README, METADATA.md and docs/ARCHITECTURE.md are up to date.

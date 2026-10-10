@@ -256,7 +256,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 
 ## Known limitations
 - (v0.9.0) Everything after Phase 2 compiles, and its 25 JVM unit tests pass, but it **has not been tested on a device**. The Shizuku, accessibility and JGit paths are only exercised at runtime.
-- There is no in-app browser: `web_search`/`web_fetch` run no JavaScript and can't log in, so JS-only or login-walled pages can't be read.
+- There is no in-app browser (and no X/Facebook tools): `web_search`/`web_fetch` run no JavaScript. JS-heavy pages need the optional Termux Chromium + Selenium add-on (`selenium_*`); login-walled pages aren't supported.
 - JGit 5.x doesn't support shallow clones. `run_shell` runs as the shell uid, which can't read the app's private workspace.
 - The keep-alive notification can't be fully hidden (Android rule).
 - (Phase 3) If a crash happens halfway through running a step's tools, the tool calls that didn't run are dropped and the model is asked again.
