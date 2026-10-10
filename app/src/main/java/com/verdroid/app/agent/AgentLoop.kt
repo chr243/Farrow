@@ -50,6 +50,10 @@ class AgentLoop internal constructor(
     private val skillsPrompt: suspend () -> String = { "" },
     /** Attached image (path under Documents/Verdroid) → data URL for vision models; null if unreadable. */
     private val imageData: suspend (relativePath: String) -> String? = { null },
+    /** The user's AGENTS.md (Settings); "" when empty. */
+    private val userInstructions: suspend () -> String = { "" },
+    /** Per-chat tool presets note ("" when every preset is on). */
+    private val presetNote: suspend (taskId: Long) -> String = { "" },
 ) {
     @Inject constructor(
         tasks: TaskRepository,
@@ -63,6 +67,8 @@ class AgentLoop internal constructor(
         memory: com.verdroid.app.data.memory.MemoryRepository,
         skills: com.verdroid.app.data.skills.SkillStore,
         sharedFolder: com.verdroid.app.data.storage.SharedFolder,
+        agentsMd: com.verdroid.app.data.instructions.AgentsMdStore,
+        presets: com.verdroid.app.data.tools.ChatToolPresets,
     ) : this(
         tasks, settings, registry, notifications,
         model = { m, t, id, st -> client.complete(m, t, id, st) },
@@ -76,9 +82,13 @@ class AgentLoop internal constructor(
                 com.verdroid.app.data.storage.AttachmentImages.dataUrl(sharedFolder, rel)
             }
         },
+        userInstructions = { agentsMd.promptBlock() },
+        presetNote = { id -> com.verdroid.app.data.tools.ToolPreset.promptNote(presets.off(id)) },
     )
 
     private suspend fun fullSystemPrompt(taskId: Long): String = systemPrompt() +
+        presetNote(taskId).let { if (it.isBlank()) "" else "\n\n" + it } +
+        userInstructions().let { if (it.isBlank()) "" else "\n\n" + it } +
         skillsPrompt().let { if (it.isBlank()) "" else "\n\n" + it } +
         memoryPrompt(taskId).let { if (it.isBlank()) "" else "\n\n" + com.verdroid.app.data.network.MemoryRedaction.wrap(it) }
 
@@ -124,7 +134,7 @@ class AgentLoop internal constructor(
             cp = cp.copy(pendingStep = PendingStep(step, "calling_model", startedAt = System.currentTimeMillis()), phase = "calling_model")
             saveCheckpoint(taskId, cp)
             val messages = buildApiMessages(taskId).let { m -> nudge?.let { m + ApiMessage("system", it) } ?: m }
-            val outcome = model(messages, registry.schemas(), taskId) { tasks.updateSubtitle(taskId, it) }
+            val outcome = model(messages, registry.schemas(taskId), taskId) { tasks.updateSubtitle(taskId, it) }
             when (outcome) {
                 ChatOutcome.NoApiKey -> {
                     fail(taskId, "No model available: add an OpenRouter API key (Settings → API keys) or keep kilo:kilo-auto/free in Settings → Model priority.")
@@ -137,7 +147,7 @@ class AgentLoop internal constructor(
                     val c = outcome.completion
                     val finish = c.finishReason?.lowercase()
                     val native = c.toolCalls
-                    val fenced = if (native.isEmpty()) FencedToolCallParser.parse(c.content, registry.names) else emptyList()
+                    val fenced = if (native.isEmpty()) FencedToolCallParser.parse(c.content, registry.namesFor(taskId)) else emptyList()
                     val calls = native.ifEmpty { fenced }
                     val blank = c.content.isNullOrBlank()
 
@@ -187,7 +197,7 @@ class AgentLoop internal constructor(
                             if (parseStreak > 1) {
                                 return pauseWithReason(taskId, "Tool call not understood", "⚠️ The model's tool call couldn't be parsed twice in a row. Tap Continue to retry.")
                             }
-                            nudge = "Your last tool call could not be parsed. Use a native tool call, or exactly one fenced ```json block like {\"tool\": \"name\", \"arguments\": {...}} with valid JSON and a known tool name (${registry.names.sorted().joinToString()})."
+                            nudge = "Your last tool call could not be parsed. Use a native tool call, or exactly one fenced ```json block like {\"tool\": \"name\", \"arguments\": {...}} with valid JSON and a known tool name (${registry.namesFor(taskId).sorted().joinToString()})."
                             status(taskId, "⚠️ Couldn't parse the model's tool call — asking it to resend.", null)
                             cp = cp.copy(step = step, pendingStep = null, lastMessageId = msgId, model = outcome.model, phase = "parse_failed")
                             saveCheckpoint(taskId, cp)
@@ -368,7 +378,7 @@ class AgentLoop internal constructor(
         const val DAILY_QUOTA_MESSAGE = "⏸️ Paused: Daily free quota exhausted. Resuming at 00:00 UTC."
         val SYSTEM_PROMPT = """
             You are Verdroid, an autonomous assistant running inside an Android app.
-            You can call the tools listed in the tool definitions (the user can turn tools off in Settings > Tools; only call
+            You can call the tools listed in the tool definitions (the user can turn tools off in Settings > Tools or per chat with Tool presets; only call
             the ones you were given). File tools work in a private sandboxed workspace (paths relative to its root).
             Prefer native tool/function calls. If you cannot use native tool calls, emit exactly one fenced block like:
             ```json
@@ -453,7 +463,10 @@ class AgentLoop internal constructor(
               reachable. Only delete what the user asked for. read_file, write_file, list_dir are a private scratch area
               the user can't see (scraper scripts, skill drafts) — not for finished work.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress
-              and decisions, scope="global" (long-term) for lasting facts and preferences about the user.
+              and decisions, scope="global" (long-term) for lasting facts and preferences about the user. Keep the current
+              task in short-term memory so you don't lose it: when the user gives you a task (or changes it), save one line
+              "Task: <goal, key constraints>" with scope="chat" and tags ["task"] (delete the old task note first if it
+              changed), and save short progress notes as you go. Skip this for one-line questions you answer right away.
             - Presenting results: lists of items with several attributes (products, options, search results) as a Markdown
               table (header row + one row per item) — the chat renders tables. Numeric comparisons (e.g. prices, ratings,
               values over time, shares, backtest equity) with the chart tool (bar/line/pie/scatter), then a short summary in text.

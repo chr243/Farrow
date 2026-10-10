@@ -49,6 +49,7 @@ object Routes {
     const val KEEP_ALIVE = "settings/keepalive"
     const val TOOLS = "settings/tools"
     const val SKILLS = "settings/skills"
+    const val AGENTS_MD = "settings/agents-md"
     const val PERMISSIONS = "settings/permissions"
     const val THEME = "settings/theme"
     const val ARCHIVE = "settings/archive"
@@ -152,6 +153,7 @@ fun VerdroidRoot(
             composable(Routes.PERMISSIONS) {
                 com.verdroid.app.ui.permissions.PermissionsScreen(onBack = { nav.popBackStack() }, onTermuxSetup = { nav.navigate(Routes.TOOLS) })
             }
+            composable(Routes.AGENTS_MD) { com.verdroid.app.ui.instructions.AgentsMdScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SKILLS) { com.verdroid.app.ui.skills.SkillsScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.MEMORY, arguments = listOf(navArgument("chat") { type = NavType.LongType; defaultValue = -1L })) {
                 com.verdroid.app.ui.memory.MemoryScreen(onBack = { nav.popBackStack() })

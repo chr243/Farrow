@@ -36,6 +36,7 @@ class ChatViewModel @Inject constructor(
     private val sendMessage: SendMessageUseCase,
     val chatHeads: ChatHeadController,
     private val sharedFolder: SharedFolder,
+    private val presets: com.verdroid.app.data.tools.ChatToolPresets,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
     /** 0 = a brand-new conversation that is created on the first send. */
@@ -49,6 +50,16 @@ class ChatViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val isGenerating: StateFlow<Boolean> = combine(taskId, agent.runningTaskIds) { id, running -> id in running }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** Tool presets switched off for this chat (empty = All on, the default). */
+    val presetsOff: StateFlow<Set<com.verdroid.app.data.tools.ToolPreset>> =
+        taskId.flatMapLatest { if (it == 0L) flowOf(emptySet()) else presets.observe(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    fun setPreset(preset: com.verdroid.app.data.tools.ToolPreset, enabled: Boolean) {
+        taskId.value.takeIf { it != 0L }?.let { presets.setEnabled(it, preset, enabled) }
+    }
+    fun setAllPresets(enabled: Boolean) { taskId.value.takeIf { it != 0L }?.let { presets.setAll(it, enabled) } }
 
     private val _pendingAttach = MutableStateFlow<ChatAttachment.Saved?>(null)
     val pendingAttach: StateFlow<ChatAttachment.Saved?> = _pendingAttach.asStateFlow()

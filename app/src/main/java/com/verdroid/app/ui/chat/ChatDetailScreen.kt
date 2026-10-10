@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -142,6 +143,11 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                     if (task != null) {
                         // No chat-head button (v0.9.18): the chat head starts automatically; settings in Settings > Chat heads.
                         var overflow by remember { mutableStateOf(false) }
+                        var showPresets by remember { mutableStateOf(false) }
+                        if (showPresets) {
+                            val off by vm.presetsOff.collectAsStateWithLifecycle()
+                            ToolPresetsDialog(off, vm::setPreset, vm::setAllPresets) { showPresets = false }
+                        }
                         Box {
                             IconButton(onClick = { overflow = true }) {
                                 Text("⋮", fontSize = 22.sp, modifier = Modifier.semantics { contentDescription = "More options" })
@@ -149,6 +155,9 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                             DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
                                 DropdownMenuItem(text = { Text("Chat memory (short-term)") }, onClick = {
                                     overflow = false; task?.id?.let(onChatMemory)
+                                })
+                                DropdownMenuItem(text = { Text("Tool presets") }, onClick = {
+                                    overflow = false; showPresets = true
                                 })
                             }
                         }
@@ -276,6 +285,46 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                 }
             }
         }
+    }
+}
+
+/** Per-chat tool presets: Web / Files / Termux / Device, plus All. Everything is on by default. */
+@Composable
+private fun ToolPresetsDialog(
+    off: Set<com.verdroid.app.data.tools.ToolPreset>,
+    onSet: (com.verdroid.app.data.tools.ToolPreset, Boolean) -> Unit,
+    onSetAll: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        title = { Text("Tool presets") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Which tools the agent can use in this chat. Memory, skills, charts and MCP always stay on; " +
+                    "Settings → Tools still applies.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                PresetRow("All", "Every tool category", off.isEmpty()) { onSetAll(it) }
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                com.verdroid.app.data.tools.ToolPreset.entries.forEach { p ->
+                    PresetRow(p.label, p.description, p !in off) { onSet(p, it) }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun PresetRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(8.dp))
+        Switch(checked, onChange)
     }
 }
 

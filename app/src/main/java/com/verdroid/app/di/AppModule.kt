@@ -112,6 +112,11 @@ object AppModule {
     @Provides @Singleton
     fun provideSkillStore(@ApplicationContext context: Context) = com.verdroid.app.data.skills.SkillStore(File(context.filesDir, "skills"))
 
+    /** The user's AGENTS.md (Settings → AGENTS.md), added to every system prompt. */
+    @Provides @Singleton
+    fun provideAgentsMd(@ApplicationContext context: Context) =
+        com.verdroid.app.data.instructions.AgentsMdStore(File(context.filesDir, "AGENTS.md"))
+
     @Provides @Singleton
     fun provideToolRegistry(
         skills: com.verdroid.app.data.skills.SkillStore,
@@ -122,6 +127,7 @@ object AppModule {
         shell: ShellExecutor,
         git: GitManager,
         toolPrefs: com.verdroid.app.data.tools.ToolPrefs,
+        chatPresets: com.verdroid.app.data.tools.ChatToolPresets,
         mcp: com.verdroid.app.data.mcp.McpManager,
         memory: com.verdroid.app.data.memory.MemoryRepository,
         @ApplicationContext context: Context,
@@ -161,6 +167,7 @@ object AppModule {
             StubTool.all(),
         toolPrefs,
         dynamic = mcp::agentTools,
+        chatFilter = chatPresets,
     )
 }
 

@@ -109,7 +109,9 @@ object MemoryText {
         appendLine("Memory (tools memory_save, memory_search, memory_delete) has two tiers:")
         appendLine("- Short-term (scope=\"chat\"): this chat's scratchpad. Save task progress, decisions and things you figured out " +
             "(e.g. which approach worked, IDs, partial results) so you can pick up where you left off. It is shown below in every " +
-            "turn of this chat and deleted with the chat.")
+            "turn of this chat and deleted with the chat. Keep the current task there: when the user gives you a task or changes " +
+            "it, save one line \"Task: <goal, key constraints>\" (scope=\"chat\", tag \"task\"; delete the outdated task note first), " +
+            "and follow it until it's done.")
         if (autoSave) appendLine("- Long-term (scope=\"global\", the default): lasting facts about the user and their preferences (name, language, " +
             "accounts, recurring tasks, style, things to avoid), kept across all chats. Save them as one short self-contained sentence; " +
             "no one-off task details, secrets or passwords. Check the list below (or memory_search) first and never save a duplicate; " +

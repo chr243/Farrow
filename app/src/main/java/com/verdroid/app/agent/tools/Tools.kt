@@ -118,13 +118,22 @@ class StubTool(override val name: String, override val description: String, over
 class ToolRegistry(val tools: List<AgentTool>, private val switches: com.verdroid.app.data.tools.ToolSwitches =
     com.verdroid.app.data.tools.ToolSwitches.ALL_ON,
     /** Tools that come and go at runtime (remote MCP servers: mcp__<server>__<tool>). */
-    private val dynamic: () -> List<AgentTool> = { emptyList() }) {
+    private val dynamic: () -> List<AgentTool> = { emptyList() },
+    /** Per-chat tool presets (chat ⋮ → Tool presets); all on unless the user turned a preset off for that chat. */
+    private val chatFilter: com.verdroid.app.data.tools.ChatToolFilter = com.verdroid.app.data.tools.ChatToolFilter.ALL) {
     private val staticByName = tools.associateBy { it.name }
     private val allTools: List<AgentTool> get() = tools + dynamic().filter { it.name !in staticByName }
     val enabledTools: List<AgentTool> get() = allTools.filter { switches.isEnabled(it.name) }
     val names: Set<String> get() = enabledTools.map { it.name }.toSet()
 
-    fun schemas(): JsonArray = JsonArray(enabledTools.map { t ->
+    /** Tools enabled in Settings and in this chat's presets. */
+    fun enabledFor(taskId: Long): List<AgentTool> = enabledTools.filter { chatFilter.allowed(taskId, it.name) }
+    fun namesFor(taskId: Long): Set<String> = enabledFor(taskId).map { it.name }.toSet()
+
+    fun schemas(): JsonArray = schemasOf(enabledTools)
+    fun schemas(taskId: Long): JsonArray = schemasOf(enabledFor(taskId))
+
+    private fun schemasOf(list: List<AgentTool>): JsonArray = JsonArray(list.map { t ->
         buildJsonObject {
             put("type", "function")
             put("function", buildJsonObject {
@@ -136,6 +145,10 @@ class ToolRegistry(val tools: List<AgentTool>, private val switches: com.verdroi
     suspend fun execute(name: String, argumentsJson: String, taskId: Long = 0L): ToolResult {
         val tool = staticByName[name] ?: dynamic().firstOrNull { it.name == name } ?: return ToolResult(errorJson("Unknown tool: $name"), true)
         if (!switches.isEnabled(name)) return ToolResult(errorJson("The tool $name is turned off by the user (Settings > Tools). Do not call it; use another approach or tell the user."), true)
+        if (!chatFilter.allowed(taskId, name)) {
+            val preset = com.verdroid.app.data.tools.ToolPreset.of(name)?.label ?: "its"
+            return ToolResult(errorJson("The tool $name is turned off in this chat (the $preset tool preset is off; chat menu → Tool presets). Do not call it or work around it; tell the user to turn the preset on if it's needed."), true)
+        }
         val args = runCatching { Json.parseToJsonElement(argumentsJson.ifBlank { "{}" }) as? JsonObject }.getOrNull()
             ?: return ToolResult(errorJson("Arguments must be a JSON object"), true)
         return try {

@@ -78,6 +78,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
             ))
             SettingsGroup("Agent tools", listOf(
                 item("Tools", "Built-in agent tools (status, on/off), Documents/Verdroid folder access, Termux setup and add-ons", Routes.TOOLS),
+                item("AGENTS.md", "Your standing instructions for the agent, added to every chat", Routes.AGENTS_MD),
                 item("Skills", "Procedures the agent saved: enable/disable (only enabled ones go into the prompt), view, delete", Routes.SKILLS),
                 item("MCP servers", "Remote MCP servers, their status and per-tool switches", Routes.MCP),
             ))
