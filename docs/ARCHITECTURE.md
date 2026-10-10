@@ -488,3 +488,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   `termux_python`, `pdf_*` and `ebook_translate` return `needs_install_confirmation` (packages + `install_id`) and install
   nothing; the agent asks the user and re-calls with `confirm_install=true` + `install_id` only after a yes. Settings →
   Tools add-ons stay one-tap (the tap is the consent).
+
+## v1.0.28
+
+- **+ attach copies to Input:** every file picked with the chat + button is copied into
+  `Documents/Farrow/Input/` (folders created, no overwrite, no partial files). Without All files access the chat shows
+  a **Grant access** button and retries the same file afterwards.
+- **No auto-translate on attach:** an attachment without instructions no longer implies translation. The attachment
+  hint is neutral; the agent asks what to do and suggests options by file type (translate last). `ebook_translate`
+  runs only when the user asks for a translation.
