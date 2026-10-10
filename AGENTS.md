@@ -28,7 +28,7 @@ Verdroid (`com.verdroid.app`) is a native Android app (Kotlin, Jetpack Compose, 
 │       │   │   ├── keepalive/    foreground keep-alive service, boot receiver
 │       │   │   ├── shizuku/      ShizukuManager, ShellExecutor, ShellUserService, RishStore (+ RishRunner for rish_run)
 │       │   │   └── ui/           Compose screens + ViewModels (chats, chat incl. ToolStacks, menu, device, tools, permissions, skills, theme, …)
-│       │   └── res/                        resources (launcher icon = vector S-curve, colour #3D5A3A on #FBF3E6)
+│       │   └── res/                        resources (launcher icon = leaf + circuit, adaptive mipmap PNGs on #133121)
 │       └── test/java/com/verdroid/app/       JVM unit tests (JUnit 4), mirroring the main package layout
 ├── gradle/libs.versions.toml       version catalog (AGP 8.7.3, Kotlin 2.1.0, KSP, Hilt, Room, Compose BOM)
 ├── gradle/wrapper/                 Gradle 8.11.1 wrapper (always use ./gradlew)

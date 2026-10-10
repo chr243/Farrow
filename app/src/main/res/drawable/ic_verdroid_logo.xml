@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Verdroid mark: the green S-curve (cubic Bézier fitted to the original artwork). -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp" android:height="48dp"
-    android:viewportWidth="48" android:viewportHeight="48">
-    <path android:fillColor="#FBF3E6" android:pathData="M24,0a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z"/>
-    <path android:strokeColor="#3D5A3A" android:strokeWidth="1.60" android:strokeLineCap="butt"
-        android:fillColor="#00000000" android:pathData="M9,34.43 C27.9,34.43 18.56,13.57 39,13.57"/>
-</vector>
