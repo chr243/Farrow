@@ -6,8 +6,9 @@ import com.farrow.app.domain.model.*
 private inline fun <reified T : Enum<T>> enumOr(name: String, default: T): T =
     runCatching { enumValueOf<T>(name) }.getOrDefault(default)
 
+/** Titles saved before v1.0.26 could be the raw "Attached file: Input/…" line; the UI always gets a clean one. */
 fun TaskEntity.toDomain() = Task(
-    id, title, prompt, enumOr(type, TaskType.CHAT), enumOr(status, TaskStatus.IDLE), subtitle, currentStep,
+    id, AttachmentText.cleanTitle(title, prompt), prompt, enumOr(type, TaskType.CHAT), enumOr(status, TaskStatus.IDLE), subtitle, currentStep,
     checkpointJson, model, createdAt, updatedAt, startedAt, lastOpenedAt, resumeAt, errorMessage, attempt, pauseReason, archivedAt,
 )
 

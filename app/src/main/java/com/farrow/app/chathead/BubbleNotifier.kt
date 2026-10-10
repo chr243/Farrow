@@ -143,7 +143,7 @@ class BubbleNotifier @Inject constructor(
         } else {
             recent.forEach { m ->
                 val sender: Person? = if (m.role == MessageRole.USER) null else bot
-                style.addMessage(m.content.orEmpty().take(500), m.createdAt, sender)
+                style.addMessage(com.farrow.app.domain.model.AttachmentText.preview(m.content.orEmpty()).take(500), m.createdAt, sender)
             }
         }
 

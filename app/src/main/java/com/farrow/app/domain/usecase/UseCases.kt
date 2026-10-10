@@ -37,11 +37,9 @@ class StartConversationUseCase @Inject constructor(
     companion object {
         fun titleFrom(prompt: String): String {
             // An attachment-only first message is titled with the file name, not "Attached file: Input/…".
-            val d = com.farrow.app.data.storage.ChatAttachment.forDisplay(prompt)
-            if (d.fileName != null && d.text.isBlank()) return d.fileName.substringBeforeLast('.').ifBlank { d.fileName }.take(60)
-            val words = d.text.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-            val title = words.take(6).joinToString(" ")
-            return if (words.size > 6) "$title…" else title.ifBlank { "New conversation" }
+            val d = com.farrow.app.domain.model.AttachmentText.forDisplay(prompt)
+            if (d.fileName != null && d.text.isBlank()) return com.farrow.app.domain.model.AttachmentText.stripExtension(d.fileName).take(60)
+            return com.farrow.app.domain.model.AttachmentText.titleWords(d.text)
         }
     }
 }

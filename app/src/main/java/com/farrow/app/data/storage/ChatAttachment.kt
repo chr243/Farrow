@@ -1,5 +1,7 @@
 package com.farrow.app.data.storage
 
+import com.farrow.app.domain.model.AttachmentText
+
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -26,34 +28,12 @@ object ChatAttachment {
     }
 
     /** Message line the chat prepends so the agent sees a sandboxed path. */
-    fun messagePrefix(saved: Saved): String =
-        "Attached file: ${saved.relativePath} (${saved.bytes} bytes). It is under Documents/Farrow — use workspace_* or ebook_translate on that path. Deliverables go in Output/.\n\n"
+    /** Model-facing line; the UI hides it via [AttachmentText]. */
+    fun messagePrefix(saved: Saved): String = AttachmentText.prefix(saved.relativePath, saved.bytes)
 
-    /** Sent when the user attaches a file without typing anything. */
-    const val DEFAULT_PROMPT = "Please work with the attached file."
-
-    /** What the chat UI shows for a user message: the attached file's name (no path / tool hints) + the typed text. */
-    data class Display(val fileName: String?, val bytes: Long?, val text: String)
-
-    private val PREFIX_RE = Regex("^Attached file: (.+?) \\((\\d+) bytes\\)\\. It is under Documents/Farrow[^\n]*(\n\n?|$)")
-
-    /**
-     * Splits the model-facing [messagePrefix] off a stored user message (the full text still goes to the API).
-     * The default prompt is hidden when it was only added because the user typed nothing.
-     */
-    fun forDisplay(content: String): Display {
-        val m = PREFIX_RE.find(content) ?: return Display(null, null, content)
-        val rest = content.substring(m.range.last + 1)
-        return Display(m.groupValues[1].substringAfterLast('/'), m.groupValues[2].toLongOrNull(),
-            if (rest.trim() == DEFAULT_PROMPT) "" else rest)
-    }
-
-    /** Human size for the chip (e.g. 1.4 MB). */
-    fun humanSize(bytes: Long): String = when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024L * 1024 -> String.format(java.util.Locale.US, "%.0f KB", bytes / 1024.0)
-        else -> String.format(java.util.Locale.US, "%.1f MB", bytes / (1024.0 * 1024))
-    }
+    const val DEFAULT_PROMPT = AttachmentText.DEFAULT_PROMPT
+    fun forDisplay(content: String): AttachmentText.Display = AttachmentText.forDisplay(content)
+    fun humanSize(bytes: Long): String = AttachmentText.humanSize(bytes)
 
     internal fun sanitize(name: String): String {
         val base = name.replace(Regex("[\\\\/\\u0000]"), "_").trim().ifEmpty { "attachment" }

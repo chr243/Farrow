@@ -116,7 +116,10 @@ fun TaskAvatar(task: Task, size: Dp = 52.dp, ring: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val shades = remember(cs.primary, cs.tertiary, dark) { ChatAvatarStyle.shades(cs.primary.toArgb(), cs.tertiary.toArgb(), dark) }
     val shade = shades[remember(task.id) { ChatAvatarStyle.colorIndex(task.id) }]
-    val glyph = remember(task.title, task.prompt, task.type) { ChatAvatarStyle.glyph(task.title, task.prompt, task.type) }
+    val glyph = remember(task.title, task.prompt, task.type) {
+        // Topic from the user's words only: the attachment line mentions workspace/file tools and would always give ⚙️.
+        ChatAvatarStyle.glyph(task.title, com.farrow.app.domain.model.AttachmentText.plain(task.prompt), task.type)
+    }
     Box(Modifier.size(size)) {
         Box(
             Modifier.fillMaxSize()

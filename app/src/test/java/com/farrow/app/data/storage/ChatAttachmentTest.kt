@@ -37,7 +37,7 @@ class ChatAttachmentTest {
         assertEquals("Fulgrim - Graham McNeill", com.farrow.app.domain.usecase.StartConversationUseCase.titleFrom(only))
         assertEquals("Translate it to French", com.farrow.app.domain.usecase.StartConversationUseCase.titleFrom(full))
         // Plain messages untouched.
-        assertEquals(ChatAttachment.Display(null, null, "hello"), ChatAttachment.forDisplay("hello"))
+        assertEquals(com.farrow.app.domain.model.AttachmentText.Display(null, null, "hello"), ChatAttachment.forDisplay("hello"))
         assertEquals("1.4 MB", ChatAttachment.humanSize(1_468_006))
     }
 }
