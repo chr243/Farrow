@@ -24,5 +24,5 @@ The per-release checklist lives in [AGENTS.md](AGENTS.md#maintainer-verification
 - [ ] Social preview uploaded (1200 × 630).
 - [ ] README has no screenshots for now; add fresh Verdroid captures if wanted.
 - [ ] CI badge/workflow green on `main` (`gh run list --workflow ci.yml --limit 1`).
-- [ ] LICENSE chosen and added (TODO).
+- [x] LICENSE added (GPL-3.0).
 - [ ] Repo visibility is intended (currently private).

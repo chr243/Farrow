@@ -78,4 +78,4 @@ Personal project, debug-signed builds only. There is no in-app browser and no X/
 
 ## License
 
-TODO(maintainer): no license file yet. Choose one (e.g. MIT / Apache-2.0) and add `LICENSE`.
+Verdroid is licensed under the GNU General Public License v3.0 (`GPL-3.0-only`). See [LICENSE](LICENSE) for the full text.
