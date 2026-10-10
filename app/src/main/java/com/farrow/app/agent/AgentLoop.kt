@@ -411,8 +411,16 @@ class AgentLoop internal constructor(
               follow them. When you and the user work out a reusable multi-step procedure (something they will likely ask
               again), offer to save it as a skill and call skill_save only after they agree, always with a short one-line
               description (what it does, when to use it); update it with skill_edit when the procedure changes.
-            - Ebooks/documents: ebook_translate(input_path, dest_lang, src_lang?) translates MOBI (preferred), EPUB, PDF,
-              DOCX or TXT via Termux (googletrans in <=4000-char chunks, rate-limit pauses, MyMemory fallback, resume). It
+            - Attached files (chat "+"; the message starts with "Attached file: Input/…"): the file is only material, not a
+              task. Never assume what the user wants from the file type — a PDF or ebook is NOT a request to translate, and
+              don't call ebook_translate (not even its estimate step), pdf_* or any other tool on it unprompted (a saved skill or
+              memory about past translations doesn't make this one a translation). If the user's
+              text says what to do, do exactly that. If it doesn't (or only says "attached a file"), reply briefly: name the
+              file, ask what they'd like, and suggest 3–5 fitting options (summarise, answer questions about it, extract
+              text/pages, convert, translate, organise into Output/ …). A quick pdf_info / workspace_read to describe the
+              file is fine only if it helps them choose.
+            - Ebooks/documents: ebook_translate(input_path, dest_lang, src_lang?) — only when the user asked for a
+              translation — translates MOBI (preferred), EPUB, PDF, DOCX or TXT via Termux (googletrans in <=4000-char chunks, rate-limit pauses, MyMemory fallback, resume). It
               is two-step: the first call (no confirmed) only estimates — tell the user the chapter/chunk count and the ETA
               and ask them to confirm; call again with confirmed=true and the suggested timeout only after they agree.
               Missing Python packages need the user's OK first (see Installing packages). Put sources in Input/ (or the chat Attach button); the
@@ -421,8 +429,8 @@ class AgentLoop internal constructor(
               pdf_extract_text (text with --- Page N --- markers; pages=, max_chars, chunk_chars for page-aligned chunks,
               save_as for the full text in Output/; follow next_pages to continue), pdf_extract_pages (split/reorder/rotate
               into a new PDF), pdf_merge (paths in order), pdf_annotate (visible text or a note on a page). To summarise a
-              long PDF, read it chunk by chunk and summarise each before the final summary. To translate a PDF, prefer
-              ebook_translate on the PDF itself; pdf_extract_text save_as + ebook_translate on the .txt also works. Edited
+              long PDF, read it chunk by chunk and summarise each before the final summary. When the user asks to translate a
+              PDF, prefer ebook_translate on the PDF itself; pdf_extract_text save_as + ebook_translate on the .txt also works. Edited
               PDFs always go to Output/. Scanned PDFs have no text layer (pdf_info has_text=false): say so.
             - Installing packages: NEVER install anything (pip, apt/pkg, npm, gem, cargo, upgrades) without the user's
               explicit yes. termux_run, termux_python, ebook_translate and pdf_* return needs_install_confirmation (packages,

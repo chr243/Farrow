@@ -41,4 +41,30 @@ class AttachmentTextTest {
         val d = AttachmentText.forDisplay("  " + withText)
         assertEquals(file, d.fileName); assertEquals("Translate to French please", d.text)
     }
+
+    @Test fun `attachment hint never steers to translation and asks when there is no instruction`() {
+        for (path in listOf("Input/$file", "Input/report.pdf", "Input/a.png", "Input/notes.docx", "Input/x.bin", "Input/noext")) {
+            val p = AttachmentText.prefix(path, 10)
+            assertFalse(p, p.contains("ebook_translate on that path"))
+            assertTrue(p.contains("ask what to do") && p.contains("no translation unless asked"))
+            assertTrue(p.endsWith("\n\n") && p.trimEnd().lines().size == 1)
+            assertTrue(AttachmentText.options(path).size in 3..6)
+            assertFalse(AttachmentText.options(path).first().contains("translat"))
+        }
+        assertTrue(AttachmentText.options("Input/r.PDF").any { it.contains("pdf_extract_text") })
+        assertFalse(AttachmentText.options("Input/a.jpg").any { it.contains("translat") })
+        assertFalse(AttachmentText.DEFAULT_PROMPT.contains("work with", ignoreCase = true))
+        assertTrue(AttachmentText.DEFAULT_PROMPT.contains("Ask me"))
+    }
+
+    @Test fun `new and legacy default prompts are hidden in the UI`() {
+        val p = AttachmentText.prefix("Input/report.pdf", 5)
+        assertEquals("", AttachmentText.forDisplay(p + AttachmentText.DEFAULT_PROMPT).text)
+        assertEquals("", AttachmentText.forDisplay(p + "Please work with the attached file.").text)
+        assertEquals("📎 report.pdf", AttachmentText.preview(p + AttachmentText.DEFAULT_PROMPT))
+        assertEquals("Input/report.pdf", AttachmentText.forDisplay(p + "Summarise").path)
+        // Messages stored by v1.0.27 (old hint wording) still parse.
+        val old = "Attached file: Input/b.mobi (9 bytes). It is under Documents/Farrow — use workspace_*, pdf_* (PDFs) or ebook_translate on that path. Deliverables go in Output/.\n\nhi"
+        assertEquals("b.mobi", AttachmentText.forDisplay(old).fileName); assertEquals("hi", AttachmentText.forDisplay(old).text)
+    }
 }

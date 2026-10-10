@@ -12,7 +12,7 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * Every chat "+" pick lands in Documents/Farrow/Input for the agent (ebook_translate, pdf_*, workspace_*, …).
+ * Every chat "+" pick lands in Documents/Farrow/Input for the agent, which asks what to do with it unless the user said.
  * The Android part only resolves the SAF [Uri]; the copy itself ([copyToInput]) is pure java.io and JVM-tested.
  */
 object ChatAttachment {

@@ -18,6 +18,8 @@ class EbookTranslateTool(
 
     override val name = "ebook_translate"
     override val description = "Translate an ebook or document with Termux Python (MOBI preferred, also EPUB/PDF/DOCX/TXT). " +
+        "Only call this when the user explicitly asked for a translation (and the target language); an attached file " +
+        "on its own is not a request to translate — ask what they want instead. " +
         "googletrans (browser User-Agent) in <=4000-char chunks, ~0.3 s between requests, backoff on Too many requests, a 5-10 s pause every 4 chapters, " +
         "MyMemory fallback, language check, resume if interrupted. input_path is under Documents/Farrow (e.g. Input/book.mobi); " +
         "the result is always written under Output/. TWO STEPS: call first WITHOUT confirmed → returns chapters, chunks and an " +

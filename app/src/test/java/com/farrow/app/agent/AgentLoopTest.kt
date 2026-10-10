@@ -268,4 +268,14 @@ class AgentLoopTest {
         assertTrue(wire.contains("\"image_url\"") && wire.contains("\"type\":\"text\""))
         assertTrue(AgentLoop.systemPrompt().contains("Look at the image itself"))
     }
+
+    @Test fun `system prompt tells the agent to ask about attachments instead of translating`() {
+        val p = AgentLoop.systemPrompt()
+        assertTrue(p.contains("a PDF or ebook is NOT a request to translate"))
+        assertTrue(p.contains("ask what they'd like, and suggest 3–5 fitting options"))
+        assertTrue(p.contains("only when the user asked for a\n  translation") || p.contains("only when the user asked for a"))
+        assertFalse(p.contains("To translate a PDF, prefer"))
+        assertTrue(p.contains("needs_install_confirmation")) // install consent gate untouched
+        assertTrue(com.farrow.app.agent.tools.EbookTranslateTool::class.java.name.isNotEmpty())
+    }
 }

@@ -9,11 +9,41 @@ import java.util.Locale
  * Pure Kotlin so domain use cases and the data mappers can share it.
  */
 object AttachmentText {
-    /** Sent when the user attaches a file without typing anything. */
-    const val DEFAULT_PROMPT = "Please work with the attached file."
+    /**
+     * Sent when the user attaches a file without typing anything. It says outright that there is no task yet, so the
+     * model asks instead of guessing one (the old "Please work with the attached file." read as "do something").
+     */
+    const val DEFAULT_PROMPT = "I attached a file but haven't said what to do with it yet. Ask me what I'd like, with a few options."
+    /** Default prompts stored by older versions (still hidden in the UI). */
+    private val LEGACY_DEFAULT_PROMPTS = setOf("Please work with the attached file.")
 
+    /**
+     * The model-facing line in front of the user's text. Neutral on purpose: it names the path and the rule (do only
+     * what the user asked; with no clear request, ask and offer [options]) — it never points at one tool such as
+     * ebook_translate. Must stay a single line (see [PREFIX_RE]).
+     */
     fun prefix(relativePath: String, bytes: Long): String =
-        "Attached file: $relativePath ($bytes bytes). It is under Documents/Farrow — use workspace_*, pdf_* (PDFs) or ebook_translate on that path. Deliverables go in Output/.\n\n"
+        "Attached file: $relativePath ($bytes bytes). It is under Documents/Farrow (use that path with the tools). " +
+            "Do only what the user asks about it; if they haven't said what they want, don't guess or start a task " +
+            "(no translation unless asked) — ask what to do and suggest options such as: " +
+            options(relativePath).joinToString("; ") + ". Deliverables go in Output/.\n\n"
+
+    /** A short, file-type-aware list of things the agent can offer to do with an attachment (each maps to real tools). */
+    fun options(name: String): List<String> = when (val ext = name.substringAfterLast('.', "").lowercase()) {
+        "pdf" -> listOf("summarise it (pdf_extract_text)", "answer questions about it",
+            "extract the text to Output/", "split, reorder or merge pages (pdf_extract_pages/pdf_merge)",
+            "annotate it (pdf_annotate)", "translate it (ebook_translate)")
+        "mobi", "epub", "azw", "azw3", "fb2" -> listOf("summarise it or a chapter", "answer questions about it",
+            "convert it to another format (termux_run, if a converter is installed)", "translate it (ebook_translate)")
+        "docx", "doc", "odt", "rtf", "txt", "md" -> listOf("summarise it", "answer questions about it", "edit or rewrite it into Output/",
+            "convert it (e.g. pandoc via termux_run)", "translate it (ebook_translate)")
+        in IMAGE_EXT -> listOf("describe what's in it", "answer questions about it", "read the text in it",
+            "convert or resize it (termux_run, e.g. imagemagick)")
+        "csv", "tsv", "json", "xlsx", "xls" -> listOf("summarise the data", "answer questions about it", "chart it",
+            "clean or convert it into Output/")
+        else -> listOf("look at it and tell me what it is", "answer questions about it", "convert it",
+            "organise or copy it into Output/")
+    }
 
     /** [path] is the attachment's path relative to Documents/Farrow (e.g. Input/photo.jpg). */
     data class Display(val fileName: String?, val bytes: Long?, val text: String, val path: String? = null) {
@@ -33,8 +63,10 @@ object AttachmentText {
         val m = PREFIX_RE.find(content) ?: return Display(null, null, content)
         val rest = content.substring(m.range.last + 1)
         return Display(m.groupValues[1].substringAfterLast('/'), m.groupValues[2].toLongOrNull(),
-            if (rest.trim() == DEFAULT_PROMPT) "" else rest, m.groupValues[1])
+            if (isDefaultPrompt(rest)) "" else rest, m.groupValues[1])
     }
+
+    fun isDefaultPrompt(text: String): Boolean = text.trim().let { it == DEFAULT_PROMPT || it in LEGACY_DEFAULT_PROMPTS }
 
     /** One-line text for previews/notifications: the user's text, else "📎 <file name>". */
     fun preview(content: String): String {
