@@ -12,16 +12,21 @@ class TermuxRunTool(private val termux: TermuxRunner) : AgentTool {
     override val description = "Run a bash command inside Termux (cwd ~/farrow-work) to use Termux packages such as ffmpeg, " +
         "magick (imagemagick), yt-dlp, git, node, jq, curl, pandoc — whichever the user installed in Settings > Tools. " +
         "Returns exit_code, stdout, stderr as soon as the command finishes (timeout_seconds is only a cap, max 600 s; " +
-        "background jobs left running are stopped when the command ends)."
+        "background jobs left running are stopped when the command ends). Installing packages (pip/apt/pkg/npm install, " +
+        "upgrade) needs the user's OK: such a command first returns needs_install_confirmation; ask the user, and only " +
+        "after they agree re-run it with confirm_install=true and the install_id."
     override val parameters = schema(listOf("command"),
         "command" to prop("string", "bash -lc command"),
-        "timeout_seconds" to prop("integer", "Max seconds before the command is killed (default 120, max 600); the tool returns as soon as it finishes"))
+        "timeout_seconds" to prop("integer", "Max seconds before the command is killed (default 120, max 600); the tool returns as soon as it finishes"),
+        InstallConsent.CONFIRM_PROP, InstallConsent.ID_PROP)
 
     override suspend fun execute(args: JsonObject): String {
         val command = args.str("command")?.takeIf { it.isNotBlank() } ?: return errorJson("command is required")
         val timeout = (args.int("timeout_seconds") ?: 120).coerceIn(1, MAX_TIMEOUT_S)
         if (!termux.isInstalled()) return errorJson("Termux is not installed (F-Droid build). $SETUP")
         if (!termux.hasRunCommandPermission()) return errorJson("Farrow doesn't have the 'Run commands in Termux' permission. $SETUP")
+        gate(name, "the command `" + command.lineSequence().first().take(120) +
+            (if (command.length > 120 || command.contains('\n')) "…" else "") + "` installs them", InstallConsent.detectShell(command), args)?.let { return it }
         val r = termux.runAndWait(script(command, timeout), "run-${System.nanoTime()}", (timeout + 15) * 1_000L, label = "Farrow: termux_run")
             ?: return errorJson("Termux did not answer within ${timeout + 15} s. Check that allow-external-apps = true is set in Termux. $SETUP")
         if (r.err != null && r.err != RESULT_OK && r.exitCode == null) return errorJson("Termux could not run the command: ${r.errmsg ?: "error ${r.err}"}")
@@ -35,6 +40,14 @@ class TermuxRunTool(private val termux: TermuxRunner) : AgentTool {
 
     companion object {
         const val MAX_TIMEOUT_S = 600
+
+        /** Consent gate for agent-written commands/scripts: null = run it; otherwise the pending/denied JSON. */
+        internal fun gate(tool: String, reason: String, packages: List<PackageSpec>, args: JsonObject): String? =
+            when (InstallConsent.decide(args, tool, packages)) {
+                InstallConsent.Decision.Allow -> null
+                InstallConsent.Decision.Deny -> InstallConsent.denied(tool, packages).toString()
+                InstallConsent.Decision.Ask -> InstallConsent.pending(tool, tool, packages, reason, InstallConsent.retryNote(args)).toString()
+            }
         /** Termux plugin API: err == Activity.RESULT_OK (-1) means the command ran. */
         private const val RESULT_OK = -1
         private const val SETUP = "Set it up in Settings > Tools > Termux."

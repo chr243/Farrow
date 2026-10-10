@@ -99,7 +99,7 @@ com.farrow.app
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
 | `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
 | `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/FarrowSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
-| `pdf_info`, `pdf_extract_text`, `pdf_extract_pages`, `pdf_merge`, `pdf_annotate` | Termux Python helper `~/.farrow/farrow_pdf.py` (`data/pdf/FarrowPdfPy`; pure logic in `data/pdf/PdfLogic`): PyMuPDF from the Termux apt package `python-pymupdf` (pip has no Android wheel), fallback pypdf + poppler `pdftotext`; auto-installed on first use (`pdf-tools` add-on does it up front). Text comes back with `--- Page N ---` markers, capped/chunked for summarising, `save_as` writes the full text (can feed `ebook_translate`); edited PDFs always go to `Output/` |
+| `pdf_info`, `pdf_extract_text`, `pdf_extract_pages`, `pdf_merge`, `pdf_annotate` | Termux Python helper `~/.farrow/farrow_pdf.py` (`data/pdf/FarrowPdfPy`; pure logic in `data/pdf/PdfLogic`): PyMuPDF from the Termux apt package `python-pymupdf` (pip has no Android wheel), fallback pypdf + poppler `pdftotext`; installed on first use only after the user agrees (agent install consent; the `pdf-tools` add-on does it up front). Text comes back with `--- Page N ---` markers, capped/chunked for summarising, `save_as` writes the full text (can feed `ebook_translate`); edited PDFs always go to `Output/` |
 | `skill_list`, `skill_get`, `skill_save`, `skill_edit`, `skill_delete` | Agent-writable skills in `files/skills/<id>/SKILL.md` (`data/skills/SkillStore`); enabled ones injected into the system prompt |
 | `rish_run` | `sh files/rish/rish -c <cmd>` from `/data/local/tmp/farrow_rish` with `RISH_APPLICATION_ID=com.termux` and chmod +x (`shizuku/RishStore`, `RishRunner`) |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
@@ -109,6 +109,16 @@ com.farrow.app
 | `run_shell` | Phase 6: Shizuku UserService (`sh -c` as uid 2000) |
 | `git_clone`, `git_status`, `git_commit`, `git_push` | Phase 6: JGit 5.13 inside the workspace, using the token from encrypted settings |
 | `screen_read`, `screen_tap`, `screen_swipe`, `screen_type`, `screen_action` | Phase 6: `FarrowAccessibilityService` |
+
+**Agent install consent** (`agent/tools/InstallConsent`, pure Kotlin, JVM-tested). The agent never installs packages
+silently. `termux_run` / `termux_python` scan the command or script for pip / python -m pip / uv / pipx, apt / apt-get /
+pkg install|reinstall|upgrade, dpkg -i, npm / pnpm / yarn, gem and cargo installs (also inside `bash -c`); `pdf_*` and
+`ebook_translate` run a Termux probe (`setupCommand(allowInstall = false)`) that prints the missing packages instead of
+installing. Either way the tool returns `{"ok":false,"needs_install_confirmation":true,"install_id":…,"packages":[…],
+"reason":…,"estimate":…,"message":…}`; the agent asks the user and only after a yes calls again with
+`confirm_install=true` + `install_id` (an 8-hex SHA-256 of tool group + package set, so a yes only covers that list);
+`confirm_install=false` returns `install_denied`. Settings → Tools add-ons (user tapped Install, `TermuxPackageJobs`)
+are not gated. Best effort: obfuscated installs can slip past the scanner; the system prompt rule still forbids them.
 
 ### Context management
 Tokens are estimated as chars/4. When the live history goes over 60% of the context budget (default 16K tokens, configurable), the oldest turns are summarized with the same model priority list. The summary is stored as a `SUMMARY` message, and the originals are flagged `summarized`, so they stay visible in the UI but are no longer sent. The kept window never starts with an orphaned tool result.

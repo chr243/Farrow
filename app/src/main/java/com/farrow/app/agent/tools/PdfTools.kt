@@ -12,7 +12,7 @@ import java.io.File
 
 /**
  * pdf_* tools: read and lightly edit PDFs with Python in Termux (`~/.farrow/farrow_pdf.py`, PyMuPDF via the Termux
- * package python-pymupdf, pypdf + pdftotext as fallback; installed automatically on first use). Inputs live under
+ * package python-pymupdf, pypdf + pdftotext as fallback; installed on first use only after the user agrees). Inputs live under
  * Documents/Farrow (usually Input/) or in the Termux home; results are always written under Output/.
  */
 abstract class PdfToolBase(protected val termux: TermuxRunner, protected val folder: SharedFolder) : AgentTool {
@@ -44,10 +44,24 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
             catch (e: IllegalArgumentException) { errorJson(e.message ?: "Invalid arguments") }
     }
 
-    /** Deploys + sets up the helper, runs `python3 farrow_pdf.py <cli>` capped at [timeoutS]; returns its JSON (or an error). */
-    protected suspend fun runHelper(cli: List<String>, timeoutS: Int, writesTo: String? = null): JsonObject {
-        val cmd = command(cli, timeoutS, writesTo)
-        val wait = timeoutS + SETUP_ALLOWANCE + 45
+    /**
+     * Deploys the helper and runs `python3 farrow_pdf.py <cli>` capped at [timeoutS]; returns its JSON (or an error).
+     * Nothing is installed without the user's OK: if no PDF library is there, the result is a needs_install_confirmation
+     * payload; with confirm_install=true + the matching install_id the setup installs it and the call runs.
+     */
+    protected suspend fun runHelper(args: JsonObject, cli: List<String>, timeoutS: Int, writesTo: String? = null): JsonObject {
+        val first = runOnce(cli, timeoutS, writesTo, allowInstall = false)
+        val missing = InstallConsent.missingFrom(first) ?: return first
+        return when (InstallConsent.decide(args, GROUP, missing)) {
+            InstallConsent.Decision.Allow -> runOnce(cli, timeoutS, writesTo, allowInstall = true)
+            InstallConsent.Decision.Deny -> InstallConsent.denied(name, missing)
+            InstallConsent.Decision.Ask -> InstallConsent.pending(name, GROUP, missing, INSTALL_REASON, InstallConsent.retryNote(args))
+        }
+    }
+
+    private suspend fun runOnce(cli: List<String>, timeoutS: Int, writesTo: String?, allowInstall: Boolean): JsonObject {
+        val cmd = command(cli, timeoutS, writesTo, allowInstall)
+        val wait = timeoutS + (if (allowInstall) SETUP_ALLOWANCE else 30) + 45
         val r = termux.runAndWait(cmd, "pdf-${System.nanoTime()}", wait * 1_000L, label = "Farrow: $name")
             ?: return err("Termux did not answer within $wait s. Check allow-external-apps / Set up Termux.")
         val line = r.stdout.lineSequence().lastOrNull { it.startsWith(FarrowPdfPy.MARKER) }
@@ -69,9 +83,15 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
 
     internal companion object {
         const val SETUP = "Set up Termux in Settings > Tools."
+        /** One consent covers the whole pdf_* family (same library). */
+        const val GROUP = "pdf"
+        const val INSTALL_REASON = "the PDF library for the pdf_* tools (Termux's prebuilt PyMuPDF; if that can't be " +
+            "installed, pypdf + poppler instead). One-time; the pdf-tools add-on in Settings > Tools does the same"
         /** First run: apt python-pymupdf (or pypdf + poppler) before the capped python step. */
         const val SETUP_ALLOWANCE = 1800
-        const val PREFIX = "PDF tool (Python in Termux: PyMuPDF, pypdf fallback; installs itself on first use). "
+        const val PREFIX = "PDF tool (Python in Termux: PyMuPDF, pypdf fallback). If the library is missing it returns " +
+            "needs_install_confirmation: ask the user, and only after they agree call again with confirm_install=true + install_id. "
+        val CONSENT_PROPS = arrayOf(InstallConsent.CONFIRM_PROP, InstallConsent.ID_PROP)
         val PASSWORD_PROP = "password" to prop("string", "Password for an encrypted PDF (optional)")
         val PATH_PROP = "path" to prop("string", "PDF path relative to Documents/Farrow (e.g. Input/report.pdf or Output/x.pdf), " +
             "an absolute path inside it, or a file in the Termux home (${TermuxManager.TERMUX_HOME}/…)")
@@ -85,15 +105,15 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
             return p
         }
 
-        /** The full Termux script: write helper, auto-install, storage check, then the capped python call (must be last). */
-        fun command(cli: List<String>, timeoutS: Int, writesTo: String?): String {
+        /** The full Termux script: write helper, install probe (or the consented install), storage check, then the capped python call (must be last). */
+        fun command(cli: List<String>, timeoutS: Int, writesTo: String?, allowInstall: Boolean = false): String {
             val storageGuard = writesTo?.let {
                 val dir = File(it).parent ?: SharedFolder.DISPLAY_PATH
                 "mkdir -p ${TermuxRunTool.shellQuote(dir)} 2>/dev/null; if [ ! -w ${TermuxRunTool.shellQuote(dir)} ]; then " +
                     "echo '${FarrowPdfPy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Farrow/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
             } ?: ""
             val python = "python3 " + (listOf(FarrowPdfPy.FILE) + cli).joinToString(" ") { TermuxRunTool.shellQuote(it) }
-            return FarrowPdfPy.installCommand() + "\n" + FarrowPdfPy.setupCommand() + "\n" + storageGuard +
+            return FarrowPdfPy.installCommand() + "\n" + FarrowPdfPy.setupCommand(allowInstall) + "\n" + storageGuard +
                 "cd ${TermuxRunTool.shellQuote(TermuxManager.TERMUX_HOME)} || exit 1\n" +
                 TermuxRunTool.capped(python, timeoutS, grace = 10)
         }
@@ -108,11 +128,11 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
 class PdfInfoTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBase(termux, folder) {
     override val name = "pdf_info"
     override val description = PREFIX + "Page count, metadata, page size, table of contents and whether the PDF has a text layer (scanned PDFs have none)."
-    override val parameters = schema(listOf("path"), PATH_PROP, PASSWORD_PROP)
+    override val parameters = schema(listOf("path"), PATH_PROP, PASSWORD_PROP, *CONSENT_PROPS)
 
     override suspend fun execute(args: JsonObject): String = guarded {
         val input = inputPath(args.str("path"))
-        runHelper(listOf("info", input) + password(args), 120).toString()
+        runHelper(args, listOf("info", input) + password(args), 120).toString()
     }
 }
 
@@ -127,7 +147,7 @@ class PdfExtractTextTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBa
         "max_chars" to prop("integer", "Max characters returned (default 20000, max $MAX_CHARS)"),
         "chunk_chars" to prop("integer", "Optional: return chunks of about this many characters (${PdfText.MIN_CHUNK}–${PdfText.MAX_CHUNK}) instead of one text"),
         "save_as" to prop("string", "Optional .txt name under Output/ for the full extracted text"),
-        PASSWORD_PROP)
+        PASSWORD_PROP, *CONSENT_PROPS)
 
     override suspend fun execute(args: JsonObject): String = guarded {
         val input = inputPath(args.str("path"))
@@ -136,7 +156,7 @@ class PdfExtractTextTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBa
         val save = args.str("save_as")?.takeIf { it.isNotBlank() }?.let { outputPath(it, "", "txt", listOf(input)) }
         val cli = listOf("text", input, "--pages", spec, "--max-chars", max.toString()) +
             (save?.let { listOf("--save", it.second) } ?: emptyList()) + password(args)
-        format(runHelper(cli, 300, save?.second), spec, args.int("chunk_chars"), save?.first).toString()
+        format(runHelper(args, cli, 300, save?.second), spec, args.int("chunk_chars"), save?.first).toString()
     }
 
     internal companion object {
@@ -187,7 +207,7 @@ class PdfExtractPagesTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolB
         "pages" to prop("string", "Pages in output order, 1-based: e.g. 1-3, 5,2, 10-last"),
         "rotate" to prop("integer", "Rotate the written pages clockwise by 90, 180 or 270 (default 0)"),
         "output_name" to prop("string", "File name under Output/ (default <name>.p<pages>.pdf)"),
-        PASSWORD_PROP)
+        PASSWORD_PROP, *CONSENT_PROPS)
 
     override suspend fun execute(args: JsonObject): String = guarded {
         val input = inputPath(args.str("path"))
@@ -197,7 +217,7 @@ class PdfExtractPagesTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolB
         val out = outputPath(args.str("output_name"), "${stem(input)}.${PdfNames.pagesTag(spec)}.pdf", "pdf", listOf(input))
         val cli = listOf("pages", input, "--pages", spec, "--out", out.second) +
             (if (rotate != 0) listOf("--rotate", rotate.toString()) else emptyList()) + password(args)
-        runHelper(cli, 300, out.second).withRel(out.first).toString()
+        runHelper(args, cli, 300, out.second).withRel(out.first).toString()
     }
 }
 
@@ -210,7 +230,7 @@ class PdfMergeTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBase(ter
             put("description", "PDF paths in order (2–$MAX_INPUTS), relative to Documents/Farrow, e.g. [\"Input/a.pdf\", \"Input/b.pdf\"]")
         },
         "output_name" to prop("string", "File name under Output/ (default <first>.merged.pdf)"),
-        PASSWORD_PROP)
+        PASSWORD_PROP, *CONSENT_PROPS)
 
     override suspend fun execute(args: JsonObject): String = guarded {
         val raw = mergeInputs(args["paths"])
@@ -219,7 +239,7 @@ class PdfMergeTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBase(ter
         val inputs = raw.map { inputPath(it) }
         val out = outputPath(args.str("output_name"), "${stem(inputs.first())}.merged.pdf", "pdf", inputs)
         val cli = listOf("merge") + inputs + listOf("--out", out.second) + password(args)
-        runHelper(cli, 600, out.second).withRel(out.first).toString()
+        runHelper(args, cli, 600, out.second).withRel(out.first).toString()
     }
 
     internal companion object {
@@ -249,7 +269,7 @@ class PdfAnnotateTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBase(
         "y" to prop("number", "Top position in points (default 36)"),
         "font_size" to prop("integer", "Font size for mode=text (default 11, 6–72)"),
         "output_name" to prop("string", "File name under Output/ (default <name>.annotated.pdf)"),
-        PASSWORD_PROP)
+        PASSWORD_PROP, *CONSENT_PROPS)
 
     override suspend fun execute(args: JsonObject): String = guarded {
         val input = inputPath(args.str("path"))
@@ -267,7 +287,7 @@ class PdfAnnotateTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBase(
             add("--font-size"); add((args.int("font_size") ?: 11).coerceIn(6, 72).toString())
             addAll(password(args))
         }
-        runHelper(cli, 300, out.second).withRel(out.first).toString()
+        runHelper(args, cli, 300, out.second).withRel(out.first).toString()
     }
 
     private fun num(args: JsonObject, key: String): Double? =

@@ -32,7 +32,7 @@ data class ToolStatus(val ready: Boolean, val text: String) {
                 else ToolStatus(false, "Needs Termux + ebook-translate add-on (Settings > Tools)")
             name.startsWith("pdf_") ->
                 if (env.termuxReady) ToolStatus(true, "Ready (PDF library installs on first use, or via the pdf-tools add-on); needs termux-setup-storage + All files access")
-                else ToolStatus(false, "Needs Termux (Settings > Tools); the PDF library installs itself on first use")
+                else ToolStatus(false, "Needs Termux (Settings > Tools); the PDF library is installed on first use after you agree")
             name.startsWith("selenium_") || name == "termux_python" ->
                 if (env.termuxReady) ToolStatus(true, "Ready if chromium-selenium is installed (Available to install)" +
                     if (name == "termux_python") "" else "; saving files needs termux-setup-storage in Termux")

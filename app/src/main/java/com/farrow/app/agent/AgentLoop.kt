@@ -415,15 +415,22 @@ class AgentLoop internal constructor(
               DOCX or TXT via Termux (googletrans in <=4000-char chunks, rate-limit pauses, MyMemory fallback, resume). It
               is two-step: the first call (no confirmed) only estimates — tell the user the chapter/chunk count and the ETA
               and ask them to confirm; call again with confirmed=true and the suggested timeout only after they agree.
-              Python packages install automatically on first use. Put sources in Input/ (or the chat Attach button); the
+              Missing Python packages need the user's OK first (see Installing packages). Put sources in Input/ (or the chat Attach button); the
               translated file is always written under Output/.
-            - PDFs (Termux Python, PyMuPDF; installs itself on first use): pdf_info (pages, metadata, has text?),
+            - PDFs (Termux Python, PyMuPDF; the library is installed on first use after the user agrees): pdf_info (pages, metadata, has text?),
               pdf_extract_text (text with --- Page N --- markers; pages=, max_chars, chunk_chars for page-aligned chunks,
               save_as for the full text in Output/; follow next_pages to continue), pdf_extract_pages (split/reorder/rotate
               into a new PDF), pdf_merge (paths in order), pdf_annotate (visible text or a note on a page). To summarise a
               long PDF, read it chunk by chunk and summarise each before the final summary. To translate a PDF, prefer
               ebook_translate on the PDF itself; pdf_extract_text save_as + ebook_translate on the .txt also works. Edited
               PDFs always go to Output/. Scanned PDFs have no text layer (pdf_info has_text=false): say so.
+            - Installing packages: NEVER install anything (pip, apt/pkg, npm, gem, cargo, upgrades) without the user's
+              explicit yes. termux_run, termux_python, ebook_translate and pdf_* return needs_install_confirmation (packages,
+              reason, estimate, install_id) instead of installing: tell the user what will be installed and why, ask
+              "Install? (yes/no)", then STOP and wait. Only after they agree call the same tool again with the same
+              arguments plus confirm_install=true and that install_id. If they say no, pass confirm_install=false or just
+              don't install, and don't try another way (no other tool, script or workaround). Never set confirm_install=true
+              on your own. The user can also install add-ons themselves in Settings > Tools.
             - Images: when the user attaches a jpg/png/webp/gif, it is sent to you as an image together with its
               Input/ path (on vision-capable models). Look at the image itself and answer from what you see; don't
               claim you can't see it. If you only get a note that this model can't see images, say so and suggest

@@ -46,7 +46,7 @@ object TermuxPackages {
     val EBOOK_TRANSLATE: TermuxPackage get() = TermuxPackage(
         pkg = "ebook-translate",
         binary = "python3",
-        description = "Ebook/document translation (MOBI/EPUB/PDF/DOCX) for ebook_translate — pip: googletrans>=4.0.2, deep-translator, mobi, ebooklib, python-docx, langdetect; apt: poppler (installed automatically on first use too)",
+        description = "Ebook/document translation (MOBI/EPUB/PDF/DOCX) for ebook_translate — pip: googletrans>=4.0.2, deep-translator, mobi, ebooklib, python-docx, langdetect; apt: poppler (ebook_translate can also install them on first use after you agree in chat)",
         detect = "python3 -c 'import googletrans,deep_translator,ebooklib,docx,langdetect,mobi' >/dev/null 2>&1 && " +
             "[ -s '${com.farrow.app.data.ebook.EbookTranslatePy.FILE}' ]",
         install = listOf(
@@ -61,7 +61,7 @@ object TermuxPackages {
     val PDF_TOOLS: TermuxPackage get() = TermuxPackage(
         pkg = "pdf-tools",
         binary = "python3",
-        description = "PDF read/edit for pdf_* tools — apt: python-pymupdf (fallback: pip pypdf + poppler); installed automatically on first use too",
+        description = "PDF read/edit for pdf_* tools — apt: python-pymupdf (fallback: pip pypdf + poppler); pdf_* can also install it on first use after you agree in chat",
         detect = "{ python3 -c 'import pymupdf' >/dev/null 2>&1 || python3 -c 'import pypdf' >/dev/null 2>&1; } && " +
             "[ -s '${com.farrow.app.data.pdf.FarrowPdfPy.FILE}' ]",
         install = listOf(

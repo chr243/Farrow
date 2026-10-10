@@ -104,6 +104,8 @@ git diff --cached | grep -nEi 'sk-or-[a-z0-9]{8}|ghp_[A-Za-z0-9]{20}|BEGIN (RSA|
 
 Termux tools wrap commands with `TermuxRunTool.capped(...)` (output to temp files, stdin `/dev/null`, leftovers killed) so they return as soon as the command exits; keep that wrapper when adding Termux-backed tools. `ebook_translate` chunks must stay below 5000 characters (tested).
 
+Agent-initiated package installs (pip / apt / pkg / npm / gem / cargo) must go through `agent/tools/InstallConsent`: the tool returns `needs_install_confirmation` (packages, reason, estimate, `install_id`) and installs nothing; the agent asks the user and only re-calls with `confirm_install=true` + `install_id` after a yes (`false` = declined). Tools with a built-in setup run a probe first (`setupCommand(allowInstall = false)`). Settings → Tools add-ons the user taps Install on bypass the gate (the tap is the consent).
+
 If you touched Shizuku, rish, Termux, Accessibility or chat heads, also test on a real device (these paths are not covered by JVM tests) and say so in the PR.
 
 ## Maintainer verification checklist (per release)
@@ -116,5 +118,6 @@ If you touched Shizuku, rish, Termux, Accessibility or chat heads, also test on 
 - [ ] Shizuku **Test (id)** returns `uid=2000(shell)`; rish **Test (id)** too if rish is set up.
 - [ ] `termux_run` with `echo hi` returns within a few seconds (not after `timeout_seconds`).
 - [ ] `ebook_translate` on a small file in `Input/` returns an estimate first, then translates into `Output/` after confirming.
+- [ ] With a package missing, `termux_run` `pip install …` / `pdf_info` / `ebook_translate` ask before installing; "no" installs nothing, "yes" installs and continues.
 - [ ] No secrets in the diff (see command above); `git ls-files | grep -E 'local.properties|\.jks|\.keystore'` is empty.
 - [ ] GitHub release created with the APK attached; README, METADATA.md and docs/ARCHITECTURE.md are up to date.

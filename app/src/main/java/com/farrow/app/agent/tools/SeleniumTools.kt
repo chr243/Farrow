@@ -138,12 +138,15 @@ class TermuxPythonTool(
     override val name = "termux_python"
     override val description = "Run a Python script you wrote (stored in the private workspace, e.g. scrapers/news.py) with Python in Termux. " +
         "Pass code to save it first. `from farrow_selenium import make_driver` gives a headless Chromium Selenium driver; " +
-        "write results to os.environ['FARROW_OUTPUT'] (Documents/Farrow/Output). Returns exit_code, stdout, stderr. Timeout max 600 s."
+        "write results to os.environ['FARROW_OUTPUT'] (Documents/Farrow/Output). Returns exit_code, stdout, stderr. Timeout max 600 s. " +
+        "A script that installs packages (pip/apt…) first returns needs_install_confirmation: ask the user and re-run with " +
+        "confirm_install=true + install_id only after they agree."
     override val parameters = schema(listOf("path"),
         "path" to prop("string", "Script path in the private workspace, e.g. scrapers/news.py"),
         "code" to prop("string", "Optional Python source to (over)write at path before running"),
         "args" to buildJsonObject { put("type", "array"); put("items", buildJsonObject { put("type", "string") }); put("description", "Command-line arguments") },
-        "timeout_seconds" to prop("integer", "Timeout in seconds (default 300, max 600)"))
+        "timeout_seconds" to prop("integer", "Timeout in seconds (default 300, max 600)"),
+        InstallConsent.CONFIRM_PROP, InstallConsent.ID_PROP)
 
     override suspend fun execute(args: JsonObject): String {
         val f = try { sandbox.resolve(args.str("path") ?: return errorJson("path is required")) }
@@ -155,6 +158,7 @@ class TermuxPythonTool(
         if (bytes.size > MAX_SCRIPT) return errorJson("Script is larger than ${MAX_SCRIPT / 1000} KB")
         if (!termux.isInstalled()) return errorJson("Termux is not installed. Set it up in Settings > Tools.")
         if (!termux.hasRunCommandPermission()) return errorJson("Farrow doesn't have the 'Run commands in Termux' permission (Settings > Tools).")
+        TermuxRunTool.gate(name, "the script ${sandbox.relativePath(f)} installs them", InstallConsent.detectPython(String(bytes)), args)?.let { return it }
         val timeout = (args.int("timeout_seconds") ?: 300).coerceIn(1, TermuxRunTool.MAX_TIMEOUT_S)
         val argv = (args["args"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
         val r = termux.runAndWait(command(f.name, bytes, argv, timeout), "py-${System.nanoTime()}", (timeout + 20) * 1_000L, label = "Farrow: termux_python")

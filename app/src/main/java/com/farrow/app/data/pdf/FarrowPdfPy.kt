@@ -314,11 +314,11 @@ if __name__ == "__main__":
 """.trimStart()
 
     /**
-     * First-use auto-install inside Termux (idempotent, instant when present): python via apt, then the apt package
+     * First-use install inside Termux, only after the user agreed (`allowInstall`; otherwise [probeCommand]) (idempotent, instant when present): python via apt, then the apt package
      * python-pymupdf (prebuilt by Termux; `pip install pymupdf` has no Android wheel and rarely builds). If that fails,
      * a flag file stops later retries and pypdf (pip) + poppler (pdftotext) are installed instead. Progress → stderr.
      */
-    fun setupCommand(): String = """
+    fun setupCommand(allowInstall: Boolean = false): String = if (!allowInstall) probeCommand() else """
 export DEBIAN_FRONTEND=noninteractive PIP_DISABLE_PIP_VERSION_CHECK=1
 if ! command -v python3 >/dev/null 2>&1; then
   echo 'Farrow: installing python (first pdf_* run)' >&2
@@ -335,6 +335,18 @@ if ! farrow_has_mupdf; then
   command -v pdftotext >/dev/null 2>&1 || { echo 'Farrow: installing poppler (pdftotext)' >&2; timeout 300 apt-get -y install poppler >/dev/null 2>&1; }
 fi
 """.trim()
+
+    /**
+     * Without the user's OK nothing is installed: if no PDF library is usable, print what would be installed
+     * (`needs_install`, exit 5) so pdf_* can ask first (agent install consent).
+     */
+    fun probeCommand(): String = """
+farrow_m=""
+if ! command -v python3 >/dev/null 2>&1; then farrow_m="apt:python apt:python-pip apt:python-pymupdf"
+elif ! python3 -c 'import pymupdf' >/dev/null 2>&1 && ! python3 -c 'import fitz; fitz.open' >/dev/null 2>&1 && ! python3 -c 'import pypdf' >/dev/null 2>&1; then
+  if [ -e '$NO_PYMUPDF_FLAG' ]; then farrow_m="pip:pypdf apt:poppler"; else farrow_m="apt:python-pymupdf"; fi
+fi
+""".trim() + "\n" + com.farrow.app.agent.tools.InstallConsent.probeExit(MARKER)
 
     /** Writes the helper into Termux and fails loudly (FARROW_JSON error, exit 4) if it isn't there afterwards. */
     fun installCommand(): String =

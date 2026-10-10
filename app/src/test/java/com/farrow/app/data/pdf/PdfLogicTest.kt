@@ -97,7 +97,9 @@ class PdfLogicTest {
         assertTrue(s.contains("def cmd_merge") && s.contains("def cmd_annotate") && s.contains("def cmd_pages"))
         assertTrue(s.contains("MARKER = \"${FarrowPdfPy.MARKER}\""))
         assertFalse(FarrowPdfPy.FILE.contains("~"))
-        val setup = FarrowPdfPy.setupCommand()
+        assertFalse(FarrowPdfPy.setupCommand().contains("install python-pymupdf")) // probe only without consent
+        assertTrue(FarrowPdfPy.setupCommand().contains("needs_install"))
+        val setup = FarrowPdfPy.setupCommand(allowInstall = true)
         assertTrue(setup.contains("apt-get -y install python-pymupdf") && setup.contains("pip install -q -U pypdf"))
         assertTrue(setup.contains(FarrowPdfPy.NO_PYMUPDF_FLAG))
         assertTrue(FarrowPdfPy.installCommand().contains("base64 -d > '${FarrowPdfPy.FILE}'"))

@@ -542,11 +542,12 @@ if __name__ == "__main__":
     const val PIP_CORE = "'googletrans>=4.0.2' deep-translator langdetect"
 
     /**
-     * First-run auto-install inside Termux (idempotent, quick when everything is present): python/pip via apt, then
+     * First-run install inside Termux, only after the user agreed (`allowInstall`; otherwise [probeCommand]) (idempotent, quick when everything is present): python/pip via apt, then
      * pip `googletrans>=4.0.2` (upgrades an older googletrans), deep-translator, langdetect and the format's reader.
      * PDF installs poppler (pdftotext) unless PyMuPDF is already there (it rarely builds on Termux). Progress → stderr.
      */
-    fun setupCommand(format: String?): String {
+    fun setupCommand(format: String?, allowInstall: Boolean = false): String {
+        if (!allowInstall) return probeCommand(format)
         val dep = FORMAT_DEPS[format]
         val mods = listOfNotNull("googletrans", "deep_translator", "langdetect", dep?.first).joinToString(",")
         val pipExtra = dep?.second?.let { " $it" } ?: ""
@@ -564,6 +565,27 @@ if ! python3 -c 'import $mods' >/dev/null 2>&1 || ! farrow_gt_ok; then
   timeout 900 pip install -q -U $PIP_CORE$pipExtra 2>&1 | tail -n 5 >&2
 fi$pdf
 """.trim()
+    }
+
+    private const val GT_OK = "farrow_gt_ok() { python3 -c 'import importlib.metadata as m,re,sys; v=m.version(\"googletrans\"); " +
+        "n=[int(x) for x in re.findall(r\"\\d+\",v)[:3]]+[0,0,0]; sys.exit(0 if n[:3]>=[4,0,2] else 1)' >/dev/null 2>&1; }"
+
+    /**
+     * Without the user's OK nothing is installed: lists what [setupCommand] would install for [format]
+     * (`needs_install`, exit 5) so ebook_translate can ask first (agent install consent).
+     */
+    fun probeCommand(format: String?): String {
+        val pips = listOf("googletrans" to "googletrans>=4.0.2", "deep_translator" to "deep-translator", "langdetect" to "langdetect") +
+            listOfNotNull(FORMAT_DEPS[format])
+        val checks = pips.joinToString("\n") { (mod, pip) ->
+            val ok = if (mod == "googletrans") "farrow_py 'import googletrans' && farrow_gt_ok" else "farrow_py 'import $mod'"
+            "$ok || farrow_m=\"${'$'}farrow_m pip:$pip\""
+        }
+        val pdf = if (format == "pdf") "\nfarrow_py 'import fitz' || command -v pdftotext >/dev/null 2>&1 || farrow_m=\"${'$'}farrow_m apt:poppler\"" else ""
+        return "farrow_m=\"\"\n" +
+            "command -v python3 >/dev/null 2>&1 || farrow_m=\"apt:python apt:python-pip\"\n" +
+            "farrow_py() { command -v python3 >/dev/null 2>&1 && python3 -c \"${'$'}1\" >/dev/null 2>&1; }\n" +
+            GT_OK + "\n" + checks + pdf + "\n" + com.farrow.app.agent.tools.InstallConsent.probeExit(MARKER)
     }
 
     /** Writes the script into Termux and fails loudly (FARROW_JSON error, exit 4) if it isn't there afterwards. */

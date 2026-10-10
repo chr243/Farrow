@@ -144,7 +144,7 @@ object AppModule {
                 SeleniumOpenTool(termux, sharedFolder), SeleniumPageSourceTool(termux, sharedFolder),
                 SeleniumScreenshotTool(termux, sharedFolder), TermuxPythonTool(termux, sandbox),
                 EbookTranslateTool(termux, sharedFolder),
-                // PDF read/edit in Termux Python (PyMuPDF, pypdf fallback; auto-installed on first use)
+                // PDF read/edit in Termux Python (PyMuPDF, pypdf fallback; installed on first use after the user agrees)
                 PdfInfoTool(termux, sharedFolder), PdfExtractTextTool(termux, sharedFolder),
                 PdfExtractPagesTool(termux, sharedFolder), PdfMergeTool(termux, sharedFolder), PdfAnnotateTool(termux, sharedFolder),
                 GitStatusTool(git), GitCommitTool(git), GitCloneTool(git), GitPushTool(git),

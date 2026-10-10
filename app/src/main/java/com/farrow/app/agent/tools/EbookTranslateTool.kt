@@ -21,8 +21,10 @@ class EbookTranslateTool(
         "googletrans (browser User-Agent) in <=4000-char chunks, ~0.3 s between requests, backoff on Too many requests, a 5-10 s pause every 4 chapters, " +
         "MyMemory fallback, language check, resume if interrupted. input_path is under Documents/Farrow (e.g. Input/book.mobi); " +
         "the result is always written under Output/. TWO STEPS: call first WITHOUT confirmed → returns chapters, chunks and an " +
-        "estimated time (installs the Python packages on first use). Tell the user the ETA and ask them to confirm; only after " +
-        "they agree call again with confirmed=true (pass suggested_timeout_seconds as timeout_seconds). Needs Termux + termux-setup-storage."
+        "estimated time. Tell the user the ETA and ask them to confirm; only after " +
+        "they agree call again with confirmed=true (pass suggested_timeout_seconds as timeout_seconds). If Python packages are " +
+        "missing it first returns needs_install_confirmation: ask the user, and only after they agree call again with " +
+        "confirm_install=true + install_id. Needs Termux + termux-setup-storage."
     override val parameters = schema(listOf("input_path", "dest_lang"),
         "input_path" to prop("string", "Path relative to Documents/Farrow, e.g. Input/novel.mobi"),
         "src_lang" to prop("string", "Source language code (default auto)"),
@@ -32,7 +34,8 @@ class EbookTranslateTool(
         "resume" to prop("boolean", "Resume a previous run if a state file exists (default true)"),
         "confirmed" to prop("boolean", "false/omitted = estimate only; true = the user confirmed the ETA, translate now"),
         "timeout_seconds" to prop("integer", "Max seconds for the translation (default 7200 = max; returns as soon as it finishes). " +
-            "If the book needs longer, re-run with resume=true to continue"))
+            "If the book needs longer, re-run with resume=true to continue"),
+        InstallConsent.CONFIRM_PROP, InstallConsent.ID_PROP)
 
     override suspend fun execute(args: JsonObject): String {
         if (!termux.isInstalled()) return errorJson("Termux is not installed. Set it up in Settings > Tools.")
@@ -69,12 +72,28 @@ class EbookTranslateTool(
             "if [ ! -w ${TermuxRunTool.shellQuote(SharedFolder.DISPLAY_PATH + "/Output")} ]; then " +
             "echo '${EbookTranslatePy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Farrow/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
         val python = "python3 " + cli.joinToString(" ") { TermuxRunTool.shellQuote(it) }
-        val cmd = EbookTranslatePy.installCommand() + "\n" + EbookTranslatePy.setupCommand(setupFmt) + "\n" + storageGuard +
-            TermuxRunTool.capped(python, if (confirmed) timeout else ESTIMATE_TIMEOUT, grace = 30)
-        // Setup (first run: apt + pip, each capped at 900 s) happens before the capped python step.
-        val wait = (if (confirmed) timeout + 300 else ESTIMATE_TIMEOUT + SETUP_ALLOWANCE) + 45
-        val r = termux.runAndWait(cmd, "ebook-${System.nanoTime()}", wait * 1_000L, label = "Farrow: ebook_translate")
-            ?: return errorJson("Termux did not answer within $wait s. Check allow-external-apps / Set up Termux.")
+        suspend fun run(allowInstall: Boolean): Pair<com.farrow.app.data.termux.TermuxResult?, Int> {
+            val cmd = EbookTranslatePy.installCommand() + "\n" + EbookTranslatePy.setupCommand(setupFmt, allowInstall) + "\n" + storageGuard +
+                TermuxRunTool.capped(python, if (confirmed) timeout else ESTIMATE_TIMEOUT, grace = 30)
+            // Setup (first run: apt + pip, each capped at 900 s) happens before the capped python step.
+            val wait = (if (confirmed) timeout + (if (allowInstall) SETUP_ALLOWANCE else 300) else ESTIMATE_TIMEOUT + SETUP_ALLOWANCE) + 45
+            return termux.runAndWait(cmd, "ebook-${System.nanoTime()}", wait * 1_000L, label = "Farrow: ebook_translate") to wait
+        }
+        // Nothing is installed without the user's OK: a probe run first; installs only with confirm_install + install_id.
+        var (r, wait) = run(allowInstall = false)
+        val missing = r?.stdout?.lineSequence()?.lastOrNull { it.startsWith(EbookTranslatePy.MARKER) }
+            ?.let { runCatching { Json.parseToJsonElement(it.removePrefix(EbookTranslatePy.MARKER)).jsonObject }.getOrNull() }
+            ?.let { InstallConsent.missingFrom(it) }
+        if (missing != null) {
+            when (InstallConsent.decide(args, name, missing)) {
+                InstallConsent.Decision.Allow -> { val again = run(allowInstall = true); r = again.first; wait = again.second }
+                InstallConsent.Decision.Deny -> return InstallConsent.denied(name, missing).toString()
+                InstallConsent.Decision.Ask -> return InstallConsent.pending(name, name, missing, INSTALL_REASON + (if (confirmed) "" else
+                    "; after installing, the call returns the translation estimate (ETA) for the user to confirm"),
+                    InstallConsent.retryNote(args)).toString()
+            }
+        }
+        if (r == null) return errorJson("Termux did not answer within $wait s. Check allow-external-apps / Set up Termux.")
         val line = r.stdout.lineSequence().lastOrNull { it.startsWith(EbookTranslatePy.MARKER) }
         if (line == null) {
             val hint = when {
@@ -122,6 +141,8 @@ class EbookTranslateTool(
         const val MAX_TIMEOUT = 7200
         const val ESTIMATE_TIMEOUT = 300
         const val SETUP_ALLOWANCE = 1900
+        const val INSTALL_REASON = "the Python packages ebook_translate needs in Termux (one-time; the ebook-translate " +
+            "add-on in Settings > Tools does the same)"
         val FORMATS = mapOf("mobi" to "mobi", "azw" to "mobi", "azw3" to "mobi", "epub" to "epub", "pdf" to "pdf",
             "docx" to "docx", "txt" to "txt", "md" to "txt", "markdown" to "txt")
 

@@ -65,9 +65,14 @@ class EbookTranslateToolTest {
         // Not confirmed yet → estimate only, with the ask-the-user instruction.
         assertTrue(cmd.contains("'--estimate'"))
         assertEquals(true, r["needs_confirmation"]?.jsonPrimitive?.boolean)
-        // Auto-install runs before the translator, with googletrans quoted (an unquoted >= would be a redirect).
-        assertTrue(cmd.indexOf("pip install -q -U 'googletrans>=4.0.2'") in 0 until cmd.indexOf("python3 '"))
-        assertTrue(cmd.contains("import googletrans,deep_translator,langdetect,mobi"))
+        // No install without consent: only the probe runs before the translator.
+        assertFalse(cmd.contains("pip install"))
+        assertTrue(cmd.indexOf("needs_install") in 0 until cmd.indexOf("python3 '"))
+        assertTrue(cmd.contains("pip:mobi"))
+        // The consented setup still quotes googletrans (an unquoted >= would be a redirect).
+        val setup = EbookTranslatePy.setupCommand("mobi", allowInstall = true)
+        assertTrue(setup.contains("pip install -q -U 'googletrans>=4.0.2'"))
+        assertTrue(setup.contains("import googletrans,deep_translator,langdetect,mobi"))
         // Confirmed → real run, no --estimate, result passed through.
         EbookTranslateTool(t, folder).execute(buildJsonObject {
             put("input_path", "Input/book.mobi"); put("dest_lang", "fr"); put("confirmed", true)
