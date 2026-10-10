@@ -1,6 +1,5 @@
 package com.verdroid.app.chathead
 
-import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.PendingIntent
@@ -14,9 +13,12 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.provider.Settings
+import android.view.Choreographer
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.WindowManager
@@ -90,7 +92,28 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
     private var panelView: View? = null
     private var dismissView: ComposeView? = null
     private var headParams: WindowManager.LayoutParams? = null
-    private var snapAnimator: ValueAnimator? = null
+    /** Messenger-style motion: the window chases [spring]'s target once per frame (drag follow, magnet, edge snap). */
+    private val spring = HeadSpring(HeadSpring.DRAG_STIFFNESS, HeadSpring.DRAG_DAMPING)
+    private var springRunning = false
+    private var lastFrameNanos = 0L
+    private var onSpringRest: (() -> Unit)? = null
+    private val frameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            val p = headParams
+            if (!springRunning || p == null) { springRunning = false; return }
+            val dt = if (lastFrameNanos == 0L) 1f / 60f else (frameTimeNanos - lastFrameNanos) / 1_000_000_000f
+            lastFrameNanos = frameTimeNanos
+            val moving = spring.step(dt)
+            val nx = Math.round(spring.x); val ny = Math.round(spring.y)
+            if (nx != p.x || ny != p.y) { p.x = nx; p.y = ny; updateHead() }
+            if (moving) {
+                Choreographer.getInstance().postFrameCallback(this)
+            } else {
+                springRunning = false
+                onSpringRest?.let { cb -> onSpringRest = null; cb() }
+            }
+        }
+    }
     private val prefs by lazy { getSharedPreferences("chat_head", Context.MODE_PRIVATE) }
 
     private val taskIdState = mutableLongStateOf(0L)
@@ -305,56 +328,109 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
         private var downRawX = 0f
         private var downRawY = 0f
         private var dragging = false
+        private var velocity: VelocityTracker? = null
 
         override fun onTouch(v: View, event: MotionEvent): Boolean {
             val params = headParams ?: return false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    // A running snap would otherwise keep writing old coordinates under the finger.
-                    snapAnimator?.cancel(); snapAnimator = null
+                    // Catch the head wherever it is mid-flight; a running snap must not keep moving it.
+                    stopSpring()
                     downRawX = event.rawX
                     downRawY = event.rawY
                     offsetX = event.rawX - params.x
                     offsetY = event.rawY - params.y
                     dragging = false
+                    velocity?.recycle()
+                    velocity = VelocityTracker.obtain().also { it.addMovement(event) }
+                    pressHead(v, true)
                     Log.d(TAG, "head DOWN raw=(${event.rawX}, ${event.rawY}) pos=(${params.x}, ${params.y})")
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    velocity?.addMovement(event)
                     if (!dragging && hypot(event.rawX - downRawX, event.rawY - downRawY) > touchSlop) {
                         dragging = true
                         Log.d(TAG, "drag start")
                         showDismissTarget()
+                        spring.configure(HeadSpring.DRAG_STIFFNESS, HeadSpring.DRAG_DAMPING)
                     }
                     if (dragging) {
-                        // Follow the finger exactly: window origin = finger − grab offset.
-                        params.x = (event.rawX - offsetX).toInt().coerceIn(-headWidth() / 2, screenWidth - headWidth() / 2)
-                        params.y = (event.rawY - offsetY).toInt().coerceIn(0, screenHeight - headHeight() / 2)
-                        updateHead()
-                        nearDismissState.value = isNearDismiss()
+                        // Finger target = finger − grab offset; the window trails it on a stiff spring.
+                        val fx = (event.rawX - offsetX).coerceIn(-headWidth() / 2f, screenWidth - headWidth() / 2f)
+                        val fy = (event.rawY - offsetY).coerceIn(0f, screenHeight - headHeight() / 2f)
+                        val near = isNearDismiss(fx, fy)
+                        if (near != nearDismissState.value) {
+                            nearDismissState.value = near
+                            if (near) v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                        }
+                        if (near) {
+                            // Magnet: pull the head onto the ✕ like Messenger.
+                            spring.configure(HeadSpring.MAGNET_STIFFNESS, HeadSpring.MAGNET_DAMPING)
+                            spring.targetX = screenWidth / 2f - headWidth() / 2f
+                            spring.targetY = dismissCenterY() - headHeight() / 2f
+                        } else {
+                            spring.configure(HeadSpring.DRAG_STIFFNESS, HeadSpring.DRAG_DAMPING)
+                            spring.targetX = fx
+                            spring.targetY = fy
+                        }
+                        startSpring()
                     }
                 }
                 MotionEvent.ACTION_UP -> {
+                    velocity?.addMovement(event)
+                    pressHead(v, false)
                     Log.d(TAG, "head UP dragging=$dragging pos=(${params.x}, ${params.y})")
                     if (!dragging) {
                         v.performClick()
                         expand()
                     } else {
-                        val dismiss = isNearDismiss()
+                        val dismiss = nearDismissState.value
                         hideDismissTarget()
-                        if (dismiss) stopSelf() else snapToEdge()
+                        if (dismiss) {
+                            stopSpring()
+                            stopSelf()
+                        } else {
+                            val vt = velocity
+                            vt?.computeCurrentVelocity(1000, HeadSpring.MAX_FLING_PX_PER_S)
+                            snapToEdge(vt?.xVelocity ?: 0f, vt?.yVelocity ?: 0f)
+                        }
                     }
                     dragging = false
+                    velocity?.recycle(); velocity = null
                 }
                 MotionEvent.ACTION_CANCEL -> {
+                    pressHead(v, false)
                     if (dragging) {
                         hideDismissTarget()
-                        snapToEdge()
+                        snapToEdge(0f, 0f)
                     }
                     dragging = false
+                    velocity?.recycle(); velocity = null
                 }
             }
             return true
         }
+    }
+
+    /** Subtle press feedback: the bubble shrinks a touch while held. */
+    private fun pressHead(v: View, pressed: Boolean) {
+        val scale = if (pressed) 0.92f else 1f
+        v.animate().scaleX(scale).scaleY(scale).setDuration(if (pressed) 90L else 160L).start()
+    }
+
+    private fun startSpring() {
+        // Spring position is synced to the window on every DOWN (stopSpring), so just (re)start the frame loop.
+        if (headParams == null || springRunning) return
+        springRunning = true
+        lastFrameNanos = 0L
+        Choreographer.getInstance().postFrameCallback(frameCallback)
+    }
+
+    private fun stopSpring() {
+        if (springRunning) Choreographer.getInstance().removeFrameCallback(frameCallback)
+        springRunning = false
+        onSpringRest = null
+        headParams?.let { spring.snapTo(it.x.toFloat(), it.y.toFloat()) }
     }
 
     private fun updateHead() {
@@ -366,24 +442,20 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
     private fun headWidth(): Int = headView?.width?.takeIf { it > 0 } ?: dp(HEAD_SIZE_DP)
     private fun headHeight(): Int = headView?.height?.takeIf { it > 0 } ?: dp(HEAD_SIZE_DP)
 
-    private fun snapToEdge() {
+    /** Release: settle on the nearer edge (fling direction wins) with a soft spring and a hint of overshoot. */
+    private fun snapToEdge(vx: Float, vy: Float) {
         val p = headParams ?: return
         val w = headWidth()
         val i = safeInsets()
-        val targetX = if (p.x + w / 2 < screenWidth / 2) i.left + dp(EDGE_MARGIN_DP) else screenWidth - i.right - w - dp(EDGE_MARGIN_DP)
-        p.y = clampY(p.y)
-        snapAnimator?.cancel()
-        snapAnimator = ValueAnimator.ofInt(p.x, targetX).apply {
-            duration = 220
-            addUpdateListener { anim ->
-                p.x = anim.animatedValue as Int
-                updateHead()
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) { savePosition(p); logHeadPosition("snapped") }
-            })
-            start()
-        }
+        val projectedCx = spring.x + w / 2f + vx * HeadSpring.FLING_PROJECTION_S
+        val targetX = if (projectedCx < screenWidth / 2f) i.left + dp(EDGE_MARGIN_DP) else screenWidth - i.right - w - dp(EDGE_MARGIN_DP)
+        val targetY = clampY((spring.y + vy * HeadSpring.FLING_PROJECTION_S).toInt())
+        spring.configure(HeadSpring.SNAP_STIFFNESS, HeadSpring.SNAP_DAMPING)
+        spring.vx = vx; spring.vy = vy
+        spring.targetX = targetX.toFloat()
+        spring.targetY = targetY.toFloat()
+        onSpringRest = { savePosition(p); logHeadPosition("snapped") }
+        startSpring()
     }
 
     // ---------------------------------------------------------------- drag-to-dismiss target
@@ -412,13 +484,13 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
 
     private fun dismissBottom(): Int = dp(DISMISS_BOTTOM_DP) + safeInsets().bottom
 
-    private fun isNearDismiss(): Boolean {
-        val p = headParams ?: return false
-        val headCx = p.x + headWidth() / 2f
-        val headCy = p.y + headHeight() / 2f
-        val targetCx = screenWidth / 2f
-        val targetCy = screenHeight - dismissBottom() - dp(DISMISS_SIZE_DP) / 2f
-        return hypot(headCx - targetCx, headCy - targetCy) < dp(DISMISS_SIZE_DP) * 1.3f
+    private fun dismissCenterY(): Float = screenHeight - dismissBottom() - dp(DISMISS_SIZE_DP) / 2f
+
+    /** Is a head whose top-left would be at ([x], [y]) (the finger target, not the lagging window) over the ✕? */
+    private fun isNearDismiss(x: Float, y: Float): Boolean {
+        val headCx = x + headWidth() / 2f
+        val headCy = y + headHeight() / 2f
+        return hypot(headCx - screenWidth / 2f, headCy - dismissCenterY()) < dp(DISMISS_SIZE_DP) * 1.3f
     }
 
     // ---------------------------------------------------------------- expanded panel
@@ -434,7 +506,7 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
     private fun expand() {
         val p = headParams ?: return
         if (panelView != null) return
-        snapAnimator?.cancel(); snapAnimator = null
+        stopSpring()
         savePosition(p)
         headView?.let { v -> if (v.isAttachedToWindow) runCatching { windowManager.removeViewImmediate(v) }.onFailure { Log.w(TAG, "remove head failed", it) } }
 
@@ -509,7 +581,7 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
     }
 
     override fun onDestroy() {
-        snapAnimator?.cancel()
+        stopSpring()
         unregisterHomeReceiver()
         listOfNotNull(panelView, dismissView, headView).forEach { v -> runCatching { windowManager.removeView(v) } }
         panelView = null

@@ -1,6 +1,12 @@
 package com.verdroid.app.ui.chathead
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.verdroid.app.R
@@ -55,9 +61,20 @@ fun ChatHeadAvatar(task: Task?, unread: Int) {
 /** The ✕ target shown at the bottom of the screen while dragging the chat head. */
 @Composable
 fun DismissTarget(near: Boolean) {
-    val size by animateDpAsState(if (near) 76.dp else 60.dp, label = "dismissSize")
+    // Grows with a soft bounce when the head is pulled onto it (Messenger-style magnet feedback).
+    val size by animateDpAsState(
+        if (near) 76.dp else 60.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "dismissSize",
+    )
+    // Pops in (fade + rise) when a drag starts instead of appearing abruptly.
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) }
     Box(
-        Modifier.size(84.dp),
+        Modifier.size(84.dp).graphicsLayer {
+            alpha = appear.value.coerceIn(0f, 1f)
+            translationY = (1f - appear.value) * 24.dp.toPx()
+        },
         contentAlignment = Alignment.Center,
     ) {
         Box(

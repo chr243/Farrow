@@ -514,3 +514,8 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Screen transitions:** opening a chat, Settings or any Settings page now fades in with a short slide from the
   right (~260 ms); the previous screen fades out and drifts slightly left. Back runs the same motion in reverse.
   One shared `NavMotion` in `VerdroidRoot.kt` replaces the old instant (`None`) transitions.
+- **Messenger-style chat head motion:** while dragging, the head trails the finger on a stiff spring (`HeadSpring`,
+  stepped per frame by `Choreographer`) instead of jumping 1:1. Near the ✕ it is magnet-pulled onto the target (with a
+  haptic tick); releasing there closes it. On release it flings toward the edge the finger was moving to and settles
+  with a soft spring and a small overshoot (replaces the 220 ms linear `ValueAnimator`). Touching it mid-flight catches
+  it. The head shrinks slightly while pressed; the ✕ target fades/rises in and grows with a bounce when the head is near.
