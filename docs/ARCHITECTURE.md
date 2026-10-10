@@ -136,7 +136,7 @@ Tried top to bottom (Menu → Model priority to change):
 A one-time DataStore migration (`ModelDefaultsMigration`, `model_defaults_version` = 2) applies the new defaults to existing installs only when the saved list is exactly the old default list. Customised lists are kept as they are.
 
 ### Navigation
-There is no bottom bar: the chat list is home and a gear opens **Settings** (Notifications, Memory, Archive, models, tools, phone and appearance settings). Notifications show an unread count in Settings. The Chats screen shows the low-quota banner. All NavHost transitions are set to `EnterTransition.None`/`ExitTransition.None`, so navigation is instant.
+There is no bottom bar: the chat list is home and a gear opens **Settings** (Notifications, Memory, Archive, models, tools, phone and appearance settings). Notifications show an unread count in Settings. The Chats screen shows the low-quota banner. NavHost uses one subtle motion for every screen (`NavMotion` in `VerdroidRoot.kt`): the new screen fades in and slides a tenth of the width from the right (~260 ms), the old one fades out and drifts slightly left; back runs it in reverse. Before v1.0.30 navigation was instant.
 
 ### Chat heads (v0.2.1)
 - The 🫧 button in the chat detail top bar opens the conversation as a floating chat head. On Android 13+ it asks for `POST_NOTIFICATIONS` first.

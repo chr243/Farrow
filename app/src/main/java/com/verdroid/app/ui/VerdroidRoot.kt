@@ -2,6 +2,13 @@ package com.verdroid.app.ui
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +57,34 @@ object Routes {
     fun chat(taskId: Long) = "chat/$taskId"
 }
 
+/**
+ * Subtle Material "shared axis X"-style motion for every screen (chats, Settings and its sub-pages):
+ * the new screen fades in while sliding a short distance from the right; the old one fades out and
+ * drifts slightly left. Back (pop) runs the same motion in reverse. Short and small on purpose.
+ */
+private object NavMotion {
+    private const val DURATION_MS = 260
+    private const val FADE_OUT_MS = 120
+    private const val FADE_IN_DELAY_MS = 60
+
+    // Fractions of the screen width: a nudge, not a full page slide.
+    private fun near(width: Int) = width / 10
+    private fun far(width: Int) = width / 20
+
+    val enter: EnterTransition =
+        fadeIn(tween(DURATION_MS - FADE_IN_DELAY_MS, delayMillis = FADE_IN_DELAY_MS, easing = LinearOutSlowInEasing)) +
+            slideInHorizontally(tween(DURATION_MS, easing = FastOutSlowInEasing)) { near(it) }
+    val exit: ExitTransition =
+        fadeOut(tween(FADE_OUT_MS, easing = FastOutSlowInEasing)) +
+            slideOutHorizontally(tween(DURATION_MS, easing = FastOutSlowInEasing)) { -far(it) }
+    val popEnter: EnterTransition =
+        fadeIn(tween(DURATION_MS - FADE_IN_DELAY_MS, delayMillis = FADE_IN_DELAY_MS, easing = LinearOutSlowInEasing)) +
+            slideInHorizontally(tween(DURATION_MS, easing = FastOutSlowInEasing)) { -far(it) }
+    val popExit: ExitTransition =
+        fadeOut(tween(FADE_OUT_MS, easing = FastOutSlowInEasing)) +
+            slideOutHorizontally(tween(DURATION_MS, easing = FastOutSlowInEasing)) { near(it) }
+}
+
 @HiltViewModel
 class RootViewModel @Inject constructor(notifications: NotificationRepository) : ViewModel() {
     val unread = notifications.observeUnreadCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -73,14 +108,14 @@ fun VerdroidRoot(
 
     // No bottom bar (v0.9.18): the chat list is home; Settings opens from its gear.
     run {
-        // Transitions disabled everywhere so tab switches and navigation are instant (no crossfade).
+        // Subtle fade + short horizontal slide on open/back (see NavMotion).
         NavHost(
             nav,
             startDestination = Routes.CHATS,
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None },
+            enterTransition = { NavMotion.enter },
+            exitTransition = { NavMotion.exit },
+            popEnterTransition = { NavMotion.popEnter },
+            popExitTransition = { NavMotion.popExit },
         ) {
             composable(Routes.CHATS) {
                 ChatsScreen(
