@@ -519,3 +519,9 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   haptic tick); releasing there closes it. On release it flings toward the edge the finger was moving to and settles
   with a soft spring and a small overshoot (replaces the 220 ms linear `ValueAnimator`). Touching it mid-flight catches
   it. The head shrinks slightly while pressed; the ✕ target fades/rises in and grows with a bounce when the head is near.
+
+## v1.0.31
+
+- **Default context budget 262K:** `contextBudgetTokens` now defaults to 262000 tokens (was 16000), so summarization
+  kicks in later (at 60% of the budget). A limit already saved in Settings → Limits keeps overriding the default;
+  set 262000 there (or clear it) to pick up the new value.
