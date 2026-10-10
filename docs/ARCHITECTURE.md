@@ -525,3 +525,18 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Default context budget 262K:** `contextBudgetTokens` now defaults to 262000 tokens (was 16000), so summarization
   kicks in later (at 60% of the budget). A limit already saved in Settings → Limits keeps overriding the default;
   set 262000 there (or clear it) to pick up the new value.
+
+## v1.0.32
+
+- **Per-chat tool presets:** chat ⋮ menu → **Tool presets** (next to Chat memory) with **All**, **Web**, **Files**,
+  **Termux**, **Device** switches, all on by default. Off presets are stored per chat (`ChatToolPresets`,
+  SharedPreferences `chat_tool_presets`, only "off" sets saved). `ToolRegistry.schemas(taskId)` / `namesFor(taskId)`
+  hide those tools from the model and `execute` refuses them; the system prompt gets a one-line note naming the off
+  presets. Mapping in `ToolPreset.of` (Web: web_*, selenium_*; Files: workspace_*, read/write_file, list_dir, pdf_*,
+  ebook_translate; Termux: termux_run/termux_python; Device: run_shell, rish_run, screen_*, git_*). Memory, skills,
+  chart, crypto and MCP tools are not in any preset and follow Settings → Tools only.
+- **Task in short-term memory (no chat-goal UI):** the memory prompt and Tool groups now tell the agent to save the
+  current task as one `Task: …` line (scope=chat, tag `task`) when the user gives or changes a task, and keep progress
+  notes, so long chats don't lose the goal.
+- **Editable AGENTS.md:** Settings → Agent tools → **AGENTS.md** — the user's standing instructions (≤ 8000 chars,
+  app-internal `files/AGENTS.md`, `AgentsMdStore`), added to every chat's system prompt; empty sends nothing.
