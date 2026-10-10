@@ -32,7 +32,7 @@ class TermuxPackageJobs(private val termux: TermuxRunner, private val scope: Cor
         _jobs.update { it + (p.pkg to Job(running = true, detail = "Installing in Termux (background)…")) }
         scope.launch {
             val r = runCatching {
-                termux.runAndWait(TermuxPackages.installScript(p), "install-${p.pkg}-${System.nanoTime()}", 15 * 60_000L, label = "Farrow: pkg install ${p.pkg}")
+                termux.runAndWait(TermuxPackages.installScript(p), "install-${p.pkg}-${System.nanoTime()}", 15 * 60_000L, label = "Verdroid: pkg install ${p.pkg}")
             }.getOrNull()
             val ok = r?.stdout?.contains("INSTALLED=1") == true
             val detail = if (ok) null else (r?.stdout?.lines()?.filter { l -> l.isNotBlank() && !l.startsWith("RESULT=") && !l.startsWith("INSTALLED=") }

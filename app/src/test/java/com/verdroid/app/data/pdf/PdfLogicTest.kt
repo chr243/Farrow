@@ -42,7 +42,7 @@ class PdfLogicTest {
         assertEquals("Output/x.pdf", PdfNames.outputRel("Output/x.pdf", "d.pdf", "pdf"))
         assertEquals("Output/sub/x.PDF", PdfNames.outputRel("sub/x.PDF", "d.pdf", "pdf"))
         assertEquals("Output/d.pdf", PdfNames.outputRel(null, "d.pdf", "pdf"))
-        assertEquals("Output/notes.txt", PdfNames.outputRel("/storage/emulated/0/Documents/Farrow/Output/notes", "", "txt"))
+        assertEquals("Output/notes.txt", PdfNames.outputRel("/storage/emulated/0/Documents/Verdroid/Output/notes", "", "txt"))
         fails { PdfNames.outputRel("../x.pdf", "d", "pdf") }
         fails { PdfNames.outputRel("Output/../Input/x.pdf", "d", "pdf") }
         fails { PdfNames.outputRel("/etc/x.pdf", "d", "pdf") }

@@ -3,19 +3,19 @@ package com.verdroid.app.data.ebook
 import java.util.Base64
 
 /**
- * Python ebook translator dropped into Termux at `~/.farrow/farrow_ebook_translate.py` before each run.
+ * Python ebook translator dropped into Termux at `~/.verdroid/verdroid_ebook_translate.py` before each run.
  * MOBI first (mobi), then EPUB/PDF/DOCX (plain-text fallback); googletrans>=4.0.2 in ≤4000-char chunks (never ≥5000), ~0.3 s + 429 backoff between
  * requests, 5–10 s pause per 4-chapter batch, MyMemory fallback (500-char pieces, deep-translator), language check,
- * resume via a sidecar `.farrow-translate.json`, `--estimate` for an ETA, output under Documents/Farrow/Output.
+ * resume via a sidecar `.verdroid-translate.json`, `--estimate` for an ETA, output under Documents/Verdroid/Output.
  */
 object EbookTranslatePy {
     /** Absolute Termux paths: a quoted "~/…" is never tilde-expanded by bash (v1.0.22 bug: script "missing"). */
-    const val DIR = com.verdroid.app.data.termux.TermuxManager.TERMUX_HOME + "/.farrow"
-    const val FILE = "$DIR/farrow_ebook_translate.py"
-    const val MARKER = "FARROW_JSON="
+    const val DIR = com.verdroid.app.data.termux.TermuxManager.TERMUX_HOME + "/.verdroid"
+    const val FILE = "$DIR/verdroid_ebook_translate.py"
+    const val MARKER = "VERDROID_JSON="
 
     val SOURCE = """
-# Farrow ebook translator (written by the Farrow app; changes are overwritten).
+# Verdroid ebook translator (written by the Verdroid app; changes are overwritten).
 # Settings follow howtotranslate.md: googletrans>=4.0.2 with a browser User-Agent, ~4000-char chunks (hard cap < 5000),
 # ~0.3 s between requests + exponential backoff on "Too many requests" (429), a 5-10 s pause after every batch of
 # 4 chapters, MyMemory fallback (500-char pieces), plain-text extraction fallback, resume.
@@ -34,7 +34,7 @@ BATCH_PAUSE = (5.0, 10.0)    # seconds between batches
 MYMEMORY_MAX = 500           # MyMemory per-request limit
 REQ_EST = (1.0, 2.0, 3.0)    # min / typical / max seconds one Google request takes (ETA only)
 PSEUDO_CHAPTER = 20000       # books without detectable chapters are split into ~20k-char sections
-MARKER = "FARROW_JSON="
+MARKER = "VERDROID_JSON="
 assert CHUNK < 5000 and HARD_MAX < 5000
 
 
@@ -453,7 +453,7 @@ def main(argv=None):
     if missing:
         return out({"ok": False, "error": "Missing Python packages in Termux: %s. Install 'ebook-translate' in Settings > Tools." % ", ".join(missing)})
     out_path = Path(a.output)
-    state_path = Path(str(out_path) + ".farrow-translate.json")
+    state_path = Path(str(out_path) + ".verdroid-translate.json")
     try:
         chapters = extract(inp, fmt)
     except Exception as e:
@@ -552,22 +552,22 @@ if __name__ == "__main__":
         val mods = listOfNotNull("googletrans", "deep_translator", "langdetect", dep?.first).joinToString(",")
         val pipExtra = dep?.second?.let { " $it" } ?: ""
         val pdf = if (format == "pdf") "\nif ! python3 -c 'import fitz' >/dev/null 2>&1 && ! command -v pdftotext >/dev/null 2>&1; then " +
-            "echo 'Farrow: installing poppler (pdftotext)' >&2; timeout 600 apt-get -y install poppler >/dev/null 2>&1; fi" else ""
+            "echo 'Verdroid: installing poppler (pdftotext)' >&2; timeout 600 apt-get -y install poppler >/dev/null 2>&1; fi" else ""
         return """
 export DEBIAN_FRONTEND=noninteractive PIP_DISABLE_PIP_VERSION_CHECK=1
 if ! command -v python3 >/dev/null 2>&1; then
-  echo 'Farrow: installing python (first ebook_translate run)' >&2
+  echo 'Verdroid: installing python (first ebook_translate run)' >&2
   timeout 900 apt-get -y install python python-pip >/dev/null 2>&1 || timeout 900 pkg install -y python python-pip >/dev/null 2>&1
 fi
-farrow_gt_ok() { python3 -c 'import importlib.metadata as m,re,sys; v=m.version("googletrans"); n=[int(x) for x in re.findall(r"\d+",v)[:3]]+[0,0,0]; sys.exit(0 if n[:3]>=[4,0,2] else 1)' >/dev/null 2>&1; }
-if ! python3 -c 'import $mods' >/dev/null 2>&1 || ! farrow_gt_ok; then
-  echo 'Farrow: installing Python packages for ebook_translate (first run, a few minutes)' >&2
+verdroid_gt_ok() { python3 -c 'import importlib.metadata as m,re,sys; v=m.version("googletrans"); n=[int(x) for x in re.findall(r"\d+",v)[:3]]+[0,0,0]; sys.exit(0 if n[:3]>=[4,0,2] else 1)' >/dev/null 2>&1; }
+if ! python3 -c 'import $mods' >/dev/null 2>&1 || ! verdroid_gt_ok; then
+  echo 'Verdroid: installing Python packages for ebook_translate (first run, a few minutes)' >&2
   timeout 900 pip install -q -U $PIP_CORE$pipExtra 2>&1 | tail -n 5 >&2
 fi$pdf
 """.trim()
     }
 
-    private const val GT_OK = "farrow_gt_ok() { python3 -c 'import importlib.metadata as m,re,sys; v=m.version(\"googletrans\"); " +
+    private const val GT_OK = "verdroid_gt_ok() { python3 -c 'import importlib.metadata as m,re,sys; v=m.version(\"googletrans\"); " +
         "n=[int(x) for x in re.findall(r\"\\d+\",v)[:3]]+[0,0,0]; sys.exit(0 if n[:3]>=[4,0,2] else 1)' >/dev/null 2>&1; }"
 
     /**
@@ -578,17 +578,17 @@ fi$pdf
         val pips = listOf("googletrans" to "googletrans>=4.0.2", "deep_translator" to "deep-translator", "langdetect" to "langdetect") +
             listOfNotNull(FORMAT_DEPS[format])
         val checks = pips.joinToString("\n") { (mod, pip) ->
-            val ok = if (mod == "googletrans") "farrow_py 'import googletrans' && farrow_gt_ok" else "farrow_py 'import $mod'"
-            "$ok || farrow_m=\"${'$'}farrow_m pip:$pip\""
+            val ok = if (mod == "googletrans") "verdroid_py 'import googletrans' && verdroid_gt_ok" else "verdroid_py 'import $mod'"
+            "$ok || verdroid_m=\"${'$'}verdroid_m pip:$pip\""
         }
-        val pdf = if (format == "pdf") "\nfarrow_py 'import fitz' || command -v pdftotext >/dev/null 2>&1 || farrow_m=\"${'$'}farrow_m apt:poppler\"" else ""
-        return "farrow_m=\"\"\n" +
-            "command -v python3 >/dev/null 2>&1 || farrow_m=\"apt:python apt:python-pip\"\n" +
-            "farrow_py() { command -v python3 >/dev/null 2>&1 && python3 -c \"${'$'}1\" >/dev/null 2>&1; }\n" +
+        val pdf = if (format == "pdf") "\nverdroid_py 'import fitz' || command -v pdftotext >/dev/null 2>&1 || verdroid_m=\"${'$'}verdroid_m apt:poppler\"" else ""
+        return "verdroid_m=\"\"\n" +
+            "command -v python3 >/dev/null 2>&1 || verdroid_m=\"apt:python apt:python-pip\"\n" +
+            "verdroid_py() { command -v python3 >/dev/null 2>&1 && python3 -c \"${'$'}1\" >/dev/null 2>&1; }\n" +
             GT_OK + "\n" + checks + pdf + "\n" + com.verdroid.app.agent.tools.InstallConsent.probeExit(MARKER)
     }
 
-    /** Writes the script into Termux and fails loudly (FARROW_JSON error, exit 4) if it isn't there afterwards. */
+    /** Writes the script into Termux and fails loudly (VERDROID_JSON error, exit 4) if it isn't there afterwards. */
     fun installCommand(): String =
         "mkdir -p '$DIR' && echo " + Base64.getEncoder().encodeToString(SOURCE.toByteArray()) + " | base64 -d > '$FILE'\n" +
             "if [ ! -s '$FILE' ]; then echo '$MARKER{\"ok\":false,\"error\":\"Could not write $FILE in Termux\"}'; exit 4; fi"

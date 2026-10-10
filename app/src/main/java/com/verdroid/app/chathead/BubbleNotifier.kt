@@ -49,7 +49,7 @@ class BubbleNotifier @Inject constructor(
         if (nm.getNotificationChannel(CHANNEL_BUBBLES) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_BUBBLES, "Chat bubbles", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Floating chat bubbles for Farrow conversations"
+                    description = "Floating chat bubbles for Verdroid conversations"
                     setAllowBubbles(true)
                 }
             )
@@ -122,14 +122,14 @@ class BubbleNotifier @Inject constructor(
             .takeLast(6)
 
         val icon = IconCompat.createWithResource(context, R.mipmap.ic_launcher)
-        val bot = Person.Builder().setName("Farrow").setKey("farrow").setBot(true).setIcon(icon).build()
+        val bot = Person.Builder().setName("Verdroid").setKey("verdroid").setBot(true).setIcon(icon).build()
         val me = Person.Builder().setName("You").setKey("me").build()
         val shortcutId = shortcutId(taskId)
         val launchIntent = MainActivity.openTaskIntent(context, taskId)
 
         val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
-            .setShortLabel(task.title.take(24).ifBlank { "Farrow" })
-            .setLongLabel(task.title.ifBlank { "Farrow" })
+            .setShortLabel(task.title.take(24).ifBlank { "Verdroid" })
+            .setLongLabel(task.title.ifBlank { "Verdroid" })
             .setIcon(icon)
             .setIntent(launchIntent)
             .setLongLived(true)

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Something in Farrow doesn't work as expected
+about: Something in Verdroid doesn't work as expected
 title: "[Bug] "
 labels: bug
 assignees: ''
@@ -17,7 +17,7 @@ A clear description of the bug.
 **Expected behaviour**
 
 **Environment**
-- Farrow version (APK file name, or Android Settings → Apps → Farrow): 
+- Verdroid version (APK file name, or Android Settings → Apps → Verdroid): 
 - Device and Android / HyperOS version: 
 - Model/provider in use (e.g. OpenRouter free model id, Kilo): 
 - Shizuku version / started via Wireless debugging or adb, if `run_shell` is involved: 

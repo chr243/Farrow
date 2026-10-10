@@ -9,7 +9,7 @@ data class ApkAsset(val name: String, val url: String, val size: Long)
 
 /** Pure update logic (unit-tested): version comparison, asset choice, release parsing, auto-check throttle. */
 object UpdateLogic {
-    const val LATEST_URL = "https://api.github.com/repos/chr243/Farrow/releases/latest"
+    const val LATEST_URL = "https://api.github.com/repos/chr243/Verdroid/releases/latest"
     const val AUTO_CHECK_EVERY_MS = 6 * 60 * 60 * 1000L
 
     private data class V(val nums: List<Int>, val pre: String?)
@@ -41,13 +41,13 @@ object UpdateLogic {
     fun isNewer(latest: String, current: String): Boolean = (compare(latest, current) ?: 0) > 0
 
     /**
-     * The APK to install: `Farrow-*.apk` of the installed build type (debug → `-debug.apk`), else any `Farrow-*.apk`,
+     * The APK to install: `Verdroid-*.apk` of the installed build type (debug → `-debug.apk`), else any `Verdroid-*.apk`,
      * else any `.apk`. Assets with size 0 or no URL are skipped.
      */
     fun pickAsset(assets: List<ApkAsset>, buildType: String = "debug"): ApkAsset? {
         val apks = assets.filter { it.name.endsWith(".apk", ignoreCase = true) && it.url.startsWith("https://") && it.size > 0 }
-        val farrow = apks.filter { it.name.startsWith("Farrow-", ignoreCase = true) }
-        return farrow.firstOrNull { it.name.endsWith("-$buildType.apk", ignoreCase = true) } ?: farrow.firstOrNull() ?: apks.firstOrNull()
+        val verdroid = apks.filter { it.name.startsWith("Verdroid-", ignoreCase = true) }
+        return verdroid.firstOrNull { it.name.endsWith("-$buildType.apk", ignoreCase = true) } ?: verdroid.firstOrNull() ?: apks.firstOrNull()
     }
 
     fun parseRelease(body: String, buildType: String = "debug"): ReleaseInfo? {

@@ -21,7 +21,7 @@ class EbookTranslateToolTest {
 
     @Before fun setUp() {
         base = Files.createTempDirectory("ebook").toFile()
-        folder = SharedFolder(File(base, "Documents/Farrow")) { access }
+        folder = SharedFolder(File(base, "Documents/Verdroid")) { access }
         folder.ensure()
     }
     @After fun tearDown() { base.deleteRecursively() }
@@ -42,25 +42,25 @@ class EbookTranslateToolTest {
         assertTrue(EbookTranslatePy.SOURCE.contains("extract_mobi") && EbookTranslatePy.SOURCE.contains("MyMemoryTranslator"))
         assertTrue(EbookTranslatePy.SOURCE.contains("from googletrans import Translator"))
         assertTrue(TermuxPackages.installScript(p).contains("'googletrans>=4.0.2'"))
-        assertTrue(EbookTranslatePy.SOURCE.contains("farrow-translate.json"))
+        assertTrue(EbookTranslatePy.SOURCE.contains("verdroid-translate.json"))
     }
 
     @Test fun toolBuildsCommandAndParsesResult() = runTest {
         File(folder.input, "book.mobi").writeBytes(ByteArray(16))
         val t = FakeTermux {
-            TermuxResult("x", "noise\n${EbookTranslatePy.MARKER}{\"ok\":true,\"output\":\"/storage/emulated/0/Documents/Farrow/Output/book.fr.txt\",\"chunks\":3}\n", "", 0, -1, null)
+            TermuxResult("x", "noise\n${EbookTranslatePy.MARKER}{\"ok\":true,\"output\":\"/storage/emulated/0/Documents/Verdroid/Output/book.fr.txt\",\"chunks\":3}\n", "", 0, -1, null)
         }
         val r = Json.parseToJsonElement(EbookTranslateTool(t, folder).execute(buildJsonObject {
             put("input_path", "Input/book.mobi"); put("dest_lang", "fr")
         })).jsonObject
         assertEquals(true, r["ok"]?.jsonPrimitive?.boolean)
         val cmd = t.cmds.single()
-        // v1.0.22 bug: the script path was passed as a quoted "~/.farrow/…", which bash never expands.
-        assertFalse(cmd.contains("~/.farrow"))
+        // v1.0.22 bug: the script path was passed as a quoted "~/.verdroid/…", which bash never expands.
+        assertFalse(cmd.contains("~/.verdroid"))
         assertTrue(cmd.contains("python3 '${EbookTranslatePy.FILE}'"))
         assertTrue(cmd.indexOf("base64 -d > '${EbookTranslatePy.FILE}'") in 0 until cmd.indexOf("python3 '"))
-        assertTrue(t.cmds.single().contains("Documents/Farrow/Input/book.mobi"))
-        assertTrue(t.cmds.single().contains("Documents/Farrow/Output/book.fr.txt"))
+        assertTrue(t.cmds.single().contains("Documents/Verdroid/Input/book.mobi"))
+        assertTrue(t.cmds.single().contains("Documents/Verdroid/Output/book.fr.txt"))
         assertTrue(t.cmds.single().contains("'--dest' 'fr'"))
         // Not confirmed yet → estimate only, with the ask-the-user instruction.
         assertTrue(cmd.contains("'--estimate'"))
@@ -98,7 +98,7 @@ class EbookTranslateToolTest {
     }
 
     private fun py(code: String): String {
-        val f = File(base, "farrow_ebook_translate.py").apply { writeText(EbookTranslatePy.SOURCE) }
+        val f = File(base, "verdroid_ebook_translate.py").apply { writeText(EbookTranslatePy.SOURCE) }
         val p = ProcessBuilder("python3", "-c", "import importlib.util as u; s=u.spec_from_file_location('f', '${f.path}'); " +
             "m=u.module_from_spec(s); s.loader.exec_module(m)\n$code").redirectErrorStream(true).start()
         val out = p.inputStream.bufferedReader().readText(); assertEquals(out, 0, p.waitFor()); return out.trim()
@@ -142,7 +142,7 @@ class EbookTranslateToolTest {
         val r = Json.parseToJsonElement(EbookTranslateTool(t, folder).execute(buildJsonObject {
             put("input_path", "Input/note.txt"); put("dest_lang", "fr"); put("timeout_seconds", 60)
         })).jsonObject
-        assertTrue(File(home, ".farrow/farrow_ebook_translate.py").length() > 1000)
+        assertTrue(File(home, ".verdroid/verdroid_ebook_translate.py").length() > 1000)
         // First call = estimate (needs no translation packages for TXT).
         assertEquals(r.toString(), true, r["needs_confirmation"]?.jsonPrimitive?.boolean)
         assertEquals(2, r["chapters"]?.jsonPrimitive?.int)

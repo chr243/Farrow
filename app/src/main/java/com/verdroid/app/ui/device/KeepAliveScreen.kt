@@ -45,15 +45,15 @@ fun KeepAliveScreen(onBack: () -> Unit, vm: KeepAliveViewModel = hiltViewModel()
                         Switch(checked = enabled, onCheckedChange = { c.enabled = it; enabled = it })
                     }
                     Text("Chat heads keep working while idle without this service, but Android may close an idle app; " +
-                        "the bubble then comes back the next time you open Farrow.",
+                        "the bubble then comes back the next time you open Verdroid.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Battery optimisation", style = MaterialTheme.typography.titleSmall)
-                    Text(if (batteryOk) "✅ Unrestricted — Android won't defer Farrow's resume jobs." else
-                        "Optimised — Doze can delay auto-resume and kill the agent. Allow Farrow to ignore battery optimisations.")
+                    Text(if (batteryOk) "✅ Unrestricted — Android won't defer Verdroid's resume jobs." else
+                        "Optimised — Doze can delay auto-resume and kill the agent. Allow Verdroid to ignore battery optimisations.")
                     if (!batteryOk) Button(onClick = { runCatching { context.startActivity(c.batteryOptimizationIntent()) } }) { Text("Allow") }
                 }
             }
@@ -61,16 +61,16 @@ fun KeepAliveScreen(onBack: () -> Unit, vm: KeepAliveViewModel = hiltViewModel()
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("HyperOS / MIUI autostart", style = MaterialTheme.typography.titleSmall)
                     Text("On Xiaomi/Redmi/POCO phones, also:\n" +
-                        "1. Security app → Permissions → Autostart → enable Farrow (needed for resume after reboot).\n" +
-                        "2. Settings → Apps → Farrow → Battery saver → No restrictions.\n" +
-                        "3. Recents: long-press Farrow → lock (padlock) so it isn't swiped away.",
+                        "1. Security app → Permissions → Autostart → enable Verdroid (needed for resume after reboot).\n" +
+                        "2. Settings → Apps → Verdroid → Battery saver → No restrictions.\n" +
+                        "3. Recents: long-press Verdroid → lock (padlock) so it isn't swiped away.",
                         style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = { c.openAutostartSettings { context.startActivity(it) } }) {
                         Text(if (c.isXiaomi) "Open Autostart settings" else "Open app settings")
                     }
                 }
             }
-            Text("After a reboot, Farrow restarts only tasks that were mid-run; paused tasks keep their scheduled resume.",
+            Text("After a reboot, Verdroid restarts only tasks that were mid-run; paused tasks keep their scheduled resume.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

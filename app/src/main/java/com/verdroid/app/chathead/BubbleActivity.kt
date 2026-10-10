@@ -54,7 +54,7 @@ class BubbleActivity : ComponentActivity() {
         fun intent(context: Context, taskId: Long): Intent =
             Intent(context, BubbleActivity::class.java)
                 .setAction(Intent.ACTION_VIEW)
-                .setData(Uri.parse("farrow://task/$taskId"))
+                .setData(Uri.parse("verdroid://task/$taskId"))
                 .putExtra(EXTRA_TASK_ID, taskId)
     }
 }

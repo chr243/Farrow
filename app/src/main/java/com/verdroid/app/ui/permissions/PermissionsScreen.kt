@@ -46,7 +46,7 @@ object PermissionCatalog {
     )
 
     fun rows(s: Status): List<PermissionRow> = listOf(
-        PermissionRow("all_files", "All files access", "Documents/Farrow (Input/, Output/) and the workspace_* tools", s.allFiles, "Grant"),
+        PermissionRow("all_files", "All files access", "Documents/Verdroid (Input/, Output/) and the workspace_* tools", s.allFiles, "Grant"),
         PermissionRow("notifications", "Notifications", "Task finished / rate-limit alerts, chat heads (Bubbles), keep-alive", s.notifications, "Grant"),
         PermissionRow("termux", "Run commands in Termux", "termux_run, Termux add-ons, selenium_* and termux_python",
             s.termuxRunCommand, if (!s.termuxInstalled) "Get Termux" else "Grant"),
@@ -59,7 +59,7 @@ object PermissionCatalog {
         PermissionRow("accessibility", "Accessibility service", "screen_read / tap / swipe / type on other apps", s.accessibility, "Open settings"),
         PermissionRow("overlay", "Display over other apps", "Overlay chat heads", s.overlay, "Grant"),
         PermissionRow("battery", "Ignore battery optimisation", "Keeps long tasks running in the background", s.battery, "Grant"),
-        PermissionRow("install", "Install unknown apps", "In-app updates (installing a new Farrow APK)", s.installApps, "Grant"),
+        PermissionRow("install", "Install unknown apps", "In-app updates (installing a new Verdroid APK)", s.installApps, "Grant"),
     )
 }
 
@@ -113,7 +113,7 @@ class PermissionsViewModel @Inject constructor(
     }?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }
 
-/** Settings > Permissions: every permission Farrow uses, its status and a Grant button, in one place. */
+/** Settings > Permissions: every permission Verdroid uses, its status and a Grant button, in one place. */
 @Composable
 fun PermissionsScreen(onBack: () -> Unit, onTermuxSetup: () -> Unit, vm: PermissionsViewModel = hiltViewModel()) {
     val rows by vm.rows.collectAsStateWithLifecycle()
@@ -133,7 +133,7 @@ fun PermissionsScreen(onBack: () -> Unit, onTermuxSetup: () -> Unit, vm: Permiss
     BackScaffold("Permissions", onBack) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Everything Farrow can ask for, in one place. Each is optional and only needed for the tools listed.",
+            Text("Everything Verdroid can ask for, in one place. Each is optional and only needed for the tools listed.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             rows.forEach { r ->
                 ElevatedCard(Modifier.fillMaxWidth()) {

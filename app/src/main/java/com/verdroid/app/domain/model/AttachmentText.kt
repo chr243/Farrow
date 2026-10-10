@@ -3,7 +3,7 @@ package com.verdroid.app.domain.model
 import java.util.Locale
 
 /**
- * The model-facing attachment line ("Attached file: Input/x.mobi (n bytes). It is under Documents/Farrow — use …") and
+ * The model-facing attachment line ("Attached file: Input/x.mobi (n bytes). It is under Documents/Verdroid — use …") and
  * the display-side helpers that hide it. Stored messages and the task prompt keep the full line (it goes to the API);
  * every UI path (bubble, header, chat list, stories, chat heads, notifications, avatar glyph) uses these instead.
  * Pure Kotlin so domain use cases and the data mappers can share it.
@@ -23,7 +23,7 @@ object AttachmentText {
      * ebook_translate. Must stay a single line (see [PREFIX_RE]).
      */
     fun prefix(relativePath: String, bytes: Long): String =
-        "Attached file: $relativePath ($bytes bytes). It is under Documents/Farrow (use that path with the tools). " +
+        "Attached file: $relativePath ($bytes bytes). It is under Documents/Verdroid (use that path with the tools). " +
             "Do only what the user asks about it; if they haven't said what they want, don't guess or start a task " +
             "(no translation unless asked) — ask what to do and suggest options such as: " +
             options(relativePath).joinToString("; ") + ". Deliverables go in Output/.\n\n"
@@ -45,7 +45,7 @@ object AttachmentText {
             "organise or copy it into Output/")
     }
 
-    /** [path] is the attachment's path relative to Documents/Farrow (e.g. Input/photo.jpg). */
+    /** [path] is the attachment's path relative to Documents/Verdroid (e.g. Input/photo.jpg). */
     data class Display(val fileName: String?, val bytes: Long?, val text: String, val path: String? = null) {
         val isImage: Boolean get() = fileName != null && isImageName(fileName)
     }
@@ -54,7 +54,7 @@ object AttachmentText {
     /** Images the chat sends to vision models (and shows as thumbnails). */
     fun isImageName(name: String): Boolean = name.substringAfterLast('.', "").lowercase() in IMAGE_EXT
 
-    private val PREFIX_RE = Regex("^\\s*Attached file: (.+?) \\((\\d+) bytes\\)\\. It is under Documents/Farrow[^\\n]*(\\n\\n?|$)")
+    private val PREFIX_RE = Regex("^\\s*Attached file: (.+?) \\((\\d+) bytes\\)\\. It is under Documents/Verdroid[^\\n]*(\\n\\n?|$)")
     /** A stored title made from the raw prefix by the old titleFrom (first 6 words, maybe with "…"). */
     private val RAW_TITLE_RE = Regex("^\\s*Attached file:\\s*(.*)$")
 

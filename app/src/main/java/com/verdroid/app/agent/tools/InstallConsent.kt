@@ -101,10 +101,10 @@ object InstallConsent {
 
     // ---- Termux probes for tools with a built-in setup (pdf_*, ebook_translate) -------------------------------------
 
-    /** Shell tail of a probe: if `${'$'}farrow_m` lists missing packages, print `<marker>{"ok":false,"needs_install":true,…}` and exit 5. */
+    /** Shell tail of a probe: if `${'$'}verdroid_m` lists missing packages, print `<marker>{"ok":false,"needs_install":true,…}` and exit 5. */
     fun probeExit(marker: String): String =
-        "farrow_m=${'$'}(echo ${'$'}farrow_m)\nif [ -n \"${'$'}farrow_m\" ]; then printf '%s{\"ok\":false,\"needs_install\":true,\"missing\":\"%s\"}\\n' " +
-            "'$marker' \"${'$'}farrow_m\"; exit 5; fi"
+        "verdroid_m=${'$'}(echo ${'$'}verdroid_m)\nif [ -n \"${'$'}verdroid_m\" ]; then printf '%s{\"ok\":false,\"needs_install\":true,\"missing\":\"%s\"}\\n' " +
+            "'$marker' \"${'$'}verdroid_m\"; exit 5; fi"
 
     /** The packages a probe reported missing, or null when [o] isn't a probe result. */
     fun missingFrom(o: JsonObject): List<PackageSpec>? =

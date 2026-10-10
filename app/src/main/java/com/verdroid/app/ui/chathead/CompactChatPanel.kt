@@ -99,7 +99,7 @@ fun CompactChatPanel(
                 task?.let { TaskAvatar(it, size = 32.dp) } ?: TaskAvatar(TaskType.CHAT, null, size = 32.dp)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(task?.title ?: "Farrow", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                    Text(task?.title ?: "Verdroid", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     if (task != null) {
                         Text(task.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -148,7 +148,7 @@ fun CompactChatPanel(
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message Farrow…") }, shape = RoundedCornerShape(24.dp), maxLines = 4,
+                    placeholder = { Text("Message Verdroid…") }, shape = RoundedCornerShape(24.dp), maxLines = 4,
                 )
                 Spacer(Modifier.width(6.dp))
                 FilledIconButton(

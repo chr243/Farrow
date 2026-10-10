@@ -93,7 +93,7 @@ object TermuxPackages {
 
     /** Background install (no Termux window): waits for other apt runs, installs, prints INSTALLED=1/0 and RESULT=<exit>. */
     fun installScript(p: TermuxPackage): String = aptPrelude() + "\n" +
-        "farrow_wait_apt >/dev/null 2>&1 || true\n(apt-get update -q >/dev/null 2>&1 || true)\n" +
+        "verdroid_wait_apt >/dev/null 2>&1 || true\n(apt-get update -q >/dev/null 2>&1 || true)\n" +
         (p.install?.let { "$it\nrc=${'$'}?\n" } ?: "${'$'}APT install ${p.pkg} 2>&1 | tail -n 20; rc=${'$'}{PIPESTATUS[0]}\n") +
         "if ${p.detect}; then echo INSTALLED=1; else echo INSTALLED=0; fi\necho RESULT=${'$'}rc"
 
@@ -101,16 +101,16 @@ object TermuxPackages {
     fun aptPrelude(maxSeconds: Int = 120): String = """
 export DEBIAN_FRONTEND=noninteractive
 APT="apt-get -y -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef"
-farrow_apt_busy() {
+verdroid_apt_busy() {
   for f in /proc/[0-9]*/comm; do
     c=""; read -r c < "${'$'}f" 2>/dev/null || continue
     case "${'$'}c" in apt|apt-get|dpkg|unattended-upgr) return 0;; esac
   done
   return 1
 }
-farrow_wait_apt() {
+verdroid_wait_apt() {
   i=0
-  while farrow_apt_busy; do
+  while verdroid_apt_busy; do
     if [ "${'$'}i" -ge $maxSeconds ]; then
       echo "⚠️  Another apt/dpkg is still running after ${maxSeconds}s and holds the dpkg lock."
       return 1

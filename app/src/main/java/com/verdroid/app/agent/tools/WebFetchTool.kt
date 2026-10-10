@@ -43,7 +43,7 @@ class WebFetchTool(
             (args.int("page_size_tokens") ?: 4_000).coerceIn(0, 50_000))
         try {
             val req = Request.Builder().url(url)
-                .header("User-Agent", "Farrow/1.0 (web_fetch)")
+                .header("User-Agent", "Verdroid/1.0 (web_fetch)")
                 .header("Accept", "*/*")
                 .method(method, null)
                 .build()

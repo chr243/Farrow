@@ -36,7 +36,7 @@ class AttachmentTextTest {
     @Test fun `previews and topic text hide path and tool hints`() {
         assertEquals("📎 $file", AttachmentText.preview(only))
         assertEquals("📎 $file · Translate to French please", AttachmentText.preview(withText))
-        assertFalse(AttachmentText.plain(only).contains("workspace_") || AttachmentText.plain(only).contains("Documents/Farrow"))
+        assertFalse(AttachmentText.plain(only).contains("workspace_") || AttachmentText.plain(only).contains("Documents/Verdroid"))
         assertEquals("hi", AttachmentText.preview("hi"))
         val d = AttachmentText.forDisplay("  " + withText)
         assertEquals(file, d.fileName); assertEquals("Translate to French please", d.text)
@@ -64,7 +64,7 @@ class AttachmentTextTest {
         assertEquals("📎 report.pdf", AttachmentText.preview(p + AttachmentText.DEFAULT_PROMPT))
         assertEquals("Input/report.pdf", AttachmentText.forDisplay(p + "Summarise").path)
         // Messages stored by v1.0.27 (old hint wording) still parse.
-        val old = "Attached file: Input/b.mobi (9 bytes). It is under Documents/Farrow — use workspace_*, pdf_* (PDFs) or ebook_translate on that path. Deliverables go in Output/.\n\nhi"
+        val old = "Attached file: Input/b.mobi (9 bytes). It is under Documents/Verdroid — use workspace_*, pdf_* (PDFs) or ebook_translate on that path. Deliverables go in Output/.\n\nhi"
         assertEquals("b.mobi", AttachmentText.forDisplay(old).fileName); assertEquals("hi", AttachmentText.forDisplay(old).text)
     }
 }

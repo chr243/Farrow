@@ -48,7 +48,7 @@ class AgentLoop internal constructor(
     private val memoryPrompt: suspend (taskId: Long) -> String = { "" },
     /** Enabled skills: index + full text (disabled skills are never sent). */
     private val skillsPrompt: suspend () -> String = { "" },
-    /** Attached image (path under Documents/Farrow) → data URL for vision models; null if unreadable. */
+    /** Attached image (path under Documents/Verdroid) → data URL for vision models; null if unreadable. */
     private val imageData: suspend (relativePath: String) -> String? = { null },
 ) {
     @Inject constructor(
@@ -367,7 +367,7 @@ class AgentLoop internal constructor(
         private const val FINISH_NOTIFICATION_BASE = 52_000
         const val DAILY_QUOTA_MESSAGE = "⏸️ Paused: Daily free quota exhausted. Resuming at 00:00 UTC."
         val SYSTEM_PROMPT = """
-            You are Farrow, an autonomous assistant running inside an Android app.
+            You are Verdroid, an autonomous assistant running inside an Android app.
             You can call the tools listed in the tool definitions (the user can turn tools off in Settings > Tools; only call
             the ones you were given). File tools work in a private sandboxed workspace (paths relative to its root).
             Prefer native tool/function calls. If you cannot use native tool calls, emit exactly one fenced block like:
@@ -394,18 +394,18 @@ class AgentLoop internal constructor(
               pair, and only after they turned those tools on in Tools; always pass confirm=true. Never invent trades.
             - Phone screen (accessibility): screen_read, screen_tap, screen_swipe, screen_type, screen_action. Only for
               controlling OTHER Android apps on the phone's display.
-            - Device: run_shell (Shizuku, adb shell user), rish_run (Shizuku's rish at /data/local/tmp/farrow_rish with
+            - Device: run_shell (Shizuku, adb shell user), rish_run (Shizuku's rish at /data/local/tmp/verdroid_rish with
               RISH_APPLICATION_ID=com.termux, if the user set it up; try it when run_shell fails), termux_run (bash in Termux
               with the packages the user installed, e.g. ffmpeg, imagemagick, yt-dlp, jq, curl, pandoc). Git: git_*.
               With rish_run/run_shell, screencap and any other saved images/media go under
-              /storage/emulated/0/Documents/Farrow/Output (never Pictures or Download).
+              /storage/emulated/0/Documents/Verdroid/Output (never Pictures or Download).
             - Headless Chromium (inside Termux, needs the chromium-selenium add-on): selenium_open (title, visible text,
-              links), selenium_page_source (rendered HTML), selenium_screenshot (PNG to Documents/Farrow/Output). Slower than
+              links), selenium_page_source (rendered HTML), selenium_screenshot (PNG to Documents/Verdroid/Output). Slower than
               web_search/web_fetch — use it only for JavaScript-rendered pages or when web_fetch is blocked. Each call is a
               fresh browser (no login, no session). For repeatable or multi-page scraping write your own Python scraper in the
-              private workspace (e.g. scrapers/name.py; `from farrow_selenium import make_driver` gives a headless driver,
-              always call driver.quit()) and run it with termux_python; save scraped data to os.environ["FARROW_OUTPUT"].
-              Keep scraper scripts in the private workspace, not in Documents/Farrow.
+              private workspace (e.g. scrapers/name.py; `from verdroid_selenium import make_driver` gives a headless driver,
+              always call driver.quit()) and run it with termux_python; save scraped data to os.environ["VERDROID_OUTPUT"].
+              Keep scraper scripts in the private workspace, not in Documents/Verdroid.
             - Skills: skill_list, skill_get, skill_save, skill_edit, skill_delete. "Saved skills" below is only an index (name +
               one-line description) of enabled skills; when a task matches one, call skill_get to load its full steps, then
               follow them. When you and the user work out a reusable multi-step procedure (something they will likely ask
@@ -444,12 +444,12 @@ class AgentLoop internal constructor(
               claim you can't see it. If you only get a note that this model can't see images, say so and suggest
               putting a vision model first in Settings → Models, or work with the file via tools.
             - Files: workspace_list, workspace_read, workspace_write, workspace_delete work in the user's shared folder
-              /storage/emulated/0/Documents/Farrow (visible in their file manager): look in Input/ for files the user gives
+              /storage/emulated/0/Documents/Verdroid (visible in their file manager): look in Input/ for files the user gives
               you. ALL user-facing deliverables go in Output/ — translated text, screenshots, scripts, coding projects,
               reports, exports, generated files, anything they asked for. Prefer workspace_write under Output/; when a tool
               only writes via shell (screencap, ffmpeg, …) use the absolute path
-              /storage/emulated/0/Documents/Farrow/Output/…. Never save deliverables to Pictures, Download, DCIM or the
-              private scratch workspace. Paths for workspace_* are relative to Documents/Farrow; nothing outside it is
+              /storage/emulated/0/Documents/Verdroid/Output/…. Never save deliverables to Pictures, Download, DCIM or the
+              private scratch workspace. Paths for workspace_* are relative to Documents/Verdroid; nothing outside it is
               reachable. Only delete what the user asked for. read_file, write_file, list_dir are a private scratch area
               the user can't see (scraper scripts, skill drafts) — not for finished work.
             - Memory: memory_save, memory_search, memory_delete — scope="chat" (short-term) for the current task's progress

@@ -9,12 +9,12 @@ import java.util.Base64
 
 /**
  * Headless Chromium + Selenium running inside Termux (installed from Settings > Tools > Available to install).
- * Every call starts a fresh headless browser through `~/.farrow/farrow_selenium.py`, so there is no session state.
- * Files are written by Termux straight into Documents/Farrow/Output, which needs `termux-setup-storage` once in Termux.
+ * Every call starts a fresh headless browser through `~/.verdroid/verdroid_selenium.py`, so there is no session state.
+ * Files are written by Termux straight into Documents/Verdroid/Output, which needs `termux-setup-storage` once in Termux.
  */
 abstract class TermuxSeleniumBase(protected val termux: TermuxRunner, protected val folder: SharedFolder) : AgentTool {
 
-    /** Output path (as Termux sees it) for a file name the agent chose; null name → null. Only inside Documents/Farrow. */
+    /** Output path (as Termux sees it) for a file name the agent chose; null name → null. Only inside Documents/Verdroid. */
     protected fun outputPath(name: String?, defaultExt: String): Pair<String, String>? {
         val n = name?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val rel = (if (n.startsWith("/") || n.startsWith("Output/") || n.startsWith("Input/")) n else "Output/$n")
@@ -27,17 +27,17 @@ abstract class TermuxSeleniumBase(protected val termux: TermuxRunner, protected 
 
     protected suspend fun runHelper(cliArgs: List<String>, timeoutS: Int, writesTo: String?): String {
         if (!termux.isInstalled()) return errorJson("Termux is not installed. $SETUP")
-        if (!termux.hasRunCommandPermission()) return errorJson("Farrow doesn't have the 'Run commands in Termux' permission. $SETUP")
+        if (!termux.hasRunCommandPermission()) return errorJson("Verdroid doesn't have the 'Run commands in Termux' permission. $SETUP")
         writesTo?.let { runCatching { folder.ensure() } }
         val storageCheck = writesTo?.let {
             val dir = it.substringBeforeLast('/')
             "mkdir -p ${TermuxRunTool.shellQuote(dir)} 2>/dev/null; if [ ! -w ${TermuxRunTool.shellQuote(dir)} ]; then " +
-                "echo '${VerdroidSeleniumPy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write to Documents/Farrow. Ask the user to run termux-setup-storage in Termux once and allow storage.\"}'; exit 3; fi\n"
+                "echo '${VerdroidSeleniumPy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write to Documents/Verdroid. Ask the user to run termux-setup-storage in Termux once and allow storage.\"}'; exit 3; fi\n"
         } ?: ""
         val cmd = VerdroidSeleniumPy.installCommand() + "\n" + storageCheck +
-            "cd ~/farrow-work 2>/dev/null || { mkdir -p ~/farrow-work && cd ~/farrow-work; }\n" +
+            "cd ~/verdroid-work 2>/dev/null || { mkdir -p ~/verdroid-work && cd ~/verdroid-work; }\n" +
             TermuxRunTool.capped("python3 ${VerdroidSeleniumPy.FILE} " + cliArgs.joinToString(" ") { TermuxRunTool.shellQuote(it) }, timeoutS)
-        val r = termux.runAndWait(cmd, "sel-${System.nanoTime()}", (timeoutS + 20) * 1_000L, label = "Farrow: $name")
+        val r = termux.runAndWait(cmd, "sel-${System.nanoTime()}", (timeoutS + 20) * 1_000L, label = "Verdroid: $name")
             ?: return errorJson("Termux did not answer within ${timeoutS + 20} s. Check allow-external-apps in Termux. $SETUP")
         val line = r.stdout.lineSequence().lastOrNull { it.startsWith(VerdroidSeleniumPy.MARKER) }
         if (line == null) {
@@ -74,10 +74,10 @@ private suspend fun guardedTool(block: suspend () -> String): String =
 
 class SeleniumOpenTool(termux: TermuxRunner, folder: SharedFolder) : TermuxSeleniumBase(termux, folder) {
     override val name = "selenium_open"
-    override val description = PREFIX + "Load a page and return its title, final URL, visible text and links. Optional save_as stores the rendered HTML in Documents/Farrow/Output."
+    override val description = PREFIX + "Load a page and return its title, final URL, visible text and links. Optional save_as stores the rendered HTML in Documents/Verdroid/Output."
     override val parameters = schema(listOf("url"), URL_PROP, WAIT_PROP, WAIT_FOR_PROP,
         "max_chars" to prop("integer", "Max characters of visible text (default 12000, max 60000)"),
-        "save_as" to prop("string", "Optional file name in Documents/Farrow/Output for the rendered HTML"))
+        "save_as" to prop("string", "Optional file name in Documents/Verdroid/Output for the rendered HTML"))
 
     override suspend fun execute(args: JsonObject): String = guardedTool {
         val url = url(args) ?: return@guardedTool errorJson("url (http/https) is required")
@@ -91,10 +91,10 @@ class SeleniumOpenTool(termux: TermuxRunner, folder: SharedFolder) : TermuxSelen
 
 class SeleniumPageSourceTool(termux: TermuxRunner, folder: SharedFolder) : TermuxSeleniumBase(termux, folder) {
     override val name = "selenium_page_source"
-    override val description = PREFIX + "Return the rendered HTML (after JavaScript) of a page. Optional save_as stores the full HTML in Documents/Farrow/Output."
+    override val description = PREFIX + "Return the rendered HTML (after JavaScript) of a page. Optional save_as stores the full HTML in Documents/Verdroid/Output."
     override val parameters = schema(listOf("url"), URL_PROP, WAIT_PROP, WAIT_FOR_PROP,
         "max_chars" to prop("integer", "Max HTML characters returned (default 20000, max 60000); the saved file is complete"),
-        "save_as" to prop("string", "Optional file name in Documents/Farrow/Output"))
+        "save_as" to prop("string", "Optional file name in Documents/Verdroid/Output"))
 
     override suspend fun execute(args: JsonObject): String = guardedTool {
         val url = url(args) ?: return@guardedTool errorJson("url (http/https) is required")
@@ -108,9 +108,9 @@ class SeleniumPageSourceTool(termux: TermuxRunner, folder: SharedFolder) : Termu
 
 class SeleniumScreenshotTool(termux: TermuxRunner, folder: SharedFolder) : TermuxSeleniumBase(termux, folder) {
     override val name = "selenium_screenshot"
-    override val description = PREFIX + "Save a PNG screenshot of a page to Documents/Farrow/Output (viewport or full page)."
+    override val description = PREFIX + "Save a PNG screenshot of a page to Documents/Verdroid/Output (viewport or full page)."
     override val parameters = schema(listOf("url"), URL_PROP, WAIT_PROP, WAIT_FOR_PROP,
-        "save_as" to prop("string", "File name in Documents/Farrow/Output (default screenshot-<time>.png)"),
+        "save_as" to prop("string", "File name in Documents/Verdroid/Output (default screenshot-<time>.png)"),
         "full_page" to prop("boolean", "Capture the whole page height (max 12000 px), default false"),
         "width" to prop("integer", "Viewport width (default 1366)"),
         "height" to prop("integer", "Viewport height (default 900)"))
@@ -127,9 +127,9 @@ class SeleniumScreenshotTool(termux: TermuxRunner, folder: SharedFolder) : Termu
 }
 
 /**
- * Runs a Python script the agent wrote. Scripts live in Farrow's private workspace (filesDir/workspace, e.g.
+ * Runs a Python script the agent wrote. Scripts live in Verdroid's private workspace (filesDir/workspace, e.g.
  * scrapers/foo.py, written with write_file or the `code` parameter) and are shipped to Termux for each run.
- * FARROW_OUTPUT / FARROW_INPUT point at Documents/Farrow/Output and Input; `farrow_selenium.make_driver()` is importable.
+ * VERDROID_OUTPUT / VERDROID_INPUT point at Documents/Verdroid/Output and Input; `verdroid_selenium.make_driver()` is importable.
  */
 class TermuxPythonTool(
     private val termux: TermuxRunner,
@@ -137,8 +137,8 @@ class TermuxPythonTool(
 ) : AgentTool {
     override val name = "termux_python"
     override val description = "Run a Python script you wrote (stored in the private workspace, e.g. scrapers/news.py) with Python in Termux. " +
-        "Pass code to save it first. `from farrow_selenium import make_driver` gives a headless Chromium Selenium driver; " +
-        "write results to os.environ['FARROW_OUTPUT'] (Documents/Farrow/Output). Returns exit_code, stdout, stderr. Timeout max 600 s. " +
+        "Pass code to save it first. `from verdroid_selenium import make_driver` gives a headless Chromium Selenium driver; " +
+        "write results to os.environ['VERDROID_OUTPUT'] (Documents/Verdroid/Output). Returns exit_code, stdout, stderr. Timeout max 600 s. " +
         "A script that installs packages (pip/apt…) first returns needs_install_confirmation: ask the user and re-run with " +
         "confirm_install=true + install_id only after they agree."
     override val parameters = schema(listOf("path"),
@@ -157,11 +157,11 @@ class TermuxPythonTool(
         val bytes = f.readBytes()
         if (bytes.size > MAX_SCRIPT) return errorJson("Script is larger than ${MAX_SCRIPT / 1000} KB")
         if (!termux.isInstalled()) return errorJson("Termux is not installed. Set it up in Settings > Tools.")
-        if (!termux.hasRunCommandPermission()) return errorJson("Farrow doesn't have the 'Run commands in Termux' permission (Settings > Tools).")
+        if (!termux.hasRunCommandPermission()) return errorJson("Verdroid doesn't have the 'Run commands in Termux' permission (Settings > Tools).")
         TermuxRunTool.gate(name, "the script ${sandbox.relativePath(f)} installs them", InstallConsent.detectPython(String(bytes)), args)?.let { return it }
         val timeout = (args.int("timeout_seconds") ?: 300).coerceIn(1, TermuxRunTool.MAX_TIMEOUT_S)
         val argv = (args["args"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
-        val r = termux.runAndWait(command(f.name, bytes, argv, timeout), "py-${System.nanoTime()}", (timeout + 20) * 1_000L, label = "Farrow: termux_python")
+        val r = termux.runAndWait(command(f.name, bytes, argv, timeout), "py-${System.nanoTime()}", (timeout + 20) * 1_000L, label = "Verdroid: termux_python")
             ?: return errorJson("Termux did not answer within ${timeout + 20} s. Check allow-external-apps in Termux.")
         val code = r.exitCode ?: -1
         return buildJsonObject {
@@ -176,14 +176,14 @@ class TermuxPythonTool(
     companion object {
         private const val MAX_SCRIPT = 256_000
 
-        /** Writes the helper + the script into Termux's tmp dir, then runs it in ~/farrow-work under `timeout`. */
+        /** Writes the helper + the script into Termux's tmp dir, then runs it in ~/verdroid-work under `timeout`. */
         internal fun command(fileName: String, script: ByteArray, argv: List<String>, timeoutS: Int): String {
             val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            val tmp = "\"${'$'}{TMPDIR:-${'$'}PREFIX/tmp}/farrow-scripts\""
+            val tmp = "\"${'$'}{TMPDIR:-${'$'}PREFIX/tmp}/verdroid-scripts\""
             return VerdroidSeleniumPy.installCommand() + "\n" +
-                "mkdir -p $tmp ~/farrow-work && cd ~/farrow-work\n" +
+                "mkdir -p $tmp ~/verdroid-work && cd ~/verdroid-work\n" +
                 "echo " + Base64.getEncoder().encodeToString(script) + " | base64 -d > $tmp/$safeName\n" +
-                "export FARROW_OUTPUT=${SharedFolder.DISPLAY_PATH}/Output FARROW_INPUT=${SharedFolder.DISPLAY_PATH}/Input " +
+                "export VERDROID_OUTPUT=${SharedFolder.DISPLAY_PATH}/Output VERDROID_INPUT=${SharedFolder.DISPLAY_PATH}/Input " +
                 "PYTHONPATH=${VerdroidSeleniumPy.DIR}${'$'}{PYTHONPATH:+:${'$'}PYTHONPATH}\n" +
                 TermuxRunTool.capped("python3 $tmp/$safeName " + argv.joinToString(" ") { TermuxRunTool.shellQuote(it) }, timeoutS)
         }

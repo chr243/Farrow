@@ -135,8 +135,8 @@ class KiloProvider(
 
 /** Removes the memory block from system messages (setting "Send memories to Kilo models" off). */
 object MemoryRedaction {
-    const val START = "<farrow-memory>"
-    const val END = "</farrow-memory>"
+    const val START = "<verdroid-memory>"
+    const val END = "</verdroid-memory>"
     private val BLOCK = Regex(Regex.escape(START) + ".*?" + Regex.escape(END), RegexOption.DOT_MATCHES_ALL)
 
     fun wrap(block: String) = if (block.isBlank()) "" else "$START\n$block\n$END"

@@ -45,7 +45,7 @@ fun SkillsScreen(onBack: () -> Unit, vm: SkillsViewModel = hiltViewModel()) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
             if (skills.isEmpty()) item {
-                Text("No skills yet. Ask Farrow to \"save this as a skill\" after a task.",
+                Text("No skills yet. Ask Verdroid to \"save this as a skill\" after a task.",
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
             }
             items(skills, key = { it.id }) { s ->

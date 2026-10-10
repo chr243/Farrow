@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Farrow</string>
-    <string name="accessibility_label">Farrow agent control</string>
-    <string name="accessibility_description">Lets the Farrow agent tap, swipe, type and read what is on screen when you ask it to automate a task on this phone. Nothing is sent anywhere except to the AI model you configured, as part of the task.</string>
+    <string name="app_name">Verdroid</string>
+    <string name="accessibility_label">Verdroid agent control</string>
+    <string name="accessibility_description">Lets the Verdroid agent tap, swipe, type and read what is on screen when you ask it to automate a task on this phone. Nothing is sent anywhere except to the AI model you configured, as part of the task.</string>
 </resources>

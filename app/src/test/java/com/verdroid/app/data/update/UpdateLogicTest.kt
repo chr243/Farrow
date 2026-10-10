@@ -18,24 +18,24 @@ class UpdateLogicTest {
         assertFalse(UpdateLogic.isNewer("garbage", "1.0.5"))
     }
 
-    private fun a(name: String, size: Long = 1000) = ApkAsset(name, "https://github.com/chr243/Farrow/releases/download/v1/$name", size)
+    private fun a(name: String, size: Long = 1000) = ApkAsset(name, "https://github.com/chr243/Verdroid/releases/download/v1/$name", size)
 
     @Test fun assetPicking() {
-        assertEquals("Farrow-v1.0.6-debug.apk",
-            UpdateLogic.pickAsset(listOf(a("notes.txt"), a("Farrow-v1.0.6-release.apk"), a("Farrow-v1.0.6-debug.apk")))!!.name)
-        assertEquals("Farrow-v1.0.6-release.apk", UpdateLogic.pickAsset(listOf(a("Farrow-v1.0.6-release.apk"), a("other.apk")), "release")!!.name)
-        assertEquals("Farrow-v1.0.6.apk", UpdateLogic.pickAsset(listOf(a("other.apk"), a("Farrow-v1.0.6.apk")))!!.name)
+        assertEquals("Verdroid-v1.0.6-debug.apk",
+            UpdateLogic.pickAsset(listOf(a("notes.txt"), a("Verdroid-v1.0.6-release.apk"), a("Verdroid-v1.0.6-debug.apk")))!!.name)
+        assertEquals("Verdroid-v1.0.6-release.apk", UpdateLogic.pickAsset(listOf(a("Verdroid-v1.0.6-release.apk"), a("other.apk")), "release")!!.name)
+        assertEquals("Verdroid-v1.0.6.apk", UpdateLogic.pickAsset(listOf(a("other.apk"), a("Verdroid-v1.0.6.apk")))!!.name)
         assertEquals("other.apk", UpdateLogic.pickAsset(listOf(a("other.apk"), a("source.zip")))!!.name)
-        assertNull(UpdateLogic.pickAsset(listOf(a("Farrow-v1.0.6-debug.apk", size = 0), a("source.zip"))))
-        assertNull(UpdateLogic.pickAsset(listOf(ApkAsset("Farrow-v1-debug.apk", "http://insecure/x.apk", 10))))
+        assertNull(UpdateLogic.pickAsset(listOf(a("Verdroid-v1.0.6-debug.apk", size = 0), a("source.zip"))))
+        assertNull(UpdateLogic.pickAsset(listOf(ApkAsset("Verdroid-v1-debug.apk", "http://insecure/x.apk", 10))))
         assertNull(UpdateLogic.pickAsset(emptyList()))
     }
 
     @Test fun parsesGithubLatestRelease() {
-        val body = """{"tag_name":"v1.0.6","name":"Farrow v1.0.6","draft":false,"body":"## v1.0.6\n- fixes","html_url":"https://github.com/chr243/Farrow/releases/tag/v1.0.6",
-          "assets":[{"name":"Farrow-v1.0.6-debug.apk","size":12345678,"browser_download_url":"https://github.com/chr243/Farrow/releases/download/v1.0.6/Farrow-v1.0.6-debug.apk"}]}"""
+        val body = """{"tag_name":"v1.0.6","name":"Verdroid v1.0.6","draft":false,"body":"## v1.0.6\n- fixes","html_url":"https://github.com/chr243/Verdroid/releases/tag/v1.0.6",
+          "assets":[{"name":"Verdroid-v1.0.6-debug.apk","size":12345678,"browser_download_url":"https://github.com/chr243/Verdroid/releases/download/v1.0.6/Verdroid-v1.0.6-debug.apk"}]}"""
         val r = UpdateLogic.parseRelease(body)!!
-        assertEquals("1.0.6", r.version); assertEquals("Farrow v1.0.6", r.name); assertTrue(r.notes.contains("fixes"))
+        assertEquals("1.0.6", r.version); assertEquals("Verdroid v1.0.6", r.name); assertTrue(r.notes.contains("fixes"))
         assertEquals(12345678L, r.asset!!.size)
         assertNull(UpdateLogic.parseRelease("""{"message":"Not Found"}"""))
         assertNull(UpdateLogic.parseRelease("""{"tag_name":"v9","draft":true}"""))

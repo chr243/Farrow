@@ -95,7 +95,7 @@ class GitPushTool(private val git: GitManager) : AgentTool {
 
 // ---------------------------------------------------------------- Accessibility
 
-private const val A11Y_OFF = "Accessibility service is off (enable 'Farrow agent control' in Settings > Shizuku & accessibility setup). " +
+private const val A11Y_OFF = "Accessibility service is off (enable 'Verdroid agent control' in Settings > Shizuku & accessibility setup). " +
     "It is only needed to control OTHER Android apps on the phone screen."
 private const val PHONE = "Phone screen (accessibility): controls other Android apps on the phone's display. "
 
@@ -118,7 +118,7 @@ class ScreenReadTool : AgentTool {
         val svc = VerdroidAccessibilityService.instance ?: return errorJson(A11Y_OFF)
         val tree = svc.screenTree((args.int("max_depth") ?: 25).coerceIn(1, 60)) ?: return errorJson("No active window")
         val s = tree.toJson().toString()
-        if (s.contains("com.verdroid.app")) return buildJsonObject { put("note", "This is Farrow's own UI."); put("tree", s.take(60_000)) }.toString()
+        if (s.contains("com.verdroid.app")) return buildJsonObject { put("note", "This is Verdroid's own UI."); put("tree", s.take(60_000)) }.toString()
         return if (s.length > 60_000) buildJsonObject { put("truncated", true); put("tree", s.take(60_000)) }.toString() else s
     }
 }

@@ -47,7 +47,7 @@ class AgentStateStore @Inject constructor(
     }
 
     private companion object {
-        const val FILE = "farrow_limiter_state"
+        const val FILE = "verdroid_limiter_state"
         const val KEY = "state_v1"
     }
 }

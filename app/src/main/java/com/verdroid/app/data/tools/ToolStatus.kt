@@ -3,11 +3,11 @@ package com.verdroid.app.data.tools
 /** What the phone currently offers; [ToolStatus.of] turns it into "ready" or what a tool still needs. */
 data class ToolEnv(
     val shizukuReady: Boolean = false,
-    /** Termux installed and Farrow holds its RUN_COMMAND permission. */
+    /** Termux installed and Verdroid holds its RUN_COMMAND permission. */
     val termuxReady: Boolean = false,
     val accessibilityOn: Boolean = false,
     val gitToken: Boolean = false,
-    /** All files access granted, so Documents/Farrow is usable. */
+    /** All files access granted, so Documents/Verdroid is usable. */
     val storageReady: Boolean = false,
     /** rish + its dex copied into files/rish. */
     val rishReady: Boolean = false,
@@ -20,7 +20,7 @@ data class ToolStatus(val ready: Boolean, val text: String) {
         fun of(name: String, env: ToolEnv): ToolStatus = when {
             name in setOf("read_file", "write_file", "list_dir") -> READY
             name.startsWith("workspace_") -> if (env.storageReady) READY
-                else ToolStatus(false, "Needs All files access for Documents/Farrow (Settings > Tools > Shared folder)")
+                else ToolStatus(false, "Needs All files access for Documents/Verdroid (Settings > Tools > Shared folder)")
             name == "web_fetch" || name == "web_search" -> READY
             name.startsWith("crypto_") -> when (name) {
                 "crypto_place_order", "crypto_cancel_order" -> ToolStatus(true, "Live trading — off by default; needs a Coinbase Exchange API key (Settings > Tools)")
@@ -40,15 +40,15 @@ data class ToolStatus(val ready: Boolean, val text: String) {
             name == "termux_run" -> if (env.termuxReady) ToolStatus(true, "Ready if allow-external-apps is on in Termux")
                 else ToolStatus(false, "Needs Termux and the Run commands permission (Settings > Tools > Termux)")
             name == "rish_run" -> when {
-                !env.rishReady -> ToolStatus(false, "Needs Find/Pick rish in Settings > Shizuku & Git (deploys to /data/local/tmp/farrow_rish)")
+                !env.rishReady -> ToolStatus(false, "Needs Find/Pick rish in Settings > Shizuku & Git (deploys to /data/local/tmp/verdroid_rish)")
                 !env.shizukuReady -> ToolStatus(false, "rish is staged; needs Shizuku running with permission to deploy/run")
-                else -> ToolStatus(true, "Ready (runs from /data/local/tmp/farrow_rish)")
+                else -> ToolStatus(true, "Ready (runs from /data/local/tmp/verdroid_rish)")
             }
             name == "run_shell" -> if (env.shizukuReady) READY else ToolStatus(false, "Needs Shizuku running with permission (Settings > Shizuku & Git)")
             name == "git_push" || name == "git_clone" -> if (env.gitToken) READY
                 else ToolStatus(true, "Ready for public repos — private ones need a Git token (Settings > Shizuku & Git)")
             name.startsWith("git_") -> READY
-            name.startsWith("screen_") -> if (env.accessibilityOn) READY else ToolStatus(false, "Needs the Farrow accessibility service (Settings > Phone > Permissions)")
+            name.startsWith("screen_") -> if (env.accessibilityOn) READY else ToolStatus(false, "Needs the Verdroid accessibility service (Settings > Phone > Permissions)")
             else -> READY
         }
 

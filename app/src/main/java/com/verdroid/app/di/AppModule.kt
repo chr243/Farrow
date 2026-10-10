@@ -38,7 +38,7 @@ object AppModule {
 
     @Provides @Singleton
     fun provideDatabase(@ApplicationContext context: Context): VerdroidDatabase =
-        Room.databaseBuilder(context, VerdroidDatabase::class.java, "farrow.db")
+        Room.databaseBuilder(context, VerdroidDatabase::class.java, "verdroid.db")
             .addMigrations(*ALL_MIGRATIONS)
             .build()
 
@@ -96,7 +96,7 @@ object AppModule {
     @Provides @Singleton
     fun provideSandbox(@ApplicationContext context: Context) = WorkspaceSandbox(File(context.filesDir, "workspace"))
 
-    /** Shared user-visible folder /storage/emulated/0/Documents/Farrow (Input/, Output/); needs All files access. */
+    /** Shared user-visible folder /storage/emulated/0/Documents/Verdroid (Input/, Output/); needs All files access. */
     @Provides @Singleton
     fun provideSharedFolder(): com.verdroid.app.data.storage.SharedFolder = com.verdroid.app.data.storage.SharedFolder.android()
 
@@ -131,7 +131,7 @@ object AppModule {
     ): ToolRegistry = ToolRegistry(
         listOf(
             ReadFileTool(sandbox), WriteFileTool(sandbox), ListDirTool(sandbox),
-            // Shared Documents/Farrow folder (Input/, Output/) the user sees in their file manager
+            // Shared Documents/Verdroid folder (Input/, Output/) the user sees in their file manager
             WorkspaceListTool(sharedFolder), WorkspaceReadTool(sharedFolder),
             WorkspaceWriteTool(sharedFolder), WorkspaceDeleteTool(sharedFolder),
             // Default web search (keyless multi-engine, port of hec-ovi/websearch-skill) + fetch a known URL (raw or Markdown)

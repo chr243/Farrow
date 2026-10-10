@@ -141,7 +141,7 @@ object MemoryText {
             appendLine("  _(updated ${fmt(m.updatedAt)})_")
         }
         val global = global(all)
-        appendLine("# Farrow memory")
+        appendLine("# Verdroid memory")
         appendLine()
         appendLine("Edit in the app (Settings > Memory); this file is rewritten on every change.")
         appendLine()

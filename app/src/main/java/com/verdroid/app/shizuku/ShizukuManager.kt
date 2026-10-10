@@ -82,7 +82,7 @@ class ShizukuManager @Inject constructor(@ApplicationContext private val context
             .debuggable(false)
             .version(BuildConfig.VERSION_CODE)
             // Own tag per build: a stale record left by an earlier failed start can't capture the new bind.
-            .tag("farrow-shell-${BuildConfig.VERSION_CODE}")
+            .tag("verdroid-shell-${BuildConfig.VERSION_CODE}")
     }
 
     /** Server facts for the card / error messages (permission is separate from whether the service process starts). */
@@ -155,7 +155,7 @@ class ShizukuManager @Inject constructor(@ApplicationContext private val context
     /** On bind failure: grab the relevant logcat lines through newProcess (works as uid 2000) and attach them. */
     private suspend fun bindFailureLogcat(): String = runCatching {
         val r = execViaNewProcess(
-            "logcat -d -v time -t 3000 2>/dev/null | grep -iE 'UserService|Shizuku|farrow|AndroidRuntime|FATAL|app_process' | grep -viE 'ActivityManagerWrapper|RecentsTaskLoader|ScnModule' | tail -n 25",
+            "logcat -d -v time -t 3000 2>/dev/null | grep -iE 'UserService|Shizuku|verdroid|AndroidRuntime|FATAL|app_process' | grep -viE 'ActivityManagerWrapper|RecentsTaskLoader|ScnModule' | tail -n 25",
             null, 15_000)
         r.stdout.trim().takeIf { it.isNotEmpty() }?.let { "\nlogcat (via newProcess):\n$it" } ?: "\n(logcat via newProcess: no matching lines)"
     }.getOrElse { "\n(logcat via newProcess failed: ${it.message})" }
@@ -164,7 +164,7 @@ class ShizukuManager @Inject constructor(@ApplicationContext private val context
         ShizukuState.NOT_INSTALLED -> "Shizuku is not installed (Settings > Shizuku setup)"
         ShizukuState.NOT_RUNNING -> "Shizuku is not running — start it from the Shizuku app (wireless debugging)"
         ShizukuState.PRE_V11 -> "Shizuku is too old (pre-v11); update it"
-        ShizukuState.NO_PERMISSION -> "Farrow has no Shizuku permission — grant it in Settings > Shizuku setup"
+        ShizukuState.NO_PERMISSION -> "Verdroid has no Shizuku permission — grant it in Settings > Shizuku setup"
         ShizukuState.READY -> "Could not bind the Shizuku shell service" + (lastBindError?.let { ": $it" } ?: "")
     }
 

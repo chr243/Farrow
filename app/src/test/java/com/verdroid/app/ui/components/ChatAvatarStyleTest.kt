@@ -44,7 +44,7 @@ class ChatAvatarStyleTest {
 
     @Test fun `glyph by topic, then type, then first letter or emoji`() {
         val g = ChatAvatarStyle::glyph
-        assertEquals("✍️", g("Post on X", "write a tweet about Farrow", TaskType.SOCIAL))
+        assertEquals("✍️", g("Post on X", "write a tweet about Verdroid", TaskType.SOCIAL))
         assertEquals("✈️", g("Weekend in Lisbon", "plan a trip with flights and a hotel", TaskType.CHAT))
         assertEquals("✈️", g("Vacances", "", TaskType.CHAT))
         assertEquals("🔎", g("Latest Pixel", "search the web for the latest Pixel phone", TaskType.WEB))

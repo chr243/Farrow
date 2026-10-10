@@ -25,11 +25,11 @@ object TermuxSetupFlow {
         TermuxSetupStep.INSTALL -> (if (retry) "Termux is still not installed. " else "") +
             "Install Termux from F-Droid (not the Play Store build), open it once, then come back — setup continues automatically."
         TermuxSetupStep.GRANT -> if (retry) "The Run commands in Termux permission was not granted. Tap Set up Termux to ask again " +
-            "(or allow it in Android Settings > Apps > Farrow > Permissions)." else "Allow Farrow to run commands in Termux."
+            "(or allow it in Android Settings > Apps > Verdroid > Permissions)." else "Allow Verdroid to run commands in Termux."
         TermuxSetupStep.ALLOW_EXTERNAL -> (if (retry) "Termux still doesn't answer. " else "") +
-            "The allow-external-apps command is copied. In Termux, long-press the screen → Paste, press Enter, wait for OK, then come back to Farrow."
+            "The allow-external-apps command is copied. In Termux, long-press the screen → Paste, press Enter, wait for OK, then come back to Verdroid."
         TermuxSetupStep.STORAGE -> (if (retry) "Termux still can't write shared storage. Tap Set up Termux to try again, or type " +
-            "termux-setup-storage in Termux. " else "") + "Termux opens a storage prompt — tap Allow, then come back to Farrow."
+            "termux-setup-storage in Termux. " else "") + "Termux opens a storage prompt — tap Allow, then come back to Verdroid."
         TermuxSetupStep.DONE -> "Termux is set up ✅"
     }
 }

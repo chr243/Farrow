@@ -1,4 +1,4 @@
-# Farrow — architecture & development notes
+# Verdroid — architecture & development notes
 
 > Detailed design notes and per-version history. The user-facing overview is in [../README.md](../README.md); agent/contributor rules are in [../AGENTS.md](../AGENTS.md).
 
@@ -35,11 +35,11 @@ Toolchain: Gradle 8.11.1 (wrapper), AGP 8.7.3, Kotlin 2.1.0 with the Compose com
 
 ## Install on the phone (Poco / HyperOS)
 
-1. Download `Farrow-debug.apk` (or `app-debug.apk`) from the GitHub Release **v0.2.0-phase2** on the phone.
+1. Download `Verdroid-debug.apk` (or `app-debug.apk`) from the GitHub Release **v0.2.0-phase2** on the phone.
 2. Open it. When HyperOS asks, allow "Install unknown apps" for your browser or file manager. If MIUI/HyperOS security scanning blocks it, choose "Install anyway".
 3. Or use adb: enable Developer options → USB debugging (on HyperOS also enable "Install via USB"), then run `adb install -r app-debug.apk`.
-4. Open Farrow → **Menu → API keys** → add your OpenRouter key (`sk-or-…`).
-5. Optional: Settings → Apps → Farrow → Battery saver → "No restrictions", so the periodic quota worker isn't killed.
+4. Open Verdroid → **Menu → API keys** → add your OpenRouter key (`sk-or-…`).
+5. Optional: Settings → Apps → Verdroid → Battery saver → "No restrictions", so the periodic quota worker isn't killed.
 
 The debug APK is signed with the standard debug key. To upgrade, install a newer debug build over it.
 
@@ -73,7 +73,7 @@ com.verdroid.app
 
 ### OpenRouter client
 - Base URL `https://openrouter.ai/api/v1/`. Uses `POST chat/completions` (OpenAI format with `tools`, `tool_choice: auto`) and `GET key`.
-- Every request carries `HTTP-Referer` and `X-Title: Farrow`.
+- Every request carries `HTTP-Referer` and `X-Title: Verdroid`.
 - `RateLimitInterceptor` reads `X-RateLimit-Limit/-Remaining/-Reset` (Unix ms, seconds tolerated) on every response. The latest values per key are shown under Menu → Rate limits & quota.
 - `ApiErrorDetector` flags errors from the HTTP status (429/402/401/5xx) **and** from the body: a top-level `{"error":{"code":429,…,"metadata":{"error_type":"rate_limit_exceeded"}}}`, including when it comes with HTTP 200, or an `error` object inside a choice.
 - Fallback per request:
@@ -97,11 +97,11 @@ com.verdroid.app
 | Tool | Status |
 |---|---|
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
-| `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
-| `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/VerdroidSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
-| `pdf_info`, `pdf_extract_text`, `pdf_extract_pages`, `pdf_merge`, `pdf_annotate` | Termux Python helper `~/.farrow/farrow_pdf.py` (`data/pdf/VerdroidPdfPy`; pure logic in `data/pdf/PdfLogic`): PyMuPDF from the Termux apt package `python-pymupdf` (pip has no Android wheel), fallback pypdf + poppler `pdftotext`; installed on first use only after the user agrees (agent install consent; the `pdf-tools` add-on does it up front). Text comes back with `--- Page N ---` markers, capped/chunked for summarising, `save_as` writes the full text (can feed `ebook_translate`); edited PDFs always go to `Output/` |
+| `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Verdroid` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
+| `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.verdroid/verdroid_selenium.py` (`data/termux/VerdroidSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Verdroid/Output` |
+| `pdf_info`, `pdf_extract_text`, `pdf_extract_pages`, `pdf_merge`, `pdf_annotate` | Termux Python helper `~/.verdroid/verdroid_pdf.py` (`data/pdf/VerdroidPdfPy`; pure logic in `data/pdf/PdfLogic`): PyMuPDF from the Termux apt package `python-pymupdf` (pip has no Android wheel), fallback pypdf + poppler `pdftotext`; installed on first use only after the user agrees (agent install consent; the `pdf-tools` add-on does it up front). Text comes back with `--- Page N ---` markers, capped/chunked for summarising, `save_as` writes the full text (can feed `ebook_translate`); edited PDFs always go to `Output/` |
 | `skill_list`, `skill_get`, `skill_save`, `skill_edit`, `skill_delete` | Agent-writable skills in `files/skills/<id>/SKILL.md` (`data/skills/SkillStore`); enabled ones injected into the system prompt |
-| `rish_run` | `sh files/rish/rish -c <cmd>` from `/data/local/tmp/farrow_rish` with `RISH_APPLICATION_ID=com.termux` and chmod +x (`shizuku/RishStore`, `RishRunner`) |
+| `rish_run` | `sh files/rish/rish -c <cmd>` from `/data/local/tmp/verdroid_rish` with `RISH_APPLICATION_ID=com.termux` and chmod +x (`shizuku/RishStore`, `RishRunner`) |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
 | `web_fetch` | Plain HTTP GET/HEAD with OkHttp (no browser, no JavaScript); `format=markdown` gives a paginated, fenced Markdown extract |
 | `crypto_*` | Coinbase Exchange market data, local backtest; live trading tools off by default (v1.0.18) |
@@ -187,7 +187,7 @@ The device screen shows the active backend and each backend's error. **Connect /
 - **Why:** in dadb 2.0.0, `AdbConnection.connect` wraps ANY `IOException` during CNXN/AUTH in `AdbConnectException("Connection handshake failed")`. That covers the peer closing the socket (key prompt denied or dismissed, or a non-adbd listener), a truncated non-ADB reply, or a read timeout. An AUTH rejection would surface as `AdbAuthException`, and STLS as `"Connection failed: STLS…"`. dadb doesn't check version or maxdata. So the error only means "the socket died mid-handshake".
 - **Packet log:** MiniAdb records each handshake packet (`> CNXN`, `< AUTH TOKEN`, `> AUTH SIGNATURE`, `> AUTH RSAPUBLICKEY`, `< CNXN`/`STLS`/EOF), and the card shows that log in the error.
 - **Port checks:** if the port answers with the adb *server* text protocol (5037 is the host adb server's default port, e.g. `adb` in Termux), it says so. STLS (the Wireless-debugging port) is also reported.
-- **Key:** `adbkey` is a PKCS#8 PEM in the same format as before, created once and reused. The public key is derived from the private key and sent as `<base64> farrow@<model>\0`.
+- **Key:** `adbkey` is a PKCS#8 PEM in the same format as before, created once and reused. The public key is derived from the private key and sent as `<base64> verdroid@<model>\0`.
 - **Prompt and retry:** it waits up to 60 s for "Allow USB debugging?" and retries once.
 - **Port:** stays as configured.
 - **Backend order:** now ADB → Shizuku newProcess → Shizuku UserService. A failed bind automatically attaches the relevant logcat lines, read through newProcess.
@@ -285,8 +285,8 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 ## v1.0.5
 - **In-app updater (`data/update/`).** Settings > App > App update shows the installed version and a "Check for updates" button.
   - It reads the public GitHub API `releases/latest` (no token) and compares versions numerically (`UpdateLogic.compare`, pre-releases rank below their release). It then shows "Up to date" or "vX.Y.Z available" with the release notes and an Update button.
-  - Update downloads `Farrow-*-<buildType>.apk` (`pickAsset`) with OkHttp into `cacheDir/updates`, with a progress bar, and checks that the size matches the asset.
-  - It then opens the system installer through FileProvider (`${applicationId}.updates`) + ACTION_VIEW (`REQUEST_INSTALL_PACKAGES`). Without the "Install unknown apps" permission it opens `ACTION_MANAGE_UNKNOWN_APP_SOURCES` for Farrow first.
+  - Update downloads `Verdroid-*-<buildType>.apk` (`pickAsset`) with OkHttp into `cacheDir/updates`, with a progress bar, and checks that the size matches the asset.
+  - It then opens the system installer through FileProvider (`${applicationId}.updates`) + ACTION_VIEW (`REQUEST_INSTALL_PACKAGES`). Without the "Install unknown apps" permission it opens `ACTION_MANAGE_UNKNOWN_APP_SOURCES` for Verdroid first.
   - The same debug key means it installs over the app. A silent check runs on app start at most every 6 h, and a dot on the gear and the row marks an available update.
 
 ## v1.0.7
@@ -320,7 +320,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 
 - **Crypto tools (Coinbase Exchange).** Revolut's public developer APIs (Business / Merchant / Open Banking) expose
   accounts, payments and fiat FX — there is **no** crypto trading, order book, candles or spot-order endpoint. Retail
-  crypto in the Revolut app has no documented API. Farrow therefore uses **Coinbase Exchange** for:
+  crypto in the Revolut app has no documented API. Verdroid therefore uses **Coinbase Exchange** for:
   - Public (no key): `crypto_markets`, `crypto_ticker`, `crypto_candles`, `crypto_orderbook`, `crypto_backtest` (local
     SMA crossover → return %, max drawdown, win rate, equity chart payload).
   - Authenticated (API key + secret + passphrase in EncryptedSharedPreferences, Settings > Tools > Coinbase Exchange key):
@@ -340,7 +340,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Tasks screen removed** from Settings.
 - **Termux kept without the bridge.** `termux_run` now runs `bash -lc` through Termux's RUN_COMMAND service in the
   background (`data/termux/TermuxManager`, result via `TermuxResultReceiver` + a mutable PendingIntent), in
-  `~/farrow-work` under coreutils `timeout` (max 600 s, exit 124 = `timed_out`). Settings → Tools has a Termux card
+  `~/verdroid-work` under coreutils `timeout` (max 600 s, exit 124 = `timed_out`). Settings → Tools has a Termux card
   (installed / *Run commands in Termux* permission with a Grant button / allow-external-apps command to copy) and the
   "Available to install" package list (ffmpeg, imagemagick, yt-dlp, git, nodejs, jq, curl, pandoc; app-scoped
   `TermuxPackageJobs`). Needs `com.termux.permission.RUN_COMMAND` and a `com.termux` package query.
@@ -353,7 +353,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   extraction, ≈4 chars/token pagination, random-nonce untrusted fence, block detection). `web_fetch` gained
   `format=markdown`, `page`, `page_size_tokens` and a 20-entry cache. Jsoup is back as a dependency for HTML parsing.
   The prompt tells the agent to use `web_search` first, then `web_fetch format=markdown` on the best 2–3 hits.
-- **Shared folder `Documents/Farrow`.** `data/storage/SharedFolder` creates `/storage/emulated/0/Documents/Farrow` with
+- **Shared folder `Documents/Verdroid`.** `data/storage/SharedFolder` creates `/storage/emulated/0/Documents/Verdroid` with
   `Input/` and `Output/` at launch (`VerdroidApp`) and whenever Tools refreshes or a `workspace_*` tool runs, if missing.
   Needs `MANAGE_EXTERNAL_STORAGE` (All files access, minSdk 30); Settings → Tools has a *Shared folder* card explaining
   the folder with a Grant button (`ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`). Tools `workspace_list`,
@@ -363,13 +363,13 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 - **Headless Chromium + Selenium in Termux.** New "Available to install" entry `chromium-selenium` (custom install:
   `x11-repo tur-repo`, `python python-pip chromium` [+ `chromedriver` if not bundled], `pip install -U selenium`; detected by
   chromium + chromedriver + `import selenium`). `TermuxPackage` gained `detect`/`install`; the detect query also reports
-  whether Termux can write shared storage (Termux card step 4: `termux-setup-storage`). Before each call Farrow writes the
-  helper `~/.farrow/farrow_selenium.py` (base64 over RUN_COMMAND): `make_driver()` (headless=new, no-sandbox, en-US) and a CLI
-  (`open`/`source`/`shot`) printing one `FARROW_JSON=` line. Tools: `selenium_open`, `selenium_page_source`,
-  `selenium_screenshot` (fresh browser per call; `save_as` only inside Documents/Farrow, written by Termux) and
+  whether Termux can write shared storage (Termux card step 4: `termux-setup-storage`). Before each call Verdroid writes the
+  helper `~/.verdroid/verdroid_selenium.py` (base64 over RUN_COMMAND): `make_driver()` (headless=new, no-sandbox, en-US) and a CLI
+  (`open`/`source`/`shot`) printing one `VERDROID_JSON=` line. Tools: `selenium_open`, `selenium_page_source`,
+  `selenium_screenshot` (fresh browser per call; `save_as` only inside Documents/Verdroid, written by Termux) and
   `termux_python` (script from the private workspace — scrapers never live in Documents — shipped to `$TMPDIR`, run in
-  `~/farrow-work` with `FARROW_OUTPUT`/`FARROW_INPUT` and the helper on `PYTHONPATH`, max 600 s). Verified end to end on the
-  build box with headless Chrome (`SeleniumToolsTest.localBashEndToEnd`, opt-in via `FARROW_LOCAL_BASH=1`).
+  `~/verdroid-work` with `VERDROID_OUTPUT`/`VERDROID_INPUT` and the helper on `PYTHONPATH`, max 600 s). Verified end to end on the
+  build box with headless Chrome (`SeleniumToolsTest.localBashEndToEnd`, opt-in via `VERDROID_LOCAL_BASH=1`).
 - **Skills.** `data/skills/SkillStore` keeps agent-written procedures in app-internal `files/skills/<id>/SKILL.md`
   (front matter `name`/`description`/`enabled` + Markdown body; id = slug of the name; max 100 skills, 20k chars each).
   Tools `skill_save` (only after the user agrees), `skill_edit` (fields or unique find/replace), `skill_delete`,
@@ -381,14 +381,14 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   `data/termux/TermuxSetupFlow` (INSTALL → GRANT → ALLOW_EXTERNAL → STORAGE → DONE) in `ToolsViewModel`: opens F-Droid,
   requests RUN_COMMAND, copies the allow-external-apps command to the clipboard and opens Termux (can't be automated:
   Termux rejects RUN_COMMAND until it is set), then runs `termux-setup-storage` in a visible Termux session
-  (`TermuxManager.runInTerminal`, background=false) and opens Termux. Returning to Farrow (ON_RESUME / permission result)
+  (`TermuxManager.runInTerminal`, background=false) and opens Termux. Returning to Verdroid (ON_RESUME / permission result)
   re-checks and continues; a step that is still pending shows a retry hint instead of re-triggering. The manual
   per-step buttons stay as a fallback.
 - **rish picker + `rish_run`.** Settings → Shizuku & Git → *rish*: the user picks the `rish` file exported by
-  Shizuku (SAF multi-select; if only `rish` is picked, Farrow reads the sibling `rish_shizuku.dex` via All files access or asks
+  Shizuku (SAF multi-select; if only `rish` is picked, Verdroid reads the sibling `rish_shizuku.dex` via All files access or asks
   for it). `RishStore` validates (shebang script / `dex\n` magic, companion name read from the script) and copies both into
-  `files/rish/` (dex made read-only for Android 14+). `rish_run` runs `/system/bin/sh files/rish/rish -c <cmd>` in Farrow's
-  process with `RISH_APPLICATION_ID` (Farrow at first; `com.termux` since the Unreleased change below), with timeout (exit 124).
+  `files/rish/` (dex made read-only for Android 14+). `rish_run` runs `/system/bin/sh files/rish/rish -c <cmd>` in Verdroid's
+  process with `RISH_APPLICATION_ID` (Verdroid at first; `com.termux` since the Unreleased change below), with timeout (exit 124).
   Settings shows status, *Test (id)* and *Remove*.
 - Version-history entries that only covered the internal browser, X/Facebook automation, the Termux bridge and
   x_post_beta were removed with it.
@@ -402,7 +402,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   The properties now sit above `init` (guarded by `ToolsViewModelInitOrderTest`), and the MCP screen has its own
   lightweight `McpViewModel`.
 - **Settings → Permissions.** `ui/permissions/PermissionsScreen` (+ `PermissionCatalog`, unit-tested) shows every
-  permission Farrow uses with status and a Grant action: All files access (creates Documents/Farrow when granted),
+  permission Verdroid uses with status and a Grant action: All files access (creates Documents/Verdroid when granted),
   notifications (runtime + notification settings), Termux RUN_COMMAND (or Get Termux), Shizuku (get / open / grant),
   accessibility service, display over other apps, battery optimisation exemption and install unknown apps. Re-checked on
   resume; a *Set up Termux…* shortcut opens Settings → Tools for the in-Termux steps.
@@ -413,33 +413,33 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 ## v1.0.21
 
 - **Find rish.** Settings → Shizuku & Git → rish has a *Find rish* button: with All files access it scans
-  `Download`, `Documents` and `Documents/Farrow/Input` (and sub-folders, 2 levels) for a `rish` script plus the companion
+  `Download`, `Documents` and `Documents/Verdroid/Input` (and sub-folders, 2 levels) for a `rish` script plus the companion
   it references (`rish_shizuku.dex`), takes the newest match and copies both into `files/rish` (`RishStore.find` /
   `findAndInstall`). Without the permission it says so and offers *Grant All files access*; the SAF *Pick rish file* stays
   as the fallback.
 
 ## v1.0.22
 
-- **`ebook_translate`.** Termux Python helper `~/.farrow/farrow_ebook_translate.py` (`data/ebook/EbookTranslatePy`): MOBI via
+- **`ebook_translate`.** Termux Python helper `~/.verdroid/verdroid_ebook_translate.py` (`data/ebook/EbookTranslatePy`): MOBI via
   `mobi`, EPUB (`ebooklib`), PDF (`pymupdf`), DOCX (`python-docx`); chunked `deep-translator` Google → MyMemory fallback,
-  `langdetect` check, resume via `<output>.farrow-translate.json`. Add-on `ebook-translate` in Available to install.
-  Output always under `Documents/Farrow/Output`.
-- **Chat Attach file.** Composer **+** (SAF `OpenDocument`) copies into `Documents/Farrow/Input` (`ChatAttachment`) and
+  `langdetect` check, resume via `<output>.verdroid-translate.json`. Add-on `ebook-translate` in Available to install.
+  Output always under `Documents/Verdroid/Output`.
+- **Chat Attach file.** Composer **+** (SAF `OpenDocument`) copies into `Documents/Verdroid/Input` (`ChatAttachment`) and
   prefixes the next send with the sandboxed path for the agent.
 
-- **rish → `/data/local/tmp/farrow_rish`.** After Find/Pick, Farrow stages the pair then deploys via Shizuku (base64 over
-  RUN_COMMAND) into `/data/local/tmp/farrow_rish` and `chmod +x` both (not chmod 400). *Fix rish permissions* re-applies
+- **rish → `/data/local/tmp/verdroid_rish`.** After Find/Pick, Verdroid stages the pair then deploys via Shizuku (base64 over
+  RUN_COMMAND) into `/data/local/tmp/verdroid_rish` and `chmod +x` both (not chmod 400). *Fix rish permissions* re-applies
   `chmod +x` there; `rish_run` runs that path with `RISH_APPLICATION_ID=com.termux` and re-chmods before each run.
-- **Deliverables → `Documents/Farrow/Output`.** The prompt and `rish_run`/`workspace_write` descriptions require every
+- **Deliverables → `Documents/Verdroid/Output`.** The prompt and `rish_run`/`workspace_write` descriptions require every
   user-facing result (translations, screenshots/screencap, scripts, coding projects, reports, …) under Output/ — never
   Pictures, Download, DCIM or the private scratch workspace.
 
 
 ## v1.0.23
 
-- **Fix: `ebook_translate` said the script was missing.** The helper path was `~/.farrow/farrow_ebook_translate.py` passed
+- **Fix: `ebook_translate` said the script was missing.** The helper path was `~/.verdroid/verdroid_ebook_translate.py` passed
   as a single-quoted argument, and bash never expands `~` inside quotes, so python3 looked for a literal `~` folder. The
-  helpers (ebook + selenium) now use the absolute Termux home (`/data/data/com.termux/files/home/.farrow/…`); the deploy
+  helpers (ebook + selenium) now use the absolute Termux home (`/data/data/com.termux/files/home/.verdroid/…`); the deploy
   step checks the file exists and returns a clear error if not, and the `ebook-translate` add-on also deploys it.
 - **Settings → Shizuku:** Re-check and rish Remove are proper outlined buttons; button rows wrap (FlowRow).
 - **Chat avatars:** only the circle colors changed — mid-tone circles in light theme (≥2:1 vs surface), brighter circles in
@@ -458,7 +458,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   batches of 4 chapters then a 5–10 s pause; MyMemory fallback in 500-char pieces (its limit); plain-text extraction
   fallback; resume. Two-step: first call estimates chapters/chunks/ETA (chunks × (request + delay) + batch pauses) and
   asks the user to confirm; `confirmed=true` runs it. Python packages install automatically on first use. Absolute
-  /storage/emulated/0/Documents/Farrow paths.
+  /storage/emulated/0/Documents/Verdroid paths.
 - **Chat avatars:** circles use only shades of the theme green, with a wide light/dark tone range.
 
 ## v1.0.25
@@ -492,7 +492,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
 ## v1.0.28
 
 - **+ attach copies to Input:** every file picked with the chat + button is copied into
-  `Documents/Farrow/Input/` (folders created, no overwrite, no partial files). Without All files access the chat shows
+  `Documents/Verdroid/Input/` (folders created, no overwrite, no partial files). Without All files access the chat shows
   a **Grant access** button and retries the same file afterwards.
 - **No auto-translate on attach:** an attachment without instructions no longer implies translation. The attachment
   hint is neutral; the agent asks what to do and suggests options by file type (translate last). `ebook_translate`

@@ -34,7 +34,7 @@ class SeleniumToolsTest {
         pb.environment()["HOME"] = home.path
         pb.environment()["TMPDIR"] = File(home, "tmp").apply { mkdirs() }.path
         extraPath?.let { pb.environment()["PATH"] = it + ":" + pb.environment()["PATH"] }
-        System.getenv("FARROW_LOCAL_PYTHONPATH")?.let { pb.environment()["PYTHONPATH"] = it }
+        System.getenv("VERDROID_LOCAL_PYTHONPATH")?.let { pb.environment()["PYTHONPATH"] = it }
         val p = pb.start()
         val out = p.inputStream.bufferedReader().readText(); val err = p.errorStream.bufferedReader().readText()
         p.waitFor(180, TimeUnit.SECONDS)
@@ -43,7 +43,7 @@ class SeleniumToolsTest {
 
     private lateinit var base: File
     private lateinit var folder: SharedFolder
-    @Before fun setUp() { base = Files.createTempDirectory("farrow-sel").toFile(); folder = SharedFolder(File(base, "Documents/Farrow")) { true } }
+    @Before fun setUp() { base = Files.createTempDirectory("verdroid-sel").toFile(); folder = SharedFolder(File(base, "Documents/Verdroid")) { true } }
     @After fun tearDown() { base.deleteRecursively() }
     private fun obj(s: String) = Json.parseToJsonElement(s).jsonObject
 
@@ -56,9 +56,9 @@ class SeleniumToolsTest {
         assertTrue(r.containsKey("untrusted"))
         val cmd = t.commands.single()
         val h = com.verdroid.app.data.termux.TermuxManager.TERMUX_HOME
-        assertTrue(cmd.startsWith("mkdir -p '$h/.farrow' && echo "))
-        assertFalse(cmd.contains("~/.farrow"))
-        assertTrue(cmd.contains("python3 $h/.farrow/farrow_selenium.py 'open' 'https://example.com/a?b='\\''c'\\''' '--wait' '2' '--wait-for' '#main'"))
+        assertTrue(cmd.startsWith("mkdir -p '$h/.verdroid' && echo "))
+        assertFalse(cmd.contains("~/.verdroid"))
+        assertTrue(cmd.contains("python3 $h/.verdroid/verdroid_selenium.py 'open' 'https://example.com/a?b='\\''c'\\''' '--wait' '2' '--wait-for' '#main'"))
         assertTrue(cmd.contains("'--save' '${SharedFolder.DISPLAY_PATH}/Output/page.html'"))
         assertTrue(cmd.contains("termux-setup-storage"))
     }
@@ -89,8 +89,8 @@ class SeleniumToolsTest {
         assertEquals(0, r["exit_code"]?.jsonPrimitive?.int)
         assertEquals("print(6*7)", File(base, "files/workspace/scrapers/s.py").readText())
         val cmd = t.commands.single()
-        assertTrue(cmd.contains("FARROW_OUTPUT=${SharedFolder.DISPLAY_PATH}/Output"))
-        assertTrue(cmd, cmd.contains("timeout -k 5 300 python3 \"\${TMPDIR:-\$PREFIX/tmp}/farrow-scripts\"/s.py 'a b' </dev/null"))
+        assertTrue(cmd.contains("VERDROID_OUTPUT=${SharedFolder.DISPLAY_PATH}/Output"))
+        assertTrue(cmd, cmd.contains("timeout -k 5 300 python3 \"\${TMPDIR:-\$PREFIX/tmp}/verdroid-scripts\"/s.py 'a b' </dev/null"))
         assertTrue(obj(TermuxPythonTool(t, sb).execute(buildJsonObject { put("path", "../x.py"); put("code", "1") })).containsKey("error"))
         assertTrue(obj(TermuxPythonTool(t, sb).execute(buildJsonObject { put("path", "x.sh"); put("code", "1") })).containsKey("error"))
     }
@@ -105,19 +105,19 @@ class SeleniumToolsTest {
         assertTrue(ToolStatus.of("termux_python", ToolEnv(termuxReady = true)).ready)
     }
 
-    /** End-to-end with local bash + python3 (opt-in: FARROW_LOCAL_BASH=1; selenium parts need FARROW_LOCAL_CHROMIUM_PATH, optional FARROW_LOCAL_PYTHONPATH). */
+    /** End-to-end with local bash + python3 (opt-in: VERDROID_LOCAL_BASH=1; selenium parts need VERDROID_LOCAL_CHROMIUM_PATH, optional VERDROID_LOCAL_PYTHONPATH). */
     @Test fun localBashEndToEnd() = runTest {
-        assumeTrue(System.getenv("FARROW_LOCAL_BASH") == "1")
+        assumeTrue(System.getenv("VERDROID_LOCAL_BASH") == "1")
         val home = File(base, "home").apply { mkdirs() }
         val sb = WorkspaceSandbox(File(base, "files/workspace"))
         val py = obj(TermuxPythonTool(localBash(home), sb).execute(buildJsonObject {
             put("path", "scrapers/env.py")
-            put("code", "import os, sys, farrow_selenium\nprint(os.environ['FARROW_OUTPUT'], sys.argv[1:], os.getcwd())")
+            put("code", "import os, sys, verdroid_selenium\nprint(os.environ['VERDROID_OUTPUT'], sys.argv[1:], os.getcwd())")
             putJsonArray("args") { add("x y"); add("it's") }
         }))
         assertEquals(py.toString(), 0, py["exit_code"]?.jsonPrimitive?.int)
-        assertTrue(py.toString(), py["stdout"]!!.jsonPrimitive.content.contains("Output ['x y', \"it's\"] ${home.path}/farrow-work"))
-        val chromium = System.getenv("FARROW_LOCAL_CHROMIUM_PATH") ?: return@runTest
+        assertTrue(py.toString(), py["stdout"]!!.jsonPrimitive.content.contains("Output ['x y', \"it's\"] ${home.path}/verdroid-work"))
+        val chromium = System.getenv("VERDROID_LOCAL_CHROMIUM_PATH") ?: return@runTest
         val open = obj(SeleniumOpenTool(localBash(home, chromium), folder).execute(buildJsonObject { put("url", "https://example.com") }))
         assertEquals(open.toString(), "Example Domain", open["title"]?.jsonPrimitive?.content)
         // Shared storage is not writable here, so saving reports the termux-setup-storage hint.

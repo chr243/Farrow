@@ -63,7 +63,7 @@ fun AppUpdateRow(updater: AppUpdater, index: Int) {
                 is UpdateState.Available -> {
                     Status("v${st.release.version} available")
                     Notes(st.release.notes)
-                    if (st.release.asset == null) Status("This release has no Farrow APK to download.")
+                    if (st.release.asset == null) Status("This release has no Verdroid APK to download.")
                     else Button(onClick = { autoInstall = true; updater.startDownload(st.release) },
                         modifier = Modifier.padding(top = 8.dp)) { Text("Update") }
                 }
@@ -74,7 +74,7 @@ fun AppUpdateRow(updater: AppUpdater, index: Int) {
                         modifier = Modifier.fillMaxWidth())
                 }
                 is UpdateState.ReadyToInstall -> {
-                    Status("v${st.release.version} downloaded" + if (needsPermission) " — allow \"Install unknown apps\" for Farrow, then tap Install" else "")
+                    Status("v${st.release.version} downloaded" + if (needsPermission) " — allow \"Install unknown apps\" for Verdroid, then tap Install" else "")
                     Button(onClick = { install(st) }, modifier = Modifier.padding(top = 8.dp)) { Text("Install") }
                 }
                 is UpdateState.Error -> {

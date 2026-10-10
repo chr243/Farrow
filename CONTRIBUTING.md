@@ -1,6 +1,6 @@
-# Contributing to Farrow
+# Contributing to Verdroid
 
-Thanks for helping! Farrow is a small personal project, so keep changes focused and well tested. AI coding agents: read [AGENTS.md](AGENTS.md) first, it has the repo map, conventions and security rules.
+Thanks for helping! Verdroid is a small personal project, so keep changes focused and well tested. AI coding agents: read [AGENTS.md](AGENTS.md) first, it has the repo map, conventions and security rules.
 
 ## Steps
 

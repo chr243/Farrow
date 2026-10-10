@@ -26,9 +26,9 @@ interface OpenRouterApi {
     companion object {
         const val BASE_URL = "https://openrouter.ai/api/v1/"
         /** Internal tag headers: read and stripped by [RateLimitInterceptor] before the request leaves the device. */
-        const val TAG_MODEL = "X-Farrow-Model"
-        const val TAG_KEY_LABEL = "X-Farrow-Key-Label"
-        const val REFERER = "https://github.com/chr243/Farrow"
-        const val TITLE = "Farrow"
+        const val TAG_MODEL = "X-Verdroid-Model"
+        const val TAG_KEY_LABEL = "X-Verdroid-Key-Label"
+        const val REFERER = "https://github.com/chr243/Verdroid"
+        const val TITLE = "Verdroid"
     }
 }

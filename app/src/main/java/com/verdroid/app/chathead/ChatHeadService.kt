@@ -197,7 +197,7 @@ class ChatHeadService : Service(), LifecycleOwner, SavedStateRegistryOwner, View
         val stop = PendingIntent.getService(this, 1, stopIntent(this), PendingIntent.FLAG_IMMUTABLE)
         val notification: Notification = NotificationCompat.Builder(this, BubbleNotifier.CHANNEL_CHAT_HEAD)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Farrow chat head")
+            .setContentTitle("Verdroid chat head")
             .setContentText("Tap the head to chat · drag it onto ✕ to close")
             .setOngoing(true)
             .setContentIntent(open)

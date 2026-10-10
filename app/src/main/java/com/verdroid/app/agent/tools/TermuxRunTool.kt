@@ -9,7 +9,7 @@ import kotlinx.serialization.json.*
  */
 class TermuxRunTool(private val termux: TermuxRunner) : AgentTool {
     override val name = "termux_run"
-    override val description = "Run a bash command inside Termux (cwd ~/farrow-work) to use Termux packages such as ffmpeg, " +
+    override val description = "Run a bash command inside Termux (cwd ~/verdroid-work) to use Termux packages such as ffmpeg, " +
         "magick (imagemagick), yt-dlp, git, node, jq, curl, pandoc — whichever the user installed in Settings > Tools. " +
         "Returns exit_code, stdout, stderr as soon as the command finishes (timeout_seconds is only a cap, max 600 s; " +
         "background jobs left running are stopped when the command ends). Installing packages (pip/apt/pkg/npm install, " +
@@ -24,10 +24,10 @@ class TermuxRunTool(private val termux: TermuxRunner) : AgentTool {
         val command = args.str("command")?.takeIf { it.isNotBlank() } ?: return errorJson("command is required")
         val timeout = (args.int("timeout_seconds") ?: 120).coerceIn(1, MAX_TIMEOUT_S)
         if (!termux.isInstalled()) return errorJson("Termux is not installed (F-Droid build). $SETUP")
-        if (!termux.hasRunCommandPermission()) return errorJson("Farrow doesn't have the 'Run commands in Termux' permission. $SETUP")
+        if (!termux.hasRunCommandPermission()) return errorJson("Verdroid doesn't have the 'Run commands in Termux' permission. $SETUP")
         gate(name, "the command `" + command.lineSequence().first().take(120) +
             (if (command.length > 120 || command.contains('\n')) "…" else "") + "` installs them", InstallConsent.detectShell(command), args)?.let { return it }
-        val r = termux.runAndWait(script(command, timeout), "run-${System.nanoTime()}", (timeout + 15) * 1_000L, label = "Farrow: termux_run")
+        val r = termux.runAndWait(script(command, timeout), "run-${System.nanoTime()}", (timeout + 15) * 1_000L, label = "Verdroid: termux_run")
             ?: return errorJson("Termux did not answer within ${timeout + 15} s. Check that allow-external-apps = true is set in Termux. $SETUP")
         if (r.err != null && r.err != RESULT_OK && r.exitCode == null) return errorJson("Termux could not run the command: ${r.errmsg ?: "error ${r.err}"}")
         val code = r.exitCode ?: -1
@@ -53,7 +53,7 @@ class TermuxRunTool(private val termux: TermuxRunner) : AgentTool {
         private const val SETUP = "Set it up in Settings > Tools > Termux."
 
         /**
-         * cd into ~/farrow-work and run [command] under coreutils `timeout` (exit 124 on timeout); the timeout is only a cap.
+         * cd into ~/verdroid-work and run [command] under coreutils `timeout` (exit 124 on timeout); the timeout is only a cap.
          *
          * Termux returns the result only when the stdout/stderr pipes reach EOF, not when bash exits. Anything the command
          * (or the login profile of `bash -l`, e.g. sshd/ssh-agent/crond/pulseaudio) leaves running in the background kept
@@ -62,7 +62,7 @@ class TermuxRunTool(private val termux: TermuxRunner) : AgentTool {
          * leftovers in its process group (timeout's pid == pgid), then prints the captured output and exits at once.
          */
         internal fun script(command: String, timeoutS: Int): String =
-            "mkdir -p ~/farrow-work && cd ~/farrow-work || exit 1\n" + capped("bash -lc " + shellQuote(command), timeoutS)
+            "mkdir -p ~/verdroid-work && cd ~/verdroid-work || exit 1\n" + capped("bash -lc " + shellQuote(command), timeoutS)
 
         /**
          * Runs the shell fragment [cmdline] under `timeout -k [grace] [timeoutS]` so that the Termux result comes back as soon

@@ -54,7 +54,7 @@ class KeepAliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel(this)
-        startInForeground(buildNotification(WorkingInfo(null, "Farrow", "Starting…", 0)))
+        startInForeground(buildNotification(WorkingInfo(null, "Verdroid", "Starting…", 0)))
         @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
         scope.launch {
             agent.runningTaskIds.flatMapLatest { ids ->

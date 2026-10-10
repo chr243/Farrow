@@ -46,7 +46,7 @@ enum class Palette(val label: String, val description: String, val seed: Long) {
     MESSENGER("Messenger Blue", "Bright blue", 0xFF0084FF),
     DYNAMIC("Dynamic", "Material You colors from your wallpaper (Android 12+)", 0xFF0084FF),
     MIDNIGHT("Midnight", "Pure black surfaces in dark mode (AMOLED)", 0xFF0084FF),
-    FOREST("Forest", "The default: Farrow's icon green", 0xFF3D5A3A),
+    FOREST("Forest", "The default: Verdroid green", 0xFF3D5A3A),
     SUNSET("Sunset", "Warm oranges", 0xFFF4511E),
     PURPLE("Purple", "Violet tones", 0xFF7E57C2),
     ROSE("Rose", "Soft pinks", 0xFFD81B60),

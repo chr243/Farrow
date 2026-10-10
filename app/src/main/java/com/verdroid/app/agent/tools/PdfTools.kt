@@ -11,18 +11,18 @@ import kotlinx.serialization.json.*
 import java.io.File
 
 /**
- * pdf_* tools: read and lightly edit PDFs with Python in Termux (`~/.farrow/farrow_pdf.py`, PyMuPDF via the Termux
+ * pdf_* tools: read and lightly edit PDFs with Python in Termux (`~/.verdroid/verdroid_pdf.py`, PyMuPDF via the Termux
  * package python-pymupdf, pypdf + pdftotext as fallback; installed on first use only after the user agrees). Inputs live under
- * Documents/Farrow (usually Input/) or in the Termux home; results are always written under Output/.
+ * Documents/Verdroid (usually Input/) or in the Termux home; results are always written under Output/.
  */
 abstract class PdfToolBase(protected val termux: TermuxRunner, protected val folder: SharedFolder) : AgentTool {
     protected val sandbox = SharedFolderSandbox(folder)
 
-    /** Termux-visible absolute path for an input PDF: Documents/Farrow (relative or absolute) or the Termux home. */
+    /** Termux-visible absolute path for an input PDF: Documents/Verdroid (relative or absolute) or the Termux home. */
     protected fun inputPath(raw: String?): String {
         val p = raw?.trim()?.takeIf { it.isNotEmpty() } ?: throw IllegalArgumentException("path is required")
         termuxHomePath(p)?.let { return it }
-        val f = sandbox.resolve(p) // SecurityException outside Documents/Farrow
+        val f = sandbox.resolve(p) // SecurityException outside Documents/Verdroid
         require(f.isFile) { "PDF not found: ${sandbox.relativePath(f)} (put it in Input/ or attach it in the chat)" }
         return "${SharedFolder.DISPLAY_PATH}/${sandbox.relativePath(f)}"
     }
@@ -38,14 +38,14 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
 
     protected suspend fun guarded(block: suspend () -> String): String {
         if (!termux.isInstalled()) return errorJson("Termux is not installed. $SETUP")
-        if (!termux.hasRunCommandPermission()) return errorJson("Farrow doesn't have the 'Run commands in Termux' permission. $SETUP")
-        if (!folder.hasAccess() || !folder.ensure()) return errorJson("Needs All files access and Documents/Farrow (Settings > Permissions).")
+        if (!termux.hasRunCommandPermission()) return errorJson("Verdroid doesn't have the 'Run commands in Termux' permission. $SETUP")
+        if (!folder.hasAccess() || !folder.ensure()) return errorJson("Needs All files access and Documents/Verdroid (Settings > Permissions).")
         return try { block() } catch (e: SecurityException) { errorJson(e.message ?: "Path not allowed") }
             catch (e: IllegalArgumentException) { errorJson(e.message ?: "Invalid arguments") }
     }
 
     /**
-     * Deploys the helper and runs `python3 farrow_pdf.py <cli>` capped at [timeoutS]; returns its JSON (or an error).
+     * Deploys the helper and runs `python3 verdroid_pdf.py <cli>` capped at [timeoutS]; returns its JSON (or an error).
      * Nothing is installed without the user's OK: if no PDF library is there, the result is a needs_install_confirmation
      * payload; with confirm_install=true + the matching install_id the setup installs it and the call runs.
      */
@@ -62,7 +62,7 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
     private suspend fun runOnce(cli: List<String>, timeoutS: Int, writesTo: String?, allowInstall: Boolean): JsonObject {
         val cmd = command(cli, timeoutS, writesTo, allowInstall)
         val wait = timeoutS + (if (allowInstall) SETUP_ALLOWANCE else 30) + 45
-        val r = termux.runAndWait(cmd, "pdf-${System.nanoTime()}", wait * 1_000L, label = "Farrow: $name")
+        val r = termux.runAndWait(cmd, "pdf-${System.nanoTime()}", wait * 1_000L, label = "Verdroid: $name")
             ?: return err("Termux did not answer within $wait s. Check allow-external-apps / Set up Termux.")
         val line = r.stdout.lineSequence().lastOrNull { it.startsWith(VerdroidPdfPy.MARKER) }
             ?: return buildJsonObject {
@@ -93,7 +93,7 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
             "needs_install_confirmation: ask the user, and only after they agree call again with confirm_install=true + install_id. "
         val CONSENT_PROPS = arrayOf(InstallConsent.CONFIRM_PROP, InstallConsent.ID_PROP)
         val PASSWORD_PROP = "password" to prop("string", "Password for an encrypted PDF (optional)")
-        val PATH_PROP = "path" to prop("string", "PDF path relative to Documents/Farrow (e.g. Input/report.pdf or Output/x.pdf), " +
+        val PATH_PROP = "path" to prop("string", "PDF path relative to Documents/Verdroid (e.g. Input/report.pdf or Output/x.pdf), " +
             "an absolute path inside it, or a file in the Termux home (${TermuxManager.TERMUX_HOME}/…)")
 
         /** An absolute path inside the Termux home (no . / .. segments), passed through as is; null otherwise. */
@@ -110,7 +110,7 @@ abstract class PdfToolBase(protected val termux: TermuxRunner, protected val fol
             val storageGuard = writesTo?.let {
                 val dir = File(it).parent ?: SharedFolder.DISPLAY_PATH
                 "mkdir -p ${TermuxRunTool.shellQuote(dir)} 2>/dev/null; if [ ! -w ${TermuxRunTool.shellQuote(dir)} ]; then " +
-                    "echo '${VerdroidPdfPy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Farrow/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
+                    "echo '${VerdroidPdfPy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Verdroid/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
             } ?: ""
             val python = "python3 " + (listOf(VerdroidPdfPy.FILE) + cli).joinToString(" ") { TermuxRunTool.shellQuote(it) }
             return VerdroidPdfPy.installCommand() + "\n" + VerdroidPdfPy.setupCommand(allowInstall) + "\n" + storageGuard +
@@ -227,7 +227,7 @@ class PdfMergeTool(termux: TermuxRunner, folder: SharedFolder) : PdfToolBase(ter
     override val parameters = schema(listOf("paths"),
         "paths" to buildJsonObject {
             put("type", "array"); put("items", buildJsonObject { put("type", "string") })
-            put("description", "PDF paths in order (2–$MAX_INPUTS), relative to Documents/Farrow, e.g. [\"Input/a.pdf\", \"Input/b.pdf\"]")
+            put("description", "PDF paths in order (2–$MAX_INPUTS), relative to Documents/Verdroid, e.g. [\"Input/a.pdf\", \"Input/b.pdf\"]")
         },
         "output_name" to prop("string", "File name under Output/ (default <first>.merged.pdf)"),
         PASSWORD_PROP, *CONSENT_PROPS)

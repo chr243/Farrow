@@ -62,7 +62,7 @@ class ChatViewModel @Inject constructor(
     fun clearAttachError() { _attachError.value = null; _attachNeedsAccess.value = null }
     fun clearPendingAttach() { _pendingAttach.value = null }
 
-    /** Every "+" pick is copied into Documents/Farrow/Input and kept until the next send. */
+    /** Every "+" pick is copied into Documents/Verdroid/Input and kept until the next send. */
     fun attach(uri: Uri) {
         viewModelScope.launch {
             _attachError.value = null

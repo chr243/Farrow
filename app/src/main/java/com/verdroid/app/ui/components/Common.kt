@@ -134,7 +134,7 @@ fun CopyButton(text: String, label: String = "Copy", modifier: Modifier = Modifi
     androidx.compose.material3.TextButton(
         onClick = {
             val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Farrow", text))
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Verdroid", text))
             android.widget.Toast.makeText(context, "Copied", android.widget.Toast.LENGTH_SHORT).show()
         },
         enabled = text.isNotBlank(),

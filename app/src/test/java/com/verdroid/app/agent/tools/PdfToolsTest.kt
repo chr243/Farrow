@@ -25,7 +25,7 @@ class PdfToolsTest {
 
     @Before fun setUp() {
         base = Files.createTempDirectory("pdf").toFile()
-        folder = SharedFolder(File(base, "Documents/Farrow")) { true }
+        folder = SharedFolder(File(base, "Documents/Verdroid")) { true }
         folder.ensure()
         File(folder.input, "a.pdf").writeBytes(ByteArray(8))
         File(folder.input, "b.pdf").writeBytes(ByteArray(8))
@@ -53,7 +53,7 @@ class PdfToolsTest {
         assertEquals(true, r["ok"]?.jsonPrimitive?.boolean)
         assertEquals("Output/both.pdf", r["path"]?.jsonPrimitive?.content)
         val cmd = t.cmds.single()
-        assertFalse(cmd.contains("~/.farrow"))
+        assertFalse(cmd.contains("~/.verdroid"))
         assertTrue(cmd.contains("python3 '${VerdroidPdfPy.FILE}' 'merge' '$abs/Input/a.pdf' '$abs/Input/b.pdf' '--out' '$abs/Output/both.pdf'"))
         // helper written + deps set up before the capped python step, which must be last
         assertTrue(cmd.indexOf("base64 -d > '${VerdroidPdfPy.FILE}'") in 0 until cmd.indexOf("python-pymupdf"))
@@ -164,13 +164,13 @@ class PdfToolsTest {
 
     /** Runs the real helper with a local python3 that has PyMuPDF or pypdf (skipped otherwise, e.g. on CI). */
     @Test fun helperRunsLocallyWhenAPdfLibraryIsAvailable() = runTest {
-        val py = System.getenv("FARROW_PDF_PYTHON") ?: "python3"
+        val py = System.getenv("VERDROID_PDF_PYTHON") ?: "python3"
         val hasLib = runCatching {
             ProcessBuilder(py, "-c", "import importlib.util as u,sys; sys.exit(0 if u.find_spec('pymupdf') or u.find_spec('pypdf') else 1)")
                 .start().waitFor() == 0
         }.getOrDefault(false)
         assumeTrue(hasLib)
-        val script = File(base, "farrow_pdf.py").apply { writeText(VerdroidPdfPy.SOURCE) }
+        val script = File(base, "verdroid_pdf.py").apply { writeText(VerdroidPdfPy.SOURCE) }
         fun run(vararg a: String): JsonObject {
             val p = ProcessBuilder(listOf(py, script.path) + a).redirectErrorStream(true).start()
             val out = p.inputStream.bufferedReader().readText(); p.waitFor(60, TimeUnit.SECONDS)

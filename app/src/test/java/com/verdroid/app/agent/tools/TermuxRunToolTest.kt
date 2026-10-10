@@ -31,7 +31,7 @@ class TermuxRunToolTest {
         put("command", cmd); if (timeout != null) put("timeout_seconds", timeout)
     }
 
-    @Test fun `runs the command in farrow-work under a timeout and returns its output`() = runTest {
+    @Test fun `runs the command in verdroid-work under a timeout and returns its output`() = runTest {
         val t = FakeTermux(answer = { tag -> TermuxResult(tag, "hi\n", "warn", 0, -1, null) })
         val o = Json.parseToJsonElement(TermuxRunTool(t).execute(args("echo 'hi'", 30))).jsonObject
         assertEquals(0, o["exit_code"]!!.jsonPrimitive.int)
@@ -39,7 +39,7 @@ class TermuxRunToolTest {
         assertEquals("warn", o["stderr"]!!.jsonPrimitive.content)
         val (cmd, timeoutMs) = t.commands.single()
         assertTrue(cmd, cmd.contains("timeout -k 5 30 bash -lc 'echo '\\''hi'\\''' </dev/null"))
-        assertTrue(cmd.startsWith("mkdir -p ~/farrow-work && cd ~/farrow-work"))
+        assertTrue(cmd.startsWith("mkdir -p ~/verdroid-work && cd ~/verdroid-work"))
         assertEquals(45_000L, timeoutMs)
     }
 
@@ -77,7 +77,7 @@ class TermuxRunToolTest {
         assertFalse(p.ok || p.running); assertTrue(p.detail!!.contains("Unable to locate package"))
         assertTrue(t.commands.first().first.contains("install jq"))
     }
-    /** Like Termux: read stdout/stderr to EOF, then take the exit code. HOME → temp so ~/farrow-work is harmless. */
+    /** Like Termux: read stdout/stderr to EOF, then take the exit code. HOME → temp so ~/verdroid-work is harmless. */
     private fun runLikeTermux(script: String): Triple<String, String, Int> {
         val home = java.nio.file.Files.createTempDirectory("tx").toFile()
         val pb = ProcessBuilder("bash", "-c", script)

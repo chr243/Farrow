@@ -49,11 +49,11 @@ android {
             pickFirsts += listOf("plugin.properties")
         }
     }
-    // APK file name: Farrow-v<version>-<buildType>.apk
+    // APK file name: Verdroid-v<version>-<buildType>.apk
     applicationVariants.all {
         outputs.all {
             (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName =
-                "Farrow-v${versionName}-${buildType.name}.apk"
+                "Verdroid-v${versionName}-${buildType.name}.apk"
         }
     }
     // v1.0.12: Room DAO + migration tests run on the JVM via Robolectric (old schemas read from /schemas).

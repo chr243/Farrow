@@ -6,8 +6,8 @@ import java.io.File
 import java.time.Instant
 
 /**
- * Confines paths to the shared Documents/Farrow tree. Relative paths are taken from the folder root; absolute paths are
- * accepted only when they point inside the tree (its real path, [SharedFolder.DISPLAY_PATH] or /sdcard/Documents/Farrow).
+ * Confines paths to the shared Documents/Verdroid tree. Relative paths are taken from the folder root; absolute paths are
+ * accepted only when they point inside the tree (its real path, [SharedFolder.DISPLAY_PATH] or /sdcard/Documents/Verdroid).
  * Anything that resolves outside (.., symlinks, other absolute paths) is rejected.
  */
 class SharedFolderSandbox(private val folder: SharedFolder) {
@@ -18,16 +18,16 @@ class SharedFolderSandbox(private val folder: SharedFolder) {
         var p = (path ?: ".").trim().replace('\\', '/').ifEmpty { "." }
         if (p.contains('\u0000')) throw SecurityException("Invalid path")
         if (p.startsWith("/")) {
-            val prefixes = listOf(folder.root.absolutePath, root.path, SharedFolder.DISPLAY_PATH, "/sdcard/Documents/Farrow")
+            val prefixes = listOf(folder.root.absolutePath, root.path, SharedFolder.DISPLAY_PATH, "/sdcard/Documents/Verdroid")
                 .map { it.trimEnd('/') }.distinct()
             val hit = prefixes.firstOrNull { p == it || p.startsWith("$it/") }
-                ?: throw SecurityException("Path is outside Documents/Farrow: $path")
+                ?: throw SecurityException("Path is outside Documents/Verdroid: $path")
             p = p.removePrefix(hit).trimStart('/').ifEmpty { "." }
         }
         val r = root
         val candidate = File(r, p).canonicalFile
         if (candidate != r && !candidate.path.startsWith(r.path + File.separator)) {
-            throw SecurityException("Path escapes Documents/Farrow: $path")
+            throw SecurityException("Path escapes Documents/Verdroid: $path")
         }
         return candidate
     }
@@ -50,7 +50,7 @@ class WorkspaceListTool(private val folder: SharedFolder) : AgentTool {
     override val name = "workspace_list"
     override val description = SHARED + "List files and folders (name, type, size, modified)."
     override val parameters = schema(emptyList(),
-        "path" to prop("string", "Folder relative to Documents/Farrow (default: the root)"),
+        "path" to prop("string", "Folder relative to Documents/Verdroid (default: the root)"),
         "recursive" to prop("boolean", "List sub-folders too (default false, max 500 entries)"))
 
     override suspend fun execute(args: JsonObject): String = folder.guarded {
@@ -87,7 +87,7 @@ class WorkspaceReadTool(private val folder: SharedFolder) : AgentTool {
     override val name = "workspace_read"
     override val description = SHARED + "Read a UTF-8 text file."
     override val parameters = schema(listOf("path"),
-        "path" to prop("string", "File path relative to Documents/Farrow, e.g. Input/notes.txt"),
+        "path" to prop("string", "File path relative to Documents/Verdroid, e.g. Input/notes.txt"),
         "offset" to prop("integer", "Byte offset to start from (default 0)"),
         "max_bytes" to prop("integer", "Maximum bytes to return (default 65536, max 1000000)"))
 
@@ -123,7 +123,7 @@ class WorkspaceWriteTool(private val folder: SharedFolder) : AgentTool {
     override val description = SHARED + "Create or edit a text file (overwrite, append or create-only), or create a folder. " +
         "Put every user-facing deliverable under Output/ (translations, reports, scripts, projects, screenshots saved as text paths, …). Parent folders are created."
     override val parameters = schema(listOf("path"),
-        "path" to prop("string", "Path relative to Documents/Farrow, e.g. Output/report.md"),
+        "path" to prop("string", "Path relative to Documents/Verdroid, e.g. Output/report.md"),
         "content" to prop("string", "UTF-8 text to write (omit with directory=true)"),
         "mode" to prop("string", "overwrite (default), append, or create (fails if the file exists)"),
         "directory" to prop("boolean", "Create a folder at path instead of a file"))
@@ -169,12 +169,12 @@ class WorkspaceDeleteTool(private val folder: SharedFolder) : AgentTool {
     override val name = "workspace_delete"
     override val description = SHARED + "Delete a file, or a folder (non-empty folders need recursive=true). Only delete what the user asked for."
     override val parameters = schema(listOf("path"),
-        "path" to prop("string", "Path relative to Documents/Farrow"),
+        "path" to prop("string", "Path relative to Documents/Verdroid"),
         "recursive" to prop("boolean", "Delete a non-empty folder and everything in it (default false)"))
 
     override suspend fun execute(args: JsonObject): String = folder.guarded {
         val f = sandbox.resolve(args.str("path") ?: return@guarded errorJson("path is required"))
-        if (f == sandbox.root) return@guarded errorJson("Refusing to delete the Documents/Farrow root")
+        if (f == sandbox.root) return@guarded errorJson("Refusing to delete the Documents/Verdroid root")
         val rel = sandbox.relativePath(f)
         if (!f.exists()) return@guarded errorJson("Not found: $rel")
         val isDir = f.isDirectory

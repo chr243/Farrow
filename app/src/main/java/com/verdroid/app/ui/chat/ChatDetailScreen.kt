@@ -80,7 +80,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
             when (vm.openChatHead()) {
                 ChatHeadResult.NEEDS_OVERLAY_PERMISSION -> showOverlayDialog = true
                 ChatHeadResult.BUBBLES_BLOCKED -> {
-                    Toast.makeText(context, "Bubbles are off for Farrow. Enable them, or pick Overlay in Settings → Chat heads.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Bubbles are off for Verdroid. Enable them, or pick Overlay in Settings → Chat heads.", Toast.LENGTH_LONG).show()
                     context.startActivity(vm.chatHeads.bubbleSettingsIntent())
                 }
                 ChatHeadResult.NOTIFICATIONS_BLOCKED ->
@@ -162,7 +162,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (visible.isEmpty()) {
                     item {
-                        Text("Describe a task or ask anything.\nFarrow can read, write and list files in its sandboxed workspace.",
+                        Text("Describe a task or ask anything.\nVerdroid can read, write and list files in its sandboxed workspace.",
                             textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().padding(top = 48.dp))
                     }
@@ -263,7 +263,7 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                         }
                         OutlinedTextField(
                             value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f),
-                            placeholder = { Text(if (task == null) "Describe a new task…" else "Message Farrow…") },
+                            placeholder = { Text(if (task == null) "Describe a new task…" else "Message Verdroid…") },
                             shape = RoundedCornerShape(24.dp), maxLines = 5,
                         )
                         Spacer(Modifier.width(6.dp))
@@ -411,7 +411,7 @@ private fun CodeBlock(label: String, code: String, language: String?) {
     }
 }
 
-/** Thumbnail of an attached image under Documents/Farrow ([relativePath] e.g. Input/photo.jpg); 🖼️ until/if it can't load. */
+/** Thumbnail of an attached image under Documents/Verdroid ([relativePath] e.g. Input/photo.jpg); 🖼️ until/if it can't load. */
 @Composable
 internal fun AttachmentThumb(relativePath: String, size: androidx.compose.ui.unit.Dp) {
     var bmp by remember(relativePath) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }

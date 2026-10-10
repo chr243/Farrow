@@ -62,7 +62,7 @@ class MemoryTest {
 
     @Test fun `markdown export lists every memory`() {
         val md = MemoryText.markdown(listOf(mem(1, "A", listOf("t")), mem(2, "B")), { "d$it" })
-        assertTrue(md.startsWith("# Farrow memory") && md.contains("**#1** A") && md.contains("`t`") && md.indexOf("#2") < md.indexOf("#1**"))
+        assertTrue(md.startsWith("# Verdroid memory") && md.contains("**#1** A") && md.contains("`t`") && md.indexOf("#2") < md.indexOf("#1**"))
         val md2 = MemoryText.markdown(listOf(mem(1, "A"), mem(2, "note", chat = 7)), { "d" })
         assertTrue(md2, md2.contains("## Long-term (1)") && md2.contains("## Short-term — chat 7 (1)") && md2.indexOf("**#2**") > md2.indexOf("chat 7"))
     }

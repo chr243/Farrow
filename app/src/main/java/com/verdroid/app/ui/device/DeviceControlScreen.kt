@@ -50,7 +50,7 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                         ShizukuState.NOT_INSTALLED -> "Shizuku is not installed."
                         ShizukuState.NOT_RUNNING -> "Shizuku is installed but not running. Open it and start it via Wireless debugging (or root)."
                         ShizukuState.PRE_V11 -> "Shizuku is too old — update to v11+."
-                        ShizukuState.NO_PERMISSION -> "Shizuku is running. Farrow needs permission."
+                        ShizukuState.NO_PERMISSION -> "Shizuku is running. Verdroid needs permission."
                         ShizukuState.READY -> "✅ Ready (permission granted)."
                     })
                     if (shizuku == ShizukuState.READY) ui.shizukuInfo?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -83,10 +83,10 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                 }
 
                 Section("rish (rish_run)") {
-                    Text("Shizuku's rish lets Farrow run privileged shell commands (rish_run). In Shizuku, open “Use Shizuku in " +
-                        "terminal apps” → Export files into Download, Documents or Documents/Farrow/Input and tap Find rish (needs " +
+                    Text("Shizuku's rish lets Verdroid run privileged shell commands (rish_run). In Shizuku, open “Use Shizuku in " +
+                        "terminal apps” → Export files into Download, Documents or Documents/Verdroid/Input and tap Find rish (needs " +
                         "All files access), or pick the exported rish file (select rish_shizuku.dex too if asked). " +
-                        "Farrow copies both to /data/local/tmp/farrow_rish and chmod +x (needs Shizuku).", style = MaterialTheme.typography.bodySmall)
+                        "Verdroid copies both to /data/local/tmp/verdroid_rish and chmod +x (needs Shizuku).", style = MaterialTheme.typography.bodySmall)
                     Text(if (ui.rishInstalled) "✅ Installed: ${ui.rishInfo}" else "Not set up", style = MaterialTheme.typography.bodyMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Button(onClick = vm::findRish) { Text("Find rish") }

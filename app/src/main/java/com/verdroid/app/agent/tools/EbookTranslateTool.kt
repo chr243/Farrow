@@ -8,7 +8,7 @@ import java.io.File
 
 /**
  * Translates an ebook/document via Termux Python (MOBI first, then EPUB/PDF/DOCX/TXT).
- * Input must be under Documents/Farrow (usually Input/); output always under Output/.
+ * Input must be under Documents/Verdroid (usually Input/); output always under Output/.
  */
 class EbookTranslateTool(
     private val termux: TermuxRunner,
@@ -21,14 +21,14 @@ class EbookTranslateTool(
         "Only call this when the user explicitly asked for a translation (and the target language); an attached file " +
         "on its own is not a request to translate — ask what they want instead. " +
         "googletrans (browser User-Agent) in <=4000-char chunks, ~0.3 s between requests, backoff on Too many requests, a 5-10 s pause every 4 chapters, " +
-        "MyMemory fallback, language check, resume if interrupted. input_path is under Documents/Farrow (e.g. Input/book.mobi); " +
+        "MyMemory fallback, language check, resume if interrupted. input_path is under Documents/Verdroid (e.g. Input/book.mobi); " +
         "the result is always written under Output/. TWO STEPS: call first WITHOUT confirmed → returns chapters, chunks and an " +
         "estimated time. Tell the user the ETA and ask them to confirm; only after " +
         "they agree call again with confirmed=true (pass suggested_timeout_seconds as timeout_seconds). If Python packages are " +
         "missing it first returns needs_install_confirmation: ask the user, and only after they agree call again with " +
         "confirm_install=true + install_id. Needs Termux + termux-setup-storage."
     override val parameters = schema(listOf("input_path", "dest_lang"),
-        "input_path" to prop("string", "Path relative to Documents/Farrow, e.g. Input/novel.mobi"),
+        "input_path" to prop("string", "Path relative to Documents/Verdroid, e.g. Input/novel.mobi"),
         "src_lang" to prop("string", "Source language code (default auto)"),
         "dest_lang" to prop("string", "Target language code, e.g. fr, de, es, zh-CN"),
         "output_name" to prop("string", "Optional file name under Output/ (default: <stem>.<dest>.txt or .docx)"),
@@ -42,7 +42,7 @@ class EbookTranslateTool(
     override suspend fun execute(args: JsonObject): String {
         if (!termux.isInstalled()) return errorJson("Termux is not installed. Set it up in Settings > Tools.")
         if (!termux.hasRunCommandPermission()) return errorJson("Needs the Run commands in Termux permission (Settings > Tools / Permissions).")
-        if (!folder.hasAccess() || !folder.ensure()) return errorJson("Needs All files access and Documents/Farrow (Settings > Permissions).")
+        if (!folder.hasAccess() || !folder.ensure()) return errorJson("Needs All files access and Documents/Verdroid (Settings > Permissions).")
         val rel = args.str("input_path")?.trim()?.takeIf { it.isNotEmpty() } ?: return errorJson("input_path is required")
         val dest = args.str("dest_lang")?.trim()?.takeIf { it.isNotEmpty() } ?: return errorJson("dest_lang is required")
         if (!LANG.matches(dest)) return errorJson("dest_lang must look like a language code (e.g. fr, en, zh-CN)")
@@ -72,14 +72,14 @@ class EbookTranslateTool(
         val setupFmt = fmt ?: FORMATS[input.extension.lowercase()]
         val storageGuard = "mkdir -p ${TermuxRunTool.shellQuote(File(absOut).parent)} 2>/dev/null; " +
             "if [ ! -w ${TermuxRunTool.shellQuote(SharedFolder.DISPLAY_PATH + "/Output")} ]; then " +
-            "echo '${EbookTranslatePy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Farrow/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
+            "echo '${EbookTranslatePy.MARKER}{\"ok\":false,\"error\":\"Termux cannot write Documents/Verdroid/Output. Run termux-setup-storage in Termux once.\"}'; exit 3; fi\n"
         val python = "python3 " + cli.joinToString(" ") { TermuxRunTool.shellQuote(it) }
         suspend fun run(allowInstall: Boolean): Pair<com.verdroid.app.data.termux.TermuxResult?, Int> {
             val cmd = EbookTranslatePy.installCommand() + "\n" + EbookTranslatePy.setupCommand(setupFmt, allowInstall) + "\n" + storageGuard +
                 TermuxRunTool.capped(python, if (confirmed) timeout else ESTIMATE_TIMEOUT, grace = 30)
             // Setup (first run: apt + pip, each capped at 900 s) happens before the capped python step.
             val wait = (if (confirmed) timeout + (if (allowInstall) SETUP_ALLOWANCE else 300) else ESTIMATE_TIMEOUT + SETUP_ALLOWANCE) + 45
-            return termux.runAndWait(cmd, "ebook-${System.nanoTime()}", wait * 1_000L, label = "Farrow: ebook_translate") to wait
+            return termux.runAndWait(cmd, "ebook-${System.nanoTime()}", wait * 1_000L, label = "Verdroid: ebook_translate") to wait
         }
         // Nothing is installed without the user's OK: a probe run first; installs only with confirm_install + install_id.
         var (r, wait) = run(allowInstall = false)

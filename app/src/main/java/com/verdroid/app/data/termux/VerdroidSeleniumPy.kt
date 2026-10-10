@@ -3,19 +3,19 @@ package com.verdroid.app.data.termux
 import java.util.Base64
 
 /**
- * The Python helper Farrow drops into Termux at `~/.farrow/farrow_selenium.py` before every selenium_* / termux_python
+ * The Python helper Verdroid drops into Termux at `~/.verdroid/verdroid_selenium.py` before every selenium_* / termux_python
  * call (headless Chromium through chromedriver). It is importable from the agent's own scrapers
- * (`from farrow_selenium import make_driver`) and is also the CLI behind the selenium_* tools; it prints one
- * `FARROW_JSON=<json>` line.
+ * (`from verdroid_selenium import make_driver`) and is also the CLI behind the selenium_* tools; it prints one
+ * `VERDROID_JSON=<json>` line.
  */
 object VerdroidSeleniumPy {
     /** Absolute (quoted "~/…" arguments are not tilde-expanded). */
-    const val DIR = TermuxManager.TERMUX_HOME + "/.farrow"
-    const val FILE = "$DIR/farrow_selenium.py"
-    const val MARKER = "FARROW_JSON="
+    const val DIR = TermuxManager.TERMUX_HOME + "/.verdroid"
+    const val FILE = "$DIR/verdroid_selenium.py"
+    const val MARKER = "VERDROID_JSON="
 
     val SOURCE = """
-# Farrow headless Chromium helper (written by the Farrow app; changes are overwritten).
+# Verdroid headless Chromium helper (written by the Verdroid app; changes are overwritten).
 import argparse, json, os, shutil, sys, time
 
 
@@ -62,7 +62,7 @@ def _save(path, data, binary=False):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="farrow_selenium")
+    ap = argparse.ArgumentParser(prog="verdroid_selenium")
     ap.add_argument("cmd", choices=["open", "source", "shot"])
     ap.add_argument("url")
     ap.add_argument("--wait", type=float, default=2.0)
@@ -115,7 +115,7 @@ def main(argv=None):
             out["saved"] = a.save
             out["bytes"] = _save(a.save, png, binary=True)
     except ImportError as e:
-        out = {"ok": False, "error": "Selenium is not installed in Termux (%s). Install 'chromium-selenium' in Farrow Settings > Tools." % e}
+        out = {"ok": False, "error": "Selenium is not installed in Termux (%s). Install 'chromium-selenium' in Verdroid Settings > Tools." % e}
     except Exception as e:
         out = {"ok": False, "error": ("%s: %s" % (type(e).__name__, e))[:2000]}
     finally:

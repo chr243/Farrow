@@ -186,14 +186,14 @@ fun McpServersScreen(onBack: () -> Unit, vm: McpViewModel = hiltViewModel()) {
     }
 }
 
-/** Documents/Farrow: what it is for, All files access and folder status. */
+/** Documents/Verdroid: what it is for, All files access and folder status. */
 @Composable
 private fun SharedFolderCard(s: StorageSetup, onGrant: () -> Unit) {
     ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(com.verdroid.app.data.storage.SharedFolder.DISPLAY_PATH, fontFamily = FontFamily.Monospace,
                 style = MaterialTheme.typography.bodyMedium)
-            Text("A folder you can open in any file manager. Put files for Farrow in Input/; Farrow saves its results in " +
+            Text("A folder you can open in any file manager. Put files for Verdroid in Input/; Verdroid saves its results in " +
                 "Output/. The agent creates, edits and deletes files only inside this folder (workspace_list, workspace_read, " +
                 "workspace_write, workspace_delete). Android 11+ needs All files access for this; the folders are created " +
                 "automatically at launch once it is granted.",
@@ -201,7 +201,7 @@ private fun SharedFolderCard(s: StorageSetup, onGrant: () -> Unit) {
             SetupLine("1. All files access", s.access) {
                 if (!s.access) OutlinedButton(onClick = onGrant) { Text("Grant") }
             }
-            SetupLine("2. Documents/Farrow with Input/ and Output/", s.exists) {}
+            SetupLine("2. Documents/Verdroid with Input/ and Output/", s.exists) {}
         }
     }
 }
@@ -223,7 +223,7 @@ private fun TermuxSetupCard(t: TermuxSetup, s: ToolsState, onSetup: () -> Unit, 
                 if (s.checking) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             }
             Text("One tap walks through everything: install, permission, allow-external-apps (copied for one paste) and storage. " +
-                "Come back to Farrow after each step and it continues.",
+                "Come back to Verdroid after each step and it continues.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             s.setupMessage?.let {
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small) {
@@ -247,7 +247,7 @@ private fun TermuxSetupCard(t: TermuxSetup, s: ToolsState, onSetup: () -> Unit, 
             }
             SetupLine("4. Storage access for Termux (optional)", t.storage == true) {}
             if (t.answering == true && t.storage != true) {
-                Text("For selenium_* and your scrapers to save into Documents/Farrow/Output, run this once in Termux and allow storage:",
+                Text("For selenium_* and your scrapers to save into Documents/Verdroid/Output, run this once in Termux and allow storage:",
                     style = MaterialTheme.typography.bodySmall)
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
                     Text("termux-setup-storage", fontFamily = FontFamily.Monospace,

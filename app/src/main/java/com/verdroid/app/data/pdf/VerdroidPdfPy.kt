@@ -3,24 +3,24 @@ package com.verdroid.app.data.pdf
 import java.util.Base64
 
 /**
- * Python PDF helper dropped into Termux at `~/.farrow/farrow_pdf.py` before each pdf_* call (absolute path, never a
+ * Python PDF helper dropped into Termux at `~/.verdroid/verdroid_pdf.py` before each pdf_* call (absolute path, never a
  * quoted "~/…"). Backend: PyMuPDF (Termux apt package `python-pymupdf`) when importable, else pypdf (pip, pure Python)
- * with poppler's pdftotext for text. Commands: info, text, pages, merge, annotate; one `FARROW_JSON=` result line.
+ * with poppler's pdftotext for text. Commands: info, text, pages, merge, annotate; one `VERDROID_JSON=` result line.
  */
 object VerdroidPdfPy {
-    const val DIR = com.verdroid.app.data.termux.TermuxManager.TERMUX_HOME + "/.farrow"
-    const val FILE = "$DIR/farrow_pdf.py"
+    const val DIR = com.verdroid.app.data.termux.TermuxManager.TERMUX_HOME + "/.verdroid"
+    const val FILE = "$DIR/verdroid_pdf.py"
     /** Set when apt could not install python-pymupdf, so later calls don't retry it every time (pypdf is used). */
     const val NO_PYMUPDF_FLAG = "$DIR/.pymupdf_unavailable"
-    const val MARKER = "FARROW_JSON="
+    const val MARKER = "VERDROID_JSON="
 
     val SOURCE = """
-# Farrow PDF helper (written by the Farrow app; changes are overwritten).
+# Verdroid PDF helper (written by the Verdroid app; changes are overwritten).
 # Backend: PyMuPDF (Termux apt package python-pymupdf) when importable, else pypdf (pip) + poppler pdftotext for text.
-# Commands: info, text, pages, merge, annotate. Prints one FARROW_JSON=<json> line.
+# Commands: info, text, pages, merge, annotate. Prints one VERDROID_JSON=<json> line.
 import argparse, json, os, re, shutil, subprocess, sys
 
-MARKER = "FARROW_JSON="
+MARKER = "VERDROID_JSON="
 
 
 def out(obj):
@@ -321,18 +321,18 @@ if __name__ == "__main__":
     fun setupCommand(allowInstall: Boolean = false): String = if (!allowInstall) probeCommand() else """
 export DEBIAN_FRONTEND=noninteractive PIP_DISABLE_PIP_VERSION_CHECK=1
 if ! command -v python3 >/dev/null 2>&1; then
-  echo 'Farrow: installing python (first pdf_* run)' >&2
+  echo 'Verdroid: installing python (first pdf_* run)' >&2
   timeout 900 apt-get -y install python python-pip >/dev/null 2>&1 || timeout 900 pkg install -y python python-pip >/dev/null 2>&1
 fi
-farrow_has_mupdf() { python3 -c 'import pymupdf' >/dev/null 2>&1; }
-if ! farrow_has_mupdf && [ ! -e '$NO_PYMUPDF_FLAG' ]; then
-  echo 'Farrow: installing python-pymupdf (first pdf_* run, a few minutes)' >&2
+verdroid_has_mupdf() { python3 -c 'import pymupdf' >/dev/null 2>&1; }
+if ! verdroid_has_mupdf && [ ! -e '$NO_PYMUPDF_FLAG' ]; then
+  echo 'Verdroid: installing python-pymupdf (first pdf_* run, a few minutes)' >&2
   timeout 600 apt-get -y install python-pymupdf >/dev/null 2>&1 || { timeout 120 apt-get update -q >/dev/null 2>&1; timeout 600 apt-get -y install python-pymupdf >/dev/null 2>&1; }
-  farrow_has_mupdf || { mkdir -p '$DIR'; touch '$NO_PYMUPDF_FLAG'; }
+  verdroid_has_mupdf || { mkdir -p '$DIR'; touch '$NO_PYMUPDF_FLAG'; }
 fi
-if ! farrow_has_mupdf; then
-  python3 -c 'import pypdf' >/dev/null 2>&1 || { echo 'Farrow: installing pypdf (fallback PDF library)' >&2; timeout 300 pip install -q -U pypdf 2>&1 | tail -n 5 >&2; }
-  command -v pdftotext >/dev/null 2>&1 || { echo 'Farrow: installing poppler (pdftotext)' >&2; timeout 300 apt-get -y install poppler >/dev/null 2>&1; }
+if ! verdroid_has_mupdf; then
+  python3 -c 'import pypdf' >/dev/null 2>&1 || { echo 'Verdroid: installing pypdf (fallback PDF library)' >&2; timeout 300 pip install -q -U pypdf 2>&1 | tail -n 5 >&2; }
+  command -v pdftotext >/dev/null 2>&1 || { echo 'Verdroid: installing poppler (pdftotext)' >&2; timeout 300 apt-get -y install poppler >/dev/null 2>&1; }
 fi
 """.trim()
 
@@ -341,14 +341,14 @@ fi
      * (`needs_install`, exit 5) so pdf_* can ask first (agent install consent).
      */
     fun probeCommand(): String = """
-farrow_m=""
-if ! command -v python3 >/dev/null 2>&1; then farrow_m="apt:python apt:python-pip apt:python-pymupdf"
+verdroid_m=""
+if ! command -v python3 >/dev/null 2>&1; then verdroid_m="apt:python apt:python-pip apt:python-pymupdf"
 elif ! python3 -c 'import pymupdf' >/dev/null 2>&1 && ! python3 -c 'import fitz; fitz.open' >/dev/null 2>&1 && ! python3 -c 'import pypdf' >/dev/null 2>&1; then
-  if [ -e '$NO_PYMUPDF_FLAG' ]; then farrow_m="pip:pypdf apt:poppler"; else farrow_m="apt:python-pymupdf"; fi
+  if [ -e '$NO_PYMUPDF_FLAG' ]; then verdroid_m="pip:pypdf apt:poppler"; else verdroid_m="apt:python-pymupdf"; fi
 fi
 """.trim() + "\n" + com.verdroid.app.agent.tools.InstallConsent.probeExit(MARKER)
 
-    /** Writes the helper into Termux and fails loudly (FARROW_JSON error, exit 4) if it isn't there afterwards. */
+    /** Writes the helper into Termux and fails loudly (VERDROID_JSON error, exit 4) if it isn't there afterwards. */
     fun installCommand(): String =
         "mkdir -p '$DIR' && echo " + Base64.getEncoder().encodeToString(SOURCE.toByteArray()) + " | base64 -d > '$FILE'\n" +
             "if [ ! -s '$FILE' ]; then echo '$MARKER{\"ok\":false,\"error\":\"Could not write $FILE in Termux\"}'; exit 4; fi"

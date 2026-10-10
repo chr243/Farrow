@@ -9,7 +9,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
- * Turns an attached image (jpg/png/webp/gif, first frame) under Documents/Farrow into a JPEG data URL for vision
+ * Turns an attached image (jpg/png/webp/gif, first frame) under Documents/Verdroid into a JPEG data URL for vision
  * models: downscaled so the long side is ≤ [MAX_SIDE] px (keeps requests small on free models), transparency
  * flattened onto white. Results are cached by path + size + mtime so each agent step doesn't re-encode.
  */
@@ -58,12 +58,12 @@ object AttachmentImages {
     }.getOrNull()
 }
 
-/** Path check shared by image loading: only files inside the Documents/Farrow tree. */
+/** Path check shared by image loading: only files inside the Documents/Verdroid tree. */
 object SharedFolderPaths {
     fun resolve(root: File, relativePath: String): File {
         val f = File(root, relativePath).canonicalFile
         val r = root.canonicalFile
-        require(f.path == r.path || f.path.startsWith(r.path + File.separator)) { "outside Documents/Farrow" }
+        require(f.path == r.path || f.path.startsWith(r.path + File.separator)) { "outside Documents/Verdroid" }
         return f
     }
 }

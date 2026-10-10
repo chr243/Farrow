@@ -12,7 +12,7 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * Every chat "+" pick lands in Documents/Farrow/Input for the agent, which asks what to do with it unless the user said.
+ * Every chat "+" pick lands in Documents/Verdroid/Input for the agent, which asks what to do with it unless the user said.
  * The Android part only resolves the SAF [Uri]; the copy itself ([copyToInput]) is pure java.io and JVM-tested.
  */
 object ChatAttachment {
@@ -20,7 +20,7 @@ object ChatAttachment {
 
     /** Thrown when All files access is missing; the chat offers a Grant button and retries the same pick. */
     class NoAccessException : IllegalStateException(
-        "Farrow needs All files access to put attachments in Documents/Farrow/Input")
+        "Verdroid needs All files access to put attachments in Documents/Verdroid/Input")
 
     fun saveToInput(context: Context, folder: SharedFolder, uri: Uri): Saved {
         if (!folder.hasAccess()) throw NoAccessException()
@@ -40,9 +40,9 @@ object ChatAttachment {
     }
 
     /**
-     * Copies [open]'s stream into Input/ (creating Documents/Farrow/Input/Output when missing) under a sanitised,
+     * Copies [open]'s stream into Input/ (creating Documents/Verdroid/Input/Output when missing) under a sanitised,
      * non-clashing name. Writes to a hidden temp file and renames, so a failed/cancelled copy never leaves a partial file.
-     * When [sourcePath] (a file path or an ExternalStorage doc id like `primary:Documents/Farrow/Input/a.pdf`) already
+     * When [sourcePath] (a file path or an ExternalStorage doc id like `primary:Documents/Verdroid/Input/a.pdf`) already
      * points at a file in Input/, that file is reused instead of duplicated.
      */
     fun copyToInput(folder: SharedFolder, rawName: String, sourcePath: String?, open: () -> InputStream?): Saved {
@@ -79,7 +79,7 @@ object ChatAttachment {
     /** The Input/ file [sourcePath] refers to, if the user picked something that is already in Input/. */
     internal fun existingInInput(inputDir: File, sourcePath: String?): File? {
         val p = sourcePath?.replace('\\', '/')?.substringAfter(':') ?: return null // "primary:Documents/…" → "Documents/…"
-        val marker = "Documents/Farrow/${SharedFolder.INPUT}/"
+        val marker = "Documents/Verdroid/${SharedFolder.INPUT}/"
         val idx = p.indexOf(marker)
         if (idx < 0) return null
         val rest = p.substring(idx + marker.length)

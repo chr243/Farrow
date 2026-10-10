@@ -57,7 +57,7 @@ class McpClient(
         val params = buildJsonObject {
             put("protocolVersion", PROTOCOL_VERSION)
             put("capabilities", buildJsonObject { })
-            put("clientInfo", buildJsonObject { put("name", "Farrow"); put("version", CLIENT_VERSION) })
+            put("clientInfo", buildJsonObject { put("name", "Verdroid"); put("version", CLIENT_VERSION) })
         }
         val legacy = url.substringBefore('?').trimEnd('/').endsWith("/sse")
         val result = if (!legacy) {

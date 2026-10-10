@@ -34,8 +34,8 @@ fun ChatHeadAvatar(task: Task?, unread: Int) {
             border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)) {
             Box(Modifier.padding(3.dp)) {
                 if (task == null) {
-                    // No task attached yet: show the Farrow mark instead of a generic chat avatar.
-                    Image(painterResource(R.drawable.ic_farrow_logo), contentDescription = "Farrow", modifier = Modifier.size(54.dp))
+                    // No task attached yet: show the Verdroid mark instead of a generic chat avatar.
+                    Image(painterResource(R.drawable.ic_verdroid_logo), contentDescription = "Verdroid", modifier = Modifier.size(54.dp))
                 } else {
                     TaskAvatar(task, size = 54.dp)
                 }
@@ -76,7 +76,7 @@ fun OverlayPermissionDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
         title = { Text("Allow chat heads over other apps") },
         text = {
             Text(
-                "To float the conversation over other apps, Farrow needs the \"Display over other apps\" permission.\n\n" +
+                "To float the conversation over other apps, Verdroid needs the \"Display over other apps\" permission.\n\n" +
                     "On HyperOS/MIUI also open Other permissions and allow \"Display pop-up windows while running in the background\".",
             )
         },

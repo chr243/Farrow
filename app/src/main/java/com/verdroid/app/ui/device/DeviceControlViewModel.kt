@@ -121,7 +121,7 @@ class DeviceControlViewModel @Inject constructor(
         })
     }
 
-    /** Files picked in the rish picker: stage, then copy into /data/local/tmp/farrow_rish and chmod +x (via Shizuku). */
+    /** Files picked in the rish picker: stage, then copy into /data/local/tmp/verdroid_rish and chmod +x (via Shizuku). */
     fun installRish(uris: List<android.net.Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -159,7 +159,7 @@ class DeviceControlViewModel @Inject constructor(
         java.io.File(java.io.File(path).parentFile, name).takeIf { it.canRead() }?.readBytes()
     }.getOrNull()
 
-    /** "Find rish": scan Download/Documents/Input, stage, then deploy to /data/local/tmp/farrow_rish. */
+    /** "Find rish": scan Download/Documents/Input, stage, then deploy to /data/local/tmp/verdroid_rish. */
     fun findRish() {
         if (!runCatching { android.os.Environment.isExternalStorageManager() }.getOrDefault(false)) {
             _ui.update { it.copy(message = "Find rish needs All files access — grant it (Settings → Permissions), or use Pick rish file.", rishNeedsAccess = true) }
@@ -169,7 +169,7 @@ class DeviceControlViewModel @Inject constructor(
             val msg = runCatching {
                 val roots = com.verdroid.app.shizuku.RishStore.searchRoots(android.os.Environment.getExternalStorageDirectory())
                 val found = rish.findAndStage(roots)
-                    ?: return@runCatching "No rish + rish_shizuku.dex found in Download, Documents or Documents/Farrow/Input. Export them from Shizuku " +
+                    ?: return@runCatching "No rish + rish_shizuku.dex found in Download, Documents or Documents/Verdroid/Input. Export them from Shizuku " +
                         "(Use Shizuku in terminal apps → Export files) into one of those folders, or use Pick rish file."
                 if (found !is com.verdroid.app.shizuku.RishStore.Result.Installed) return@runCatching describeInstall(found)
                 describeInstall(runCatching { rish.deploy(::shellExec) }.getOrElse {
@@ -184,7 +184,7 @@ class DeviceControlViewModel @Inject constructor(
     fun allFilesAccessIntent(): android.content.Intent =
         com.verdroid.app.data.storage.SharedFolder.accessIntent(context).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    /** "Fix rish permissions": chmod +x both files in /data/local/tmp/farrow_rish (also done after every deploy and before rish_run). */
+    /** "Fix rish permissions": chmod +x both files in /data/local/tmp/verdroid_rish (also done after every deploy and before rish_run). */
     fun fixRishPermissions() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val line = runCatching { rish.fixPermissions(::shellExec) }.getOrNull()

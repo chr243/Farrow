@@ -34,11 +34,11 @@ data class TermuxSetup(
     val installed: Boolean = false,
     val permission: Boolean = false,
     val answering: Boolean? = null,
-    /** Termux can write shared storage (termux-setup-storage), needed for selenium_* / scrapers saving to Documents/Farrow. */
+    /** Termux can write shared storage (termux-setup-storage), needed for selenium_* / scrapers saving to Documents/Verdroid. */
     val storage: Boolean? = null,
 )
 
-/** Documents/Farrow as seen from the app: All files access granted and the folders present. */
+/** Documents/Verdroid as seen from the app: All files access granted and the folders present. */
 data class StorageSetup(val access: Boolean = false, val exists: Boolean = false)
 
 data class ToolsState(
@@ -113,7 +113,7 @@ class ToolsViewModel @Inject constructor(
 
     fun cancelSetup() = _state.update { it.copy(setupActive = false, setupStep = null, setupMessage = null) }
 
-    /** Back in Farrow (resume / permission dialog closed): re-check and continue the flow if it is running. */
+    /** Back in Verdroid (resume / permission dialog closed): re-check and continue the flow if it is running. */
     fun onReturned() {
         if (!_state.value.setupActive) return refresh()
         viewModelScope.launch { check(); advance() }
@@ -136,7 +136,7 @@ class ToolsViewModel @Inject constructor(
             com.verdroid.app.data.termux.TermuxSetupStep.GRANT -> _events.tryEmit(SetupEvent.RequestPermission)
             com.verdroid.app.data.termux.TermuxSetupStep.ALLOW_EXTERNAL -> _events.tryEmit(SetupEvent.PasteAllowCommand)
             com.verdroid.app.data.termux.TermuxSetupStep.STORAGE -> {
-                termux.runInTerminal("termux-setup-storage && echo 'Storage OK - you can go back to Farrow'", label = "Farrow: storage setup")
+                termux.runInTerminal("termux-setup-storage && echo 'Storage OK - you can go back to Verdroid'", label = "Verdroid: storage setup")
                 _events.tryEmit(SetupEvent.OpenTermux)
             }
             com.verdroid.app.data.termux.TermuxSetupStep.DONE -> lastActed = null
@@ -186,7 +186,7 @@ class ToolsViewModel @Inject constructor(
         val t = _state.value.termux
         if (!t.installed) return setNote("Install Termux (F-Droid build) to add these.")
         if (!t.permission) return setNote("Grant the Run commands in Termux permission (Termux card above) first.")
-        val r = termux.runAndWait(TermuxPackages.detectQuery(), "pkgs-${System.nanoTime()}", 10_000, label = "Farrow status")
+        val r = termux.runAndWait(TermuxPackages.detectQuery(), "pkgs-${System.nanoTime()}", 10_000, label = "Verdroid status")
         val found = r?.let { TermuxPackages.parseDetect(it.stdout) }
         val storage = r?.let { TermuxPackages.parseKeys(it.stdout)["STORAGE"] == "1" }
         _state.update { it.copy(termux = it.termux.copy(answering = found != null, storage = storage)) }

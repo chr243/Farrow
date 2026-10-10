@@ -1,6 +1,6 @@
-# AGENTS.md — Farrow
+# AGENTS.md — Verdroid
 
-Farrow (`com.verdroid.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, shell commands through rish (`rish_run`, from `/data/local/tmp/farrow_rish`), bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), headless Chromium + Selenium inside Termux (`selenium_*`, `termux_python` for agent-written scrapers), ebook/document translation in Termux Python (`ebook_translate`, estimate → user confirms → translate), PDF read/light edit in Termux Python (`pdf_*`: info, text extract with page markers, split/merge, annotate; PyMuPDF with pypdf fallback), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Farrow` folder (`workspace_*`, All files access; chat **Attach file** copies into `Input/`), memory, agent-writable skills (`skill_*`, `files/skills/<id>/SKILL.md`, Settings → Skills), a Permissions screen and an MCP client. There is no in-app browser and there are no X/Facebook tools (removed in 4bcca87). There is no backend server; everything runs on the device.
+Verdroid (`com.verdroid.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, shell commands through rish (`rish_run`, from `/data/local/tmp/verdroid_rish`), bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), headless Chromium + Selenium inside Termux (`selenium_*`, `termux_python` for agent-written scrapers), ebook/document translation in Termux Python (`ebook_translate`, estimate → user confirms → translate), PDF read/light edit in Termux Python (`pdf_*`: info, text extract with page markers, split/merge, annotate; PyMuPDF with pypdf fallback), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Verdroid` folder (`workspace_*`, All files access; chat **Attach file** copies into `Input/`), memory, agent-writable skills (`skill_*`, `files/skills/<id>/SKILL.md`, Settings → Skills), a Permissions screen and an MCP client. There is no in-app browser and there are no X/Facebook tools (removed in 4bcca87). There is no backend server; everything runs on the device.
 
 ## Repo map
 
@@ -21,7 +21,7 @@ Farrow (`com.verdroid.app`) is a native Android app (Kotlin, Jetpack Compose, Ma
 │       │   │   │                 termux (RUN_COMMAND manager, result receiver, Set up Termux flow, Selenium helper script),
 │       │   │   │                 local (Room), mcp, memory, network (OpenRouter/Kilo clients, providers, model caps), notify,
 │       │   │   │                 prefs, repository, secure (encrypted key store), settings (DataStore), skills (SkillStore),
-│       │   │   │                 storage (Documents/Farrow SharedFolder, ChatAttachment), tools (Termux add-ons, tool status),
+│       │   │   │                 storage (Documents/Verdroid SharedFolder, ChatAttachment), tools (Termux add-ons, tool status),
 │       │   │   │                 update, websearch (web_search engines + fusion), work (WorkManager)
 │       │   │   ├── di/           Hilt AppModule (incl. tool registry)
 │       │   │   ├── domain/       models, repository interfaces, use cases (no Android deps)
@@ -45,7 +45,7 @@ Toolchain: JDK 17, Android SDK with `platforms;android-35` and `build-tools;35.0
 # one-time: point Gradle at the SDK (local.properties is git-ignored, never commit it)
 echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-./gradlew assembleDebug          # APK -> app/build/outputs/apk/debug/Farrow-v<versionName>-debug.apk
+./gradlew assembleDebug          # APK -> app/build/outputs/apk/debug/Verdroid-v<versionName>-debug.apk
 ./gradlew testDebugUnitTest      # JVM unit tests
 ./gradlew lint                   # Android lint; abortOnError = true, so any lint *error* fails the build (0 errors, ~50 warnings at v1.0.0; no baseline)
 ./gradlew assembleDebug testDebugUnitTest lint   # exactly what CI runs
@@ -57,7 +57,7 @@ Install and run on a device (USB or wireless debugging):
 ```bash
 adb pair <phone-ip>:<pairing-port>     # Developer options → Wireless debugging → Pair with code
 adb connect <phone-ip>:<port>
-adb install -r app/build/outputs/apk/debug/Farrow-v*-debug.apk
+adb install -r app/build/outputs/apk/debug/Verdroid-v*-debug.apk
 adb shell am start -n com.verdroid.app/.MainActivity
 adb logcat --pid=$(adb shell pidof com.verdroid.app)
 ```
@@ -68,10 +68,10 @@ Shizuku (needed for `run_shell`): start Shizuku from its app via **Wireless debu
 adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh
 ```
 
-`run_shell` binds a Shizuku UserService / newProcess (`shizuku/ShellExecutor.kt`). `rish_run` instead uses the `rish` + `rish_shizuku.dex` exported by Shizuku (*Use Shizuku in terminal apps*): Settings → Shizuku & Git → rish → **Find rish** / **Pick rish file** stages them privately, then copies them through Shizuku to `/data/local/tmp/farrow_rish/` with `chmod +x` (`shizuku/RishStore.kt`). Manual check over adb:
+`run_shell` binds a Shizuku UserService / newProcess (`shizuku/ShellExecutor.kt`). `rish_run` instead uses the `rish` + `rish_shizuku.dex` exported by Shizuku (*Use Shizuku in terminal apps*): Settings → Shizuku & Git → rish → **Find rish** / **Pick rish file** stages them privately, then copies them through Shizuku to `/data/local/tmp/verdroid_rish/` with `chmod +x` (`shizuku/RishStore.kt`). Manual check over adb:
 
 ```bash
-adb shell 'RISH_APPLICATION_ID=com.termux sh /data/local/tmp/farrow_rish/rish -c id'   # expect uid=2000(shell)
+adb shell 'RISH_APPLICATION_ID=com.termux sh /data/local/tmp/verdroid_rish/rish -c id'   # expect uid=2000(shell)
 ```
 
 ## Coding conventions
@@ -111,7 +111,7 @@ If you touched Shizuku, rish, Termux, Accessibility or chat heads, also test on 
 ## Maintainer verification checklist (per release)
 
 - [ ] `./gradlew clean assembleDebug testDebugUnitTest lint` passes locally and the CI run on `main` is green.
-- [ ] `versionCode`/`versionName` bumped in `app/build.gradle.kts`; APK is named `Farrow-v<versionName>-debug.apk`.
+- [ ] `versionCode`/`versionName` bumped in `app/build.gradle.kts`; APK is named `Verdroid-v<versionName>-debug.apk`.
 - [ ] If the Room schema changed: migration added and `app/schemas/` committed.
 - [ ] Fresh install on a device: onboarding, add API key, send a chat, a tool call runs.
 - [ ] `web_search` returns fused results, and `web_fetch format=markdown` returns a public page.

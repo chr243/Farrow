@@ -61,7 +61,7 @@ fun ChatsScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("Farrow", fontWeight = FontWeight.Bold, fontSize = 26.sp) },
+                title = { Text("Verdroid", fontWeight = FontWeight.Bold, fontSize = 26.sp) },
                 actions = {
                     quotaDot?.let { QuotaDotButton(it, onDetails = onOpenModels) }
                     IconButton(onClick = onOpenSettings) {

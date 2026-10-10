@@ -26,7 +26,7 @@ class RishStoreTest {
 
     /** Fake shell that maps DEPLOY_DIR under [deployRoot] and runs bash. */
     private fun fakeShell(): suspend (String, Long) -> ShellResult = { cmd, _ ->
-        val dir = File(deployRoot, "data/local/tmp/farrow_rish")
+        val dir = File(deployRoot, "data/local/tmp/verdroid_rish")
         val mapped = cmd.replace(RishStore.DEPLOY_DIR, dir.path)
         val pb = ProcessBuilder("bash", "-c", mapped)
         val p = pb.start()
@@ -54,10 +54,10 @@ class RishStoreTest {
     @Test fun findScansDownloadDocumentsAndInputThenStages() {
         val storage = File(base, "storage").apply { mkdirs() }
         val roots = RishStore.searchRoots(storage)
-        assertEquals(listOf("Download", "Documents", "Documents/Farrow/Input"), roots.map { it.relativeTo(storage).path })
+        assertEquals(listOf("Download", "Documents", "Documents/Verdroid/Input"), roots.map { it.relativeTo(storage).path })
         File(storage, "Download").mkdirs(); File(storage, "Download/rish").writeBytes(script)
         assertNull(store.find(roots))
-        val exportDir = File(storage, "Documents/Farrow/Input/shizuku").apply { mkdirs() }
+        val exportDir = File(storage, "Documents/Verdroid/Input/shizuku").apply { mkdirs() }
         File(exportDir, "rish").writeBytes(script); File(exportDir, "rish_shizuku.dex").writeBytes(dex)
         assertTrue(store.findAndStage(roots) is RishStore.Result.Installed)
         assertTrue(store.isStaged())
@@ -68,7 +68,7 @@ class RishStoreTest {
         val shell = fakeShell()
         val r = store.deploy(shell) as RishStore.Result.Installed
         assertTrue(r.deployed)
-        val dir = File(deployRoot, "data/local/tmp/farrow_rish")
+        val dir = File(deployRoot, "data/local/tmp/verdroid_rish")
         assertArrayEquals(script, File(dir, "rish").readBytes())
         assertArrayEquals(dex, File(dir, "rish_shizuku.dex").readBytes())
         assertTrue(File(dir, "rish").canExecute())
@@ -90,19 +90,19 @@ class RishStoreTest {
         assertEquals("oops\n", out.stderr)
         assertTrue(store.isDeployed(shell))
         assertTrue(ToolStatus.of("rish_run", ToolEnv(shizukuReady = true, rishReady = true)).ready)
-        assertTrue(ToolStatus.of("rish_run", ToolEnv(shizukuReady = true, rishReady = true)).text.contains("farrow_rish"))
+        assertTrue(ToolStatus.of("rish_run", ToolEnv(shizukuReady = true, rishReady = true)).text.contains("verdroid_rish"))
         assertFalse(ToolStatus.of("rish_run", ToolEnv(shizukuReady = true)).ready)
     }
 
     @Test fun rishRunToolDescriptionMentionsOutputAndTermux() {
         assertEquals("com.termux", RishRunner.APPLICATION_ID)
-        assertEquals("/data/local/tmp/farrow_rish", RishStore.DEPLOY_DIR)
+        assertEquals("/data/local/tmp/verdroid_rish", RishStore.DEPLOY_DIR)
         val src = File("src/main/java/com/verdroid/app/agent/tools/RishRunTool.kt").readText()
-        assertTrue(src.contains("Documents/Farrow/Output") && src.contains("not Pictures") && src.contains("com.termux"))
+        assertTrue(src.contains("Documents/Verdroid/Output") && src.contains("not Pictures") && src.contains("com.termux"))
         val prompt = File("src/main/java/com/verdroid/app/agent/AgentLoop.kt").readText()
         assertTrue(prompt.contains("ALL user-facing deliverables go in Output/"))
         assertTrue(prompt.contains("never Pictures") || prompt.contains("Never save deliverables to Pictures"))
-        assertTrue(prompt.contains("/data/local/tmp/farrow_rish"))
+        assertTrue(prompt.contains("/data/local/tmp/verdroid_rish"))
     }
 
     @Test fun rejectsWrongFiles() {

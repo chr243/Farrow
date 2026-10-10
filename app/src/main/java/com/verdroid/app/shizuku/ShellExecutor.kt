@@ -51,8 +51,8 @@ class ShellExecutor @Inject constructor(private val shizuku: ShizukuManager) {
      * is the :shell process alive, and what did logcat say while Shizuku tried to start it.
      */
     suspend fun diagnoseShizuku(): String {
-        val cmd = "echo '--- processes'; ps -A -o PID,USER,NAME 2>/dev/null | grep -iE 'farrow|shizuku' ; " +
-            "echo '--- logcat'; logcat -d -v time -t 4000 2>/dev/null | grep -iE 'UserService|Shizuku|farrow|AndroidRuntime|FATAL|app_process' | grep -viE 'ActivityManagerWrapper|RecentsTaskLoader|ScnModule' | tail -n 80"
+        val cmd = "echo '--- processes'; ps -A -o PID,USER,NAME 2>/dev/null | grep -iE 'verdroid|shizuku' ; " +
+            "echo '--- logcat'; logcat -d -v time -t 4000 2>/dev/null | grep -iE 'UserService|Shizuku|verdroid|AndroidRuntime|FATAL|app_process' | grep -viE 'ActivityManagerWrapper|RecentsTaskLoader|ScnModule' | tail -n 80"
         val r = runCatching { shizuku.execViaNewProcess(cmd, null, 20_000) }
         return "${shizuku.serverInfo()}\nLast bind error: ${shizuku.lastBindError ?: "none"}\n" + r.fold(
             { "[${it.backend}]\n${it.stdout.trim()}${it.stderr.trim().takeIf { e -> e.isNotEmpty() }?.let { e -> "\n$e" } ?: ""}" },

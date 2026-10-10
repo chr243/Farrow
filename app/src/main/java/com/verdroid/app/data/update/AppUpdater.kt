@@ -34,7 +34,7 @@ sealed interface UpdateState {
 }
 
 /**
- * In-app updater: public GitHub API (no token) → latest release → Farrow-*.apk into cacheDir/updates → system installer
+ * In-app updater: public GitHub API (no token) → latest release → Verdroid-*.apk into cacheDir/updates → system installer
  * (FileProvider + ACTION_VIEW). Same debug key as the installed app, so it installs over it.
  */
 @Singleton
@@ -78,7 +78,7 @@ class AppUpdater @Inject constructor(@ApplicationContext private val context: Co
         val r = try {
             withContext(Dispatchers.IO) {
                 val req = Request.Builder().url(UpdateLogic.LATEST_URL)
-                    .header("Accept", "application/vnd.github+json").header("User-Agent", "Farrow/$currentVersion").build()
+                    .header("Accept", "application/vnd.github+json").header("User-Agent", "Verdroid/$currentVersion").build()
                 http.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) throw IOException("GitHub answered HTTP ${resp.code}")
                     UpdateLogic.parseRelease(resp.body?.string().orEmpty(), BuildConfig.BUILD_TYPE) ?: throw IOException("unreadable release info")
@@ -101,7 +101,7 @@ class AppUpdater @Inject constructor(@ApplicationContext private val context: Co
 
     /** Downloads the release's APK with progress, verifies its size; then [install]. */
     suspend fun download(release: ReleaseInfo): UpdateState {
-        val asset = release.asset ?: return UpdateState.Error("Release ${release.tag} has no Farrow APK", release).also { _state.value = it }
+        val asset = release.asset ?: return UpdateState.Error("Release ${release.tag} has no Verdroid APK", release).also { _state.value = it }
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val safe = asset.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -110,7 +110,7 @@ class AppUpdater @Inject constructor(@ApplicationContext private val context: Co
         _state.value = UpdateState.Downloading(release, 0, asset.size)
         return try {
             withContext(Dispatchers.IO) {
-                val req = Request.Builder().url(asset.url).header("User-Agent", "Farrow/$currentVersion")
+                val req = Request.Builder().url(asset.url).header("User-Agent", "Verdroid/$currentVersion")
                     .header("Accept", "application/octet-stream").build()
                 http.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) throw IOException("download failed: HTTP ${resp.code}")
@@ -138,7 +138,7 @@ class AppUpdater @Inject constructor(@ApplicationContext private val context: Co
 
     fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
 
-    /** "Install unknown apps" screen for Farrow (when [canInstall] is false). */
+    /** "Install unknown apps" screen for Verdroid (when [canInstall] is false). */
     fun unknownSourcesIntent(): Intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 

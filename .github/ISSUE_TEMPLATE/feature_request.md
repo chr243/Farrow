@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a new tool, provider or improvement for Farrow
+about: Suggest a new tool, provider or improvement for Verdroid
 title: "[Feature] "
 labels: enhancement
 assignees: ''

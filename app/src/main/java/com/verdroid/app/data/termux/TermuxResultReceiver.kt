@@ -44,7 +44,7 @@ class TermuxResultReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_RESULT = "com.verdroid.app.TERMUX_RESULT"
-        const val EXTRA_TAG = "farrow_tag"
+        const val EXTRA_TAG = "verdroid_tag"
         private const val RESULT_BUNDLE = "result"
     }
 }

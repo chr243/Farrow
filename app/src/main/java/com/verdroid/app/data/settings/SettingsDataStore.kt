@@ -19,7 +19,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
-    name = "farrow_settings",
+    name = "verdroid_settings",
     produceMigrations = { listOf(ModelDefaultsMigration) },
 )
 

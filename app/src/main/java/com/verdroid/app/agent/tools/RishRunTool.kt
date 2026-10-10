@@ -5,18 +5,18 @@ import com.verdroid.app.shizuku.RishStore
 import com.verdroid.app.shizuku.ShellExecutor
 import kotlinx.serialization.json.*
 
-/** Runs a shell command through Shizuku's rish deployed at /data/local/tmp/farrow_rish (RISH_APPLICATION_ID=com.termux). */
+/** Runs a shell command through Shizuku's rish deployed at /data/local/tmp/verdroid_rish (RISH_APPLICATION_ID=com.termux). */
 class RishRunTool(
     private val store: RishStore,
     private val runner: RishRunner,
     private val shell: ShellExecutor,
 ) : AgentTool {
     override val name = "rish_run"
-    override val description = "Run a shell command through Shizuku's rish at /data/local/tmp/farrow_rish " +
+    override val description = "Run a shell command through Shizuku's rish at /data/local/tmp/verdroid_rish " +
         "(privileged shell: adb/shell user, or root if Shizuku runs as root; RISH_APPLICATION_ID=com.termux). " +
         "Alternative to run_shell when the user set up rish in Settings. " +
         "When saving screenshots (screencap), images or any other deliverable for the user, write under " +
-        "/storage/emulated/0/Documents/Farrow/Output (not Pictures or Download). Returns exit_code, stdout, stderr. Timeout max 600 s."
+        "/storage/emulated/0/Documents/Verdroid/Output (not Pictures or Download). Returns exit_code, stdout, stderr. Timeout max 600 s."
     override val parameters = schema(listOf("command"),
         "command" to prop("string", "Command for /system/bin/sh -c on the Shizuku side"),
         "timeout_seconds" to prop("integer", "Timeout in seconds (default 60, max 600)"))

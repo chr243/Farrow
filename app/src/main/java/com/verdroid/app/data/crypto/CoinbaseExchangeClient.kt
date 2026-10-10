@@ -82,7 +82,7 @@ class CoinbaseExchangeClient(
                 .header("CB-ACCESS-TIMESTAMP", ts)
                 .header("CB-ACCESS-PASSPHRASE", k.passphrase!!)
         }
-        builder.header("Accept", "application/json").header("User-Agent", "Farrow/1.0")
+        builder.header("Accept", "application/json").header("User-Agent", "Verdroid/1.0")
         when (method) {
             "GET" -> builder.get()
             "DELETE" -> builder.delete()

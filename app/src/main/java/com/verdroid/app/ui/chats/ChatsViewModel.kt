@@ -42,7 +42,7 @@ class ChatsViewModel @Inject constructor(
 
     fun undoArchive(taskId: Long) = viewModelScope.launch { archive.restore(taskId) }
 
-    /** Dot on the gear: a newer Farrow release exists. */
+    /** Dot on the gear: a newer Verdroid release exists. */
     val updateAvailable = updater.updateAvailable
     val query = MutableStateFlow("")
 

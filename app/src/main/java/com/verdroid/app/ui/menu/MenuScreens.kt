@@ -77,7 +77,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
                 },
             ))
             SettingsGroup("Agent tools", listOf(
-                item("Tools", "Built-in agent tools (status, on/off), Documents/Farrow folder access, Termux setup and add-ons", Routes.TOOLS),
+                item("Tools", "Built-in agent tools (status, on/off), Documents/Verdroid folder access, Termux setup and add-ons", Routes.TOOLS),
                 item("Skills", "Procedures the agent saved: enable/disable (only enabled ones go into the prompt), view, delete", Routes.SKILLS),
                 item("MCP servers", "Remote MCP servers, their status and per-tool switches", Routes.MCP),
             ))
@@ -89,7 +89,7 @@ fun SettingsScreen(onNavigate: (String) -> Unit, onBack: () -> Unit, unreadNotif
             ))
             SettingsGroup("Appearance", listOf(item("Theme", "Light / dark mode and color palette", Routes.THEME)))
             SettingsGroup("App", listOf({ i -> AppUpdateRow(vm.updater, i) }))
-            Text("Farrow v${com.verdroid.app.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall,
+            Text("Verdroid v${com.verdroid.app.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 28.dp, top = 16.dp))
         }
     }

@@ -10,7 +10,7 @@ class A11yHintTest {
     @Test fun `screen tools explain the accessibility requirement`() = runTest {
         // Service off (unit test): the error says how to enable it.
         val r = ScreenTapTool().execute(buildJsonObject { put("x", 1); put("y", 2) })
-        assertTrue(r, r.contains("Accessibility service is off") && r.contains("Farrow agent control"))
+        assertTrue(r, r.contains("Accessibility service is off") && r.contains("Verdroid agent control"))
         assertFalse(r, r.contains("browser") || r.contains("web_click"))
         assertTrue(ScreenTapTool().description.startsWith("Phone screen (accessibility)"))
         assertFalse(ScreenReadTool().description.contains("browser"))

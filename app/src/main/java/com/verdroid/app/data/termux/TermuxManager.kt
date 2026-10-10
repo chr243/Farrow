@@ -21,7 +21,7 @@ interface TermuxRunner {
     fun isInstalled(): Boolean
     fun hasRunCommandPermission(): Boolean
     /** Background `bash -lc` command + wait for its result (null = couldn't start or no answer within [timeoutMs]). */
-    suspend fun runAndWait(command: String, tag: String, timeoutMs: Long = 8_000, label: String = "Farrow"): TermuxResult?
+    suspend fun runAndWait(command: String, tag: String, timeoutMs: Long = 8_000, label: String = "Verdroid"): TermuxResult?
 }
 
 /**
@@ -46,7 +46,7 @@ class TermuxManager @Inject constructor(@ApplicationContext private val context:
     fun openIntent(): Intent? = context.packageManager.getLaunchIntentForPackage(TERMUX_PACKAGE)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     /** Runs [command] in a visible Termux terminal session (for interactive prompts such as termux-setup-storage). */
-    fun runInTerminal(command: String, label: String = "Farrow"): Boolean =
+    fun runInTerminal(command: String, label: String = "Verdroid"): Boolean =
         runCommand(command, label, "term-${System.nanoTime()}", background = false).isSuccess
 
     private fun runCommand(command: String, label: String, resultTag: String, background: Boolean = true): Result<Unit> {
@@ -90,7 +90,7 @@ class TermuxManager @Inject constructor(@ApplicationContext private val context:
         const val FDROID_URL = "https://f-droid.org/packages/com.termux/"
         const val TERMUX_PREFIX = "/data/data/com.termux/files/usr"
         const val TERMUX_HOME = "/data/data/com.termux/files/home"
-        /** Paste once into Termux so other apps (Farrow) may run commands there. */
+        /** Paste once into Termux so other apps (Verdroid) may run commands there. */
         const val ALLOW_EXTERNAL_APPS_CMD = "mkdir -p ~/.termux && (grep -q '^allow-external-apps *= *true' ~/.termux/termux.properties 2>/dev/null || " +
             "echo 'allow-external-apps = true' >> ~/.termux/termux.properties) && termux-reload-settings && echo OK"
         private const val RUN_COMMAND_SERVICE = "com.termux.app.RunCommandService"

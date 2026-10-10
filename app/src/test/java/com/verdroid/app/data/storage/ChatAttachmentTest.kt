@@ -30,7 +30,7 @@ class ChatAttachmentTest {
         assertEquals("Fulgrim - Graham McNeill.mobi", d.fileName)
         assertEquals(1_468_006L, d.bytes)
         assertEquals("Translate it to French", d.text)
-        assertFalse(d.text.contains("workspace_") || d.text.contains("Documents/Farrow"))
+        assertFalse(d.text.contains("workspace_") || d.text.contains("Documents/Verdroid"))
         // Attachment-only: default prompt hidden, chat titled by the file name.
         val only = ChatAttachment.messagePrefix(saved) + ChatAttachment.DEFAULT_PROMPT
         assertEquals("", ChatAttachment.forDisplay(only).text)
@@ -42,8 +42,8 @@ class ChatAttachmentTest {
     }
 
     private fun tempFolder(access: Boolean = true): Pair<File, SharedFolder> {
-        val dir = Files.createTempDirectory("farrow").toFile()
-        return dir to SharedFolder(File(dir, "Documents/Farrow")) { access }
+        val dir = Files.createTempDirectory("verdroid").toFile()
+        return dir to SharedFolder(File(dir, "Documents/Verdroid")) { access }
     }
 
     @Test fun copyCreatesInputAndCopies() {
@@ -52,7 +52,7 @@ class ChatAttachmentTest {
             assertFalse(folder.input.exists())
             val s = ChatAttachment.copyToInput(folder, "My Book.pdf", "primary:Download/My Book.pdf") { "hello".byteInputStream() }
             assertEquals("Input/My Book.pdf", s.relativePath)
-            assertEquals("/storage/emulated/0/Documents/Farrow/Input/My Book.pdf", s.absolutePath)
+            assertEquals("/storage/emulated/0/Documents/Verdroid/Input/My Book.pdf", s.absolutePath)
             assertEquals(5L, s.bytes)
             assertEquals("hello", File(folder.input, "My Book.pdf").readText())
             assertTrue(folder.output.isDirectory)
@@ -93,16 +93,16 @@ class ChatAttachmentTest {
             folder.ensure()
             File(folder.input, "photo.jpg").writeText("img")
             var opened = false
-            val s = ChatAttachment.copyToInput(folder, "photo.jpg", "primary:Documents/Farrow/Input/photo.jpg") { opened = true; null }
+            val s = ChatAttachment.copyToInput(folder, "photo.jpg", "primary:Documents/Verdroid/Input/photo.jpg") { opened = true; null }
             assertFalse(opened)
             assertEquals("Input/photo.jpg", s.relativePath)
             assertEquals(1, folder.input.list()!!.size)
             // file:// path form too; nested / escaping paths are not reused.
-            assertNotNull(ChatAttachment.existingInInput(folder.input, "/storage/emulated/0/Documents/Farrow/Input/photo.jpg"))
-            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Input/sub/photo.jpg"))
-            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Input/.."))
-            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Output/photo.jpg"))
-            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Input/missing.jpg"))
+            assertNotNull(ChatAttachment.existingInInput(folder.input, "/storage/emulated/0/Documents/Verdroid/Input/photo.jpg"))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Verdroid/Input/sub/photo.jpg"))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Verdroid/Input/.."))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Verdroid/Output/photo.jpg"))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Verdroid/Input/missing.jpg"))
         } finally { dir.deleteRecursively() }
     }
 

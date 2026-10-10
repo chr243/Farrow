@@ -33,11 +33,11 @@ class GitCredentialStore @Inject constructor(@ApplicationContext private val con
         set(value) { prefs.edit().putString(KEY_USER, value.trim()).apply() }
 
     var authorName: String
-        get() = prefs.getString(KEY_NAME, null) ?: "Farrow"
+        get() = prefs.getString(KEY_NAME, null) ?: "Verdroid"
         set(value) { prefs.edit().putString(KEY_NAME, value.trim()).apply() }
 
     var authorEmail: String
-        get() = prefs.getString(KEY_EMAIL, null) ?: "farrow@localhost"
+        get() = prefs.getString(KEY_EMAIL, null) ?: "verdroid@localhost"
         set(value) { prefs.edit().putString(KEY_EMAIL, value.trim()).apply() }
 
     val maskedToken: String?

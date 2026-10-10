@@ -19,8 +19,8 @@ class WorkspaceToolsTest {
     private lateinit var folder: SharedFolder
 
     @Before fun setUp() {
-        base = Files.createTempDirectory("farrow-docs").toFile()
-        root = File(base, "Documents/Farrow")
+        base = Files.createTempDirectory("verdroid-docs").toFile()
+        root = File(base, "Documents/Verdroid")
         access = true
         folder = SharedFolder(root) { access }
     }
@@ -50,9 +50,9 @@ class WorkspaceToolsTest {
         assertEquals(File(root, "Input/a.txt").canonicalFile, sb.resolve("Input/a.txt"))
         assertEquals(File(root, "Output/b.md").canonicalFile, sb.resolve("${SharedFolder.DISPLAY_PATH}/Output/b.md"))
         assertEquals(File(root, "Output").canonicalFile, sb.resolve(root.absolutePath + "/Output"))
-        assertEquals(root.canonicalFile, sb.resolve("/sdcard/Documents/Farrow"))
+        assertEquals(root.canonicalFile, sb.resolve("/sdcard/Documents/Verdroid"))
         for (bad in listOf("../x", "Input/../../x", "/etc/passwd", "/storage/emulated/0/Download/x",
-                "${SharedFolder.DISPLAY_PATH}/../Secret", "/storage/emulated/0/Documents/FarrowEvil/x", "a\u0000b")) {
+                "${SharedFolder.DISPLAY_PATH}/../Secret", "/storage/emulated/0/Documents/VerdroidEvil/x", "a\u0000b")) {
             assertThrows(bad, SecurityException::class.java) { sb.resolve(bad) }
         }
         val outside = File(base, "outside").apply { mkdirs() }

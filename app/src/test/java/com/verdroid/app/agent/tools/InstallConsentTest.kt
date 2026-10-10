@@ -20,7 +20,7 @@ class InstallConsentTest {
 
     @Before fun setUp() {
         base = Files.createTempDirectory("consent").toFile()
-        folder = SharedFolder(File(base, "Documents/Farrow")) { true }
+        folder = SharedFolder(File(base, "Documents/Verdroid")) { true }
         folder.ensure()
         File(folder.input, "a.pdf").writeBytes(ByteArray(8))
         File(folder.input, "book.mobi").writeText("x")
@@ -196,7 +196,7 @@ class InstallConsentTest {
         assertEquals(specs("apt:python", "apt:python-pip", "pip:googletrans>=4.0.2", "pip:deep-translator", "pip:langdetect", "apt:poppler"),
             InstallConsent.missingFrom(o2))
         // Nothing missing → silent, continues.
-        val (rc3, out3) = bash("farrow_m=\"\"\n" + InstallConsent.probeExit("M=") + "\necho go")
+        val (rc3, out3) = bash("verdroid_m=\"\"\n" + InstallConsent.probeExit("M=") + "\necho go")
         assertEquals(0, rc3); assertEquals("go", out3.trim())
     }
 }

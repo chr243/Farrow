@@ -94,6 +94,6 @@ class SecureApiKeyRepository @Inject constructor(
 
     private companion object {
         const val PREF = "api_keys_v1"
-        const val FILE = "farrow_secure_keys"
+        const val FILE = "verdroid_secure_keys"
     }
 }

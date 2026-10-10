@@ -5,7 +5,7 @@ import java.util.Base64
 
 /**
  * Shizuku's `rish` (https://github.com/RikkaApps/Shizuku-API/tree/master/rish): the user exports `rish` +
- * `rish_shizuku.dex`, Farrow validates them, then deploys both to [DEPLOY_DIR] via Shizuku (`chmod +x` both —
+ * `rish_shizuku.dex`, Verdroid validates them, then deploys both to [DEPLOY_DIR] via Shizuku (`chmod +x` both —
  * what worked on the phone; Android 14's "writable dex" rule does not apply under /data/local/tmp the same way).
  * [RishRunner] runs commands from that directory with `RISH_APPLICATION_ID=com.termux`.
  */
@@ -126,14 +126,14 @@ class RishStore(stagingDir: File) {
         const val SCRIPT = "rish"
         const val DEFAULT_COMPANION = "rish_shizuku.dex"
         /** Where the phone-proven setup lives (shell-writable; chmod +x both). */
-        const val DEPLOY_DIR = "/data/local/tmp/farrow_rish"
+        const val DEPLOY_DIR = "/data/local/tmp/verdroid_rish"
         private const val MAX_SCRIPT = 64_000
         private const val MAX_DIRS = 200
         /** Base64 chunk size kept well under typical Android shell argument limits. */
         private const val B64_CHUNK = 48_000
 
         fun searchRoots(storage: File = File("/storage/emulated/0")): List<File> = listOf(
-            File(storage, "Download"), File(storage, "Documents"), File(storage, "Documents/Farrow/Input"))
+            File(storage, "Download"), File(storage, "Documents"), File(storage, "Documents/Verdroid/Input"))
 
         fun isScript(p: Picked): Boolean =
             p.bytes.size in 3..MAX_SCRIPT && p.bytes[0] == '#'.code.toByte() && p.bytes[1] == '!'.code.toByte() &&
