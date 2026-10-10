@@ -2,7 +2,6 @@ package com.farrow.app.ui.device
 
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -110,11 +109,8 @@ fun DeviceControlScreen(onBack: () -> Unit, vm: DeviceControlViewModel = hiltVie
                 }
 
                 Section("Accessibility (screen_read / tap / swipe / type)") {
-                    Text(if (ui.accessibilityOn) "✅ Enabled" else "Off — enable “Farrow agent control” in Accessibility settings. " +
-                        "On HyperOS: Settings → Additional settings → Accessibility → Downloaded apps.")
-                    Button(onClick = {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }) { Text("Open Accessibility settings") }
+                    // The grant button lives in Settings → Phone → Permissions; this section only shows the status.
+                    Text(if (ui.accessibilityOn) "✅ Enabled" else "Off — turn on “Farrow agent control” from Settings → Phone → Permissions.")
                 }
 
                 Section("Git (git_clone / git_status / git_commit / git_push)") {
