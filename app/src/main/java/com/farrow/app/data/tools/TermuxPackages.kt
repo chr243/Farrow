@@ -23,6 +23,7 @@ object TermuxPackages {
         TermuxPackage("pandoc", "pandoc", "Convert documents (Markdown, HTML, DOCX, …)"),
         SELENIUM,
         EBOOK_TRANSLATE,
+        PDF_TOOLS,
     )
 
     /** Headless Chromium + chromedriver (TUR via x11-repo/tur-repo) and Python Selenium, for selenium_* and termux_python. */
@@ -53,6 +54,21 @@ object TermuxPackages {
             "pip install -U ${com.farrow.app.data.ebook.EbookTranslatePy.PIP_CORE} mobi ebooklib python-docx 2>&1 | tail -n 15",
             // Deploy the translator script too (ebook_translate also rewrites it before every run).
             com.farrow.app.data.ebook.EbookTranslatePy.installCommand(),
+        ).joinToString("\n"),
+    )
+
+    /** PDF library for pdf_*: python-pymupdf (Termux apt package), else pypdf (pip) + poppler; pdf_* also installs it on first use. */
+    val PDF_TOOLS: TermuxPackage get() = TermuxPackage(
+        pkg = "pdf-tools",
+        binary = "python3",
+        description = "PDF read/edit for pdf_* tools — apt: python-pymupdf (fallback: pip pypdf + poppler); installed automatically on first use too",
+        detect = "{ python3 -c 'import pymupdf' >/dev/null 2>&1 || python3 -c 'import pypdf' >/dev/null 2>&1; } && " +
+            "[ -s '${com.farrow.app.data.pdf.FarrowPdfPy.FILE}' ]",
+        install = listOf(
+            "${'$'}APT install python python-pip 2>&1 | tail -n 5",
+            "${'$'}APT install python-pymupdf 2>&1 | tail -n 5",
+            "python3 -c 'import pymupdf' >/dev/null 2>&1 || { pip install -U pypdf 2>&1 | tail -n 5; ${'$'}APT install poppler 2>&1 | tail -n 5; }",
+            com.farrow.app.data.pdf.FarrowPdfPy.installCommand(),
         ).joinToString("\n"),
     )
 

@@ -13,7 +13,7 @@ object AttachmentText {
     const val DEFAULT_PROMPT = "Please work with the attached file."
 
     fun prefix(relativePath: String, bytes: Long): String =
-        "Attached file: $relativePath ($bytes bytes). It is under Documents/Farrow — use workspace_* or ebook_translate on that path. Deliverables go in Output/.\n\n"
+        "Attached file: $relativePath ($bytes bytes). It is under Documents/Farrow — use workspace_*, pdf_* (PDFs) or ebook_translate on that path. Deliverables go in Output/.\n\n"
 
     /** [path] is the attachment's path relative to Documents/Farrow (e.g. Input/photo.jpg). */
     data class Display(val fileName: String?, val bytes: Long?, val text: String, val path: String? = null) {

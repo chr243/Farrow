@@ -144,6 +144,9 @@ object AppModule {
                 SeleniumOpenTool(termux, sharedFolder), SeleniumPageSourceTool(termux, sharedFolder),
                 SeleniumScreenshotTool(termux, sharedFolder), TermuxPythonTool(termux, sandbox),
                 EbookTranslateTool(termux, sharedFolder),
+                // PDF read/edit in Termux Python (PyMuPDF, pypdf fallback; auto-installed on first use)
+                PdfInfoTool(termux, sharedFolder), PdfExtractTextTool(termux, sharedFolder),
+                PdfExtractPagesTool(termux, sharedFolder), PdfMergeTool(termux, sharedFolder), PdfAnnotateTool(termux, sharedFolder),
                 GitStatusTool(git), GitCommitTool(git), GitCloneTool(git), GitPushTool(git),
                 ScreenReadTool(), ScreenTapTool(), ScreenSwipeTool(), ScreenTypeTool(), ScreenGlobalActionTool(),
                 // v0.9.16: persistent memory

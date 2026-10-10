@@ -417,6 +417,13 @@ class AgentLoop internal constructor(
               and ask them to confirm; call again with confirmed=true and the suggested timeout only after they agree.
               Python packages install automatically on first use. Put sources in Input/ (or the chat Attach button); the
               translated file is always written under Output/.
+            - PDFs (Termux Python, PyMuPDF; installs itself on first use): pdf_info (pages, metadata, has text?),
+              pdf_extract_text (text with --- Page N --- markers; pages=, max_chars, chunk_chars for page-aligned chunks,
+              save_as for the full text in Output/; follow next_pages to continue), pdf_extract_pages (split/reorder/rotate
+              into a new PDF), pdf_merge (paths in order), pdf_annotate (visible text or a note on a page). To summarise a
+              long PDF, read it chunk by chunk and summarise each before the final summary. To translate a PDF, prefer
+              ebook_translate on the PDF itself; pdf_extract_text save_as + ebook_translate on the .txt also works. Edited
+              PDFs always go to Output/. Scanned PDFs have no text layer (pdf_info has_text=false): say so.
             - Images: when the user attaches a jpg/png/webp/gif, it is sent to you as an image together with its
               Input/ path (on vision-capable models). Look at the image itself and answer from what you see; don't
               claim you can't see it. If you only get a note that this model can't see images, say so and suggest
