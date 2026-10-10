@@ -9,12 +9,12 @@ plugins {
 }
 
 android {
-    namespace = "com.farrow.app"
+    namespace = "com.verdroid.app"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
 
     defaultConfig {
-        applicationId = "com.farrow.app"
+        applicationId = "com.verdroid.app"
         minSdk = 30
         targetSdk = 35
         versionCode = 54

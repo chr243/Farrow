@@ -1,20 +1,20 @@
 # AGENTS.md — Farrow
 
-Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, shell commands through rish (`rish_run`, from `/data/local/tmp/farrow_rish`), bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), headless Chromium + Selenium inside Termux (`selenium_*`, `termux_python` for agent-written scrapers), ebook/document translation in Termux Python (`ebook_translate`, estimate → user confirms → translate), PDF read/light edit in Termux Python (`pdf_*`: info, text extract with page markers, split/merge, annotate; PyMuPDF with pypdf fallback), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Farrow` folder (`workspace_*`, All files access; chat **Attach file** copies into `Input/`), memory, agent-writable skills (`skill_*`, `files/skills/<id>/SKILL.md`, Settings → Skills), a Permissions screen and an MCP client. There is no in-app browser and there are no X/Facebook tools (removed in 4bcca87). There is no backend server; everything runs on the device.
+Farrow (`com.verdroid.app`) is a native Android app (Kotlin, Jetpack Compose, Material 3, Hilt, Room) that runs a tool-using LLM agent on the phone itself. It talks to free OpenRouter and Kilo models with automatic model/key fallback and rate-limit recovery, and gives the agent real tools: keyless multi-engine web search (`web_search`, a port of hec-ovi/websearch-skill), plain HTTP fetching with a Markdown reader (`web_fetch`), Coinbase Exchange crypto tools, shell commands via Shizuku, shell commands through rish (`rish_run`, from `/data/local/tmp/farrow_rish`), bash in Termux (`termux_run`, via Termux's RUN_COMMAND service), headless Chromium + Selenium inside Termux (`selenium_*`, `termux_python` for agent-written scrapers), ebook/document translation in Termux Python (`ebook_translate`, estimate → user confirms → translate), PDF read/light edit in Termux Python (`pdf_*`: info, text extract with page markers, split/merge, annotate; PyMuPDF with pypdf fallback), screen control via an Accessibility service, JGit, sandboxed file tools, a shared `Documents/Farrow` folder (`workspace_*`, All files access; chat **Attach file** copies into `Input/`), memory, agent-writable skills (`skill_*`, `files/skills/<id>/SKILL.md`, Settings → Skills), a Permissions screen and an MCP client. There is no in-app browser and there are no X/Facebook tools (removed in 4bcca87). There is no backend server; everything runs on the device.
 
 ## Repo map
 
 ```
 .
 ├── app/
-│   ├── build.gradle.kts            app module (namespace/applicationId com.farrow.app, versionCode/versionName)
+│   ├── build.gradle.kts            app module (namespace/applicationId com.verdroid.app, versionCode/versionName)
 │   ├── schemas/                    Room schema JSON exports (commit changes when the DB version changes)
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
-│       │   ├── aidl/com/farrow/app/        IShellService (Shizuku UserService)
-│       │   ├── java/com/farrow/app/
-│       │   │   ├── FarrowApp.kt, MainActivity.kt
+│       │   ├── aidl/com/verdroid/app/        IShellService (Shizuku UserService)
+│       │   ├── java/com/verdroid/app/
+│       │   │   ├── VerdroidApp.kt, MainActivity.kt
 │       │   │   ├── agent/        AgentLoop, AgentRunner, backoff, context/ (summarisation), tools/ (tool implementations, registry)
 │       │   │   ├── chathead/     chat heads overlay + Android Bubbles
 │       │   │   ├── data/         a11y, crypto (Coinbase Exchange), ebook (translator script for Termux), git,
@@ -29,7 +29,7 @@ Farrow (`com.farrow.app`) is a native Android app (Kotlin, Jetpack Compose, Mate
 │       │   │   ├── shizuku/      ShizukuManager, ShellExecutor, ShellUserService, RishStore (+ RishRunner for rish_run)
 │       │   │   └── ui/           Compose screens + ViewModels (chats, chat incl. ToolStacks, menu, device, tools, permissions, skills, theme, …)
 │       │   └── res/                        resources (launcher icon = vector S-curve, colour #3D5A3A on #FBF3E6)
-│       └── test/java/com/farrow/app/       JVM unit tests (JUnit 4), mirroring the main package layout
+│       └── test/java/com/verdroid/app/       JVM unit tests (JUnit 4), mirroring the main package layout
 ├── gradle/libs.versions.toml       version catalog (AGP 8.7.3, Kotlin 2.1.0, KSP, Hilt, Room, Compose BOM)
 ├── gradle/wrapper/                 Gradle 8.11.1 wrapper (always use ./gradlew)
 ├── docs/ARCHITECTURE.md            detailed architecture notes and version history
@@ -49,7 +49,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ./gradlew testDebugUnitTest      # JVM unit tests
 ./gradlew lint                   # Android lint; abortOnError = true, so any lint *error* fails the build (0 errors, ~50 warnings at v1.0.0; no baseline)
 ./gradlew assembleDebug testDebugUnitTest lint   # exactly what CI runs
-./gradlew testDebugUnitTest --tests 'com.farrow.app.data.crypto.*'   # a subset
+./gradlew testDebugUnitTest --tests 'com.verdroid.app.data.crypto.*'   # a subset
 ```
 
 Install and run on a device (USB or wireless debugging):
@@ -58,8 +58,8 @@ Install and run on a device (USB or wireless debugging):
 adb pair <phone-ip>:<pairing-port>     # Developer options → Wireless debugging → Pair with code
 adb connect <phone-ip>:<port>
 adb install -r app/build/outputs/apk/debug/Farrow-v*-debug.apk
-adb shell am start -n com.farrow.app/.MainActivity
-adb logcat --pid=$(adb shell pidof com.farrow.app)
+adb shell am start -n com.verdroid.app/.MainActivity
+adb logcat --pid=$(adb shell pidof com.verdroid.app)
 ```
 
 Shizuku (needed for `run_shell`): start Shizuku from its app via **Wireless debugging**, or over adb:
@@ -77,7 +77,7 @@ adb shell 'RISH_APPLICATION_ID=com.termux sh /data/local/tmp/farrow_rish/rish -c
 ## Coding conventions
 
 - Kotlin official code style (`kotlin.code.style=official`), 4-space indent. No formatter/linter plugin is configured besides Android lint (TODO(maintainer): decide whether to add ktlint/detekt).
-- Package naming: everything lives under `com.farrow.app.<layer>.<feature>` (`ui.*`, `data.*`, `domain.*`, `agent.*`, …). Tests use the same package as the class under test, in `app/src/test/java/com/farrow/app/...`.
+- Package naming: everything lives under `com.verdroid.app.<layer>.<feature>` (`ui.*`, `data.*`, `domain.*`, `agent.*`, …). Tests use the same package as the class under test, in `app/src/test/java/com/verdroid/app/...`.
 - DI with Hilt (`@Singleton`, `@Inject constructor`, bindings in `di/AppModule.kt`). New agent tools are registered in the tool registry there and listed in `AgentLoop` `TOOL_GROUPS`.
 - JSON with kotlinx.serialization; HTTP with OkHttp/Retrofit; persistence with Room (bump the DB version and add a migration + exported schema in `app/schemas/`) or DataStore.
 - `domain/` must stay free of Android dependencies.

@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.Farrow" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.Verdroid" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

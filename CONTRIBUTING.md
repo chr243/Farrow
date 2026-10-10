@@ -7,7 +7,7 @@ Thanks for helping! Farrow is a small personal project, so keep changes focused 
 1. **Open an issue first** for anything bigger than a small fix (use the bug or feature template).
 2. **Fork and branch** from `main`: `git checkout -b fix/short-description` (or `feat/…`, `docs/…`).
 3. **Set up:** JDK 17, Android SDK (`platforms;android-35`, `build-tools;35.0.0`), and `echo "sdk.dir=$ANDROID_HOME" > local.properties` (never commit it).
-4. **Make the change** following the conventions in [AGENTS.md](AGENTS.md#coding-conventions). Add or update unit tests in `app/src/test/java/com/farrow/app/...`.
+4. **Make the change** following the conventions in [AGENTS.md](AGENTS.md#coding-conventions). Add or update unit tests in `app/src/test/java/com/verdroid/app/...`.
 5. **Verify** (required, same as CI):
 
    ```bash

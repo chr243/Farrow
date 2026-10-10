@@ -26,7 +26,7 @@
     </queries>
 
     <application
-        android:name=".FarrowApp"
+        android:name=".VerdroidApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
@@ -35,7 +35,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Farrow"
+        android:theme="@style/Theme.Verdroid"
         tools:targetApi="35">
 
         <activity
@@ -43,7 +43,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.Farrow">
+            android:theme="@style/Theme.Verdroid">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -58,7 +58,7 @@
             android:exported="false"
             android:label="@string/app_name"
             android:resizeableActivity="true"
-            android:theme="@style/Theme.Farrow"
+            android:theme="@style/Theme.Verdroid"
             android:windowSoftInputMode="adjustResize" />
 
         <!-- Overlay chat head (SYSTEM_ALERT_WINDOW fallback for HyperOS/MIUI). -->
@@ -73,7 +73,7 @@
 
         <!-- Phase 6: taps / swipes / text input / screen tree for the agent (user enables it in system settings). -->
         <service
-            android:name=".data.a11y.FarrowAccessibilityService"
+            android:name=".data.a11y.VerdroidAccessibilityService"
             android:exported="true"
             android:label="@string/accessibility_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

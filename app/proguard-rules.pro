@@ -2,5 +2,5 @@
 -keepattributes *Annotation*, InnerClasses
 
 # Shizuku UserService is instantiated reflectively by Shizuku (app_process).
--keep class com.farrow.app.shizuku.ShellUserService { *; }
--keep class com.farrow.app.shizuku.IShellService** { *; }
+-keep class com.verdroid.app.shizuku.ShellUserService { *; }
+-keep class com.verdroid.app.shizuku.IShellService** { *; }

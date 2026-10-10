@@ -4,7 +4,7 @@
 
 A native Android agent app (Kotlin, Jetpack Compose, Material 3) with a Messenger-style UI. It runs a tool-using LLM agent on **OpenRouter free models**, falls back between models and API keys automatically, and handles free-tier rate limits.
 
-- Package: `com.farrow.app`. minSdk 30, targetSdk/compileSdk 35. Built for Android 15 / HyperOS (Poco X8 Pro Max) and runs on any Android 11+ device.
+- Package: `com.verdroid.app`. minSdk 30, targetSdk/compileSdk 35. Built for Android 15 / HyperOS (Poco X8 Pro Max) and runs on any Android 11+ device.
 - Stack: Hilt, Navigation Compose, Room, DataStore, WorkManager (+ Hilt-Work), Retrofit + OkHttp + kotlinx.serialization, androidx.security-crypto. No vendor LLM SDKs: everything goes through OpenRouter's OpenAI-compatible REST API.
 
 ## Phase status
@@ -46,7 +46,7 @@ The debug APK is signed with the standard debug key. To upgrade, install a newer
 ## Architecture
 
 ```
-com.farrow.app
+com.verdroid.app
 ├── ui/            Compose screens + ViewModels
 │   ├── chats/         conversation list, stories row, search, quota banner, FAB
 │   ├── chat/          chat detail (bubbles, tool cards, status lines, Stop/Resume, input)
@@ -98,8 +98,8 @@ com.farrow.app
 |---|---|
 | `read_file`, `write_file`, `list_dir` | ✅ working inside `filesDir/workspace`. Absolute paths are re-rooted, and `..`/symlink escapes are rejected |
 | `workspace_list`, `workspace_read`, `workspace_write`, `workspace_delete` | Shared `/storage/emulated/0/Documents/Farrow` (`Input/`, `Output/`); needs All files access; `SharedFolderSandbox` rejects `..`, outside absolute paths and symlink escapes; recursive delete never follows symlinks |
-| `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/FarrowSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
-| `pdf_info`, `pdf_extract_text`, `pdf_extract_pages`, `pdf_merge`, `pdf_annotate` | Termux Python helper `~/.farrow/farrow_pdf.py` (`data/pdf/FarrowPdfPy`; pure logic in `data/pdf/PdfLogic`): PyMuPDF from the Termux apt package `python-pymupdf` (pip has no Android wheel), fallback pypdf + poppler `pdftotext`; installed on first use only after the user agrees (agent install consent; the `pdf-tools` add-on does it up front). Text comes back with `--- Page N ---` markers, capped/chunked for summarising, `save_as` writes the full text (can feed `ebook_translate`); edited PDFs always go to `Output/` |
+| `selenium_open`, `selenium_page_source`, `selenium_screenshot`, `termux_python` | Headless Chromium + Selenium inside Termux (`chromium-selenium` add-on) via `~/.farrow/farrow_selenium.py` (`data/termux/VerdroidSeleniumPy`); scripts in `filesDir/workspace`, output to `Documents/Farrow/Output` |
+| `pdf_info`, `pdf_extract_text`, `pdf_extract_pages`, `pdf_merge`, `pdf_annotate` | Termux Python helper `~/.farrow/farrow_pdf.py` (`data/pdf/VerdroidPdfPy`; pure logic in `data/pdf/PdfLogic`): PyMuPDF from the Termux apt package `python-pymupdf` (pip has no Android wheel), fallback pypdf + poppler `pdftotext`; installed on first use only after the user agrees (agent install consent; the `pdf-tools` add-on does it up front). Text comes back with `--- Page N ---` markers, capped/chunked for summarising, `save_as` writes the full text (can feed `ebook_translate`); edited PDFs always go to `Output/` |
 | `skill_list`, `skill_get`, `skill_save`, `skill_edit`, `skill_delete` | Agent-writable skills in `files/skills/<id>/SKILL.md` (`data/skills/SkillStore`); enabled ones injected into the system prompt |
 | `rish_run` | `sh files/rish/rish -c <cmd>` from `/data/local/tmp/farrow_rish` with `RISH_APPLICATION_ID=com.termux` and chmod +x (`shizuku/RishStore`, `RishRunner`) |
 | `web_search` | Default search: keyless parallel DDG/Brave/Bing/Mojeek/Yahoo/Wikipedia, redirect unwrapping, canonical dedup, de-correlated RRF (`data/websearch/`, port of hec-ovi/websearch-skill, MIT) |
@@ -108,7 +108,7 @@ com.farrow.app
 | `memory_*`, `chart` | Persistent memory (v0.9.16) and native charts (v1.0.12) |
 | `run_shell` | Phase 6: Shizuku UserService (`sh -c` as uid 2000) |
 | `git_clone`, `git_status`, `git_commit`, `git_push` | Phase 6: JGit 5.13 inside the workspace, using the token from encrypted settings |
-| `screen_read`, `screen_tap`, `screen_swipe`, `screen_type`, `screen_action` | Phase 6: `FarrowAccessibilityService` |
+| `screen_read`, `screen_tap`, `screen_swipe`, `screen_type`, `screen_action` | Phase 6: `VerdroidAccessibilityService` |
 
 **Agent install consent** (`agent/tools/InstallConsent`, pure Kotlin, JVM-tested). The agent never installs packages
 silently. `termux_run` / `termux_python` scan the command or script for pip / python -m pip / uv / pipx, apt / apt-get /
@@ -167,7 +167,7 @@ There is no bottom bar: the chat list is home and a gear opens **Settings** (Not
 - Room schema v2 adds `tasks.attempt` and `tasks.pauseReason` (migration `MIGRATION_1_2`).
 
 ### Accessibility, Shizuku and Git (Phase 6)
-- **Accessibility:** `FarrowAccessibilityService` (`res/xml/accessibility_service_config.xml`, protected by `BIND_ACCESSIBILITY_SERVICE`) uses `dispatchGesture` for taps and swipes, `ACTION_SET_TEXT` on the first editable or focused node for text, and `rootInActiveWindow` for a bounded JSON tree with class, text, description, view id, bounds and the clickable/editable flags. It also supports global actions (back, home, recents, …). The user turns it on in system Accessibility settings, or on HyperOS under Additional settings → Accessibility → Downloaded apps.
+- **Accessibility:** `VerdroidAccessibilityService` (`res/xml/accessibility_service_config.xml`, protected by `BIND_ACCESSIBILITY_SERVICE`) uses `dispatchGesture` for taps and swipes, `ACTION_SET_TEXT` on the first editable or focused node for text, and `rootInActiveWindow` for a bounded JSON tree with class, text, description, view id, bounds and the clickable/editable flags. It also supports global actions (back, home, recents, …). The user turns it on in system Accessibility settings, or on HyperOS under Additional settings → Accessibility → Downloaded apps.
 - **Shizuku** (`dev.rikka.shizuku:api`/`provider` 13.1.5, with `rikka.shizuku.ShizukuProvider` in the manifest): `ShizukuManager` tracks NOT_INSTALLED, NOT_RUNNING, PRE_V11, NO_PERMISSION and READY through binder and permission listeners. Since `Shizuku.newProcess` is private in API 13, `run_shell` binds a **UserService** (`ShellUserService`, AIDL `IShellService`) that runs `sh -c` in Shizuku's process and returns exit code, stdout and stderr as JSON, with a timeout of up to 600 s. The setup screen is at Menu → Shizuku & Git, and includes a "Test (id)" button.
 - **JGit 5.13** (the last Java 8 line; 6.x needs APIs that only exist on Android 13+): `git_clone` (https only, shallow clones are not supported in 5.x), `git_status`, `git_commit` (stages adds and deletions, then commits with the configured author) and `git_push`. Push uses `UsernamePasswordCredentialsProvider(username, token)` with a PAT stored in EncryptedSharedPreferences (`git_secure`). Repositories are limited to the agent workspace sandbox.
 
@@ -354,7 +354,7 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   `format=markdown`, `page`, `page_size_tokens` and a 20-entry cache. Jsoup is back as a dependency for HTML parsing.
   The prompt tells the agent to use `web_search` first, then `web_fetch format=markdown` on the best 2–3 hits.
 - **Shared folder `Documents/Farrow`.** `data/storage/SharedFolder` creates `/storage/emulated/0/Documents/Farrow` with
-  `Input/` and `Output/` at launch (`FarrowApp`) and whenever Tools refreshes or a `workspace_*` tool runs, if missing.
+  `Input/` and `Output/` at launch (`VerdroidApp`) and whenever Tools refreshes or a `workspace_*` tool runs, if missing.
   Needs `MANAGE_EXTERNAL_STORAGE` (All files access, minSdk 30); Settings → Tools has a *Shared folder* card explaining
   the folder with a Grant button (`ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`). Tools `workspace_list`,
   `workspace_read` (offset/max_bytes, binary detection), `workspace_write` (overwrite/append/create, directory=true) and

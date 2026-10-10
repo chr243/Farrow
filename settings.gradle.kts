@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Farrow"
+rootProject.name = "Verdroid"
 include(":app")
