@@ -17,8 +17,8 @@ android {
         applicationId = "com.verdroid.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 58
-        versionName = "1.0.32"
+        versionCode = 59
+        versionName = "1.0.33"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }

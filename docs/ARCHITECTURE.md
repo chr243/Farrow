@@ -540,3 +540,12 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   notes, so long chats don't lose the goal.
 - **Editable AGENTS.md:** Settings → Agent tools → **AGENTS.md** — the user's standing instructions (≤ 8000 chars,
   app-internal `files/AGENTS.md`, `AgentsMdStore`), added to every chat's system prompt; empty sends nothing.
+
+## v1.0.33
+
+- **Chat ⋮ menu on brand-new chats:** Tool presets and Chat memory are reachable before the first message; presets
+  picked on an empty chat are kept once it's created.
+- **Stronger Task note trigger:** the Tool groups prompt (`AgentLoop`), the memory block (`MemoryText.promptBlock`) and
+  the `memory_save` description now say to save `Task: …` (scope=chat, tags `[task]`) in the same reply as soon as the
+  user gives a task *or announces what you'll work on together* (TBD details allowed, update later). Only a single
+  question fully answered in that reply skips it.
