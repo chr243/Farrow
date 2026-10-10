@@ -40,4 +40,76 @@ class ChatAttachmentTest {
         assertEquals(com.farrow.app.domain.model.AttachmentText.Display(null, null, "hello"), ChatAttachment.forDisplay("hello"))
         assertEquals("1.4 MB", ChatAttachment.humanSize(1_468_006))
     }
+
+    private fun tempFolder(access: Boolean = true): Pair<File, SharedFolder> {
+        val dir = Files.createTempDirectory("farrow").toFile()
+        return dir to SharedFolder(File(dir, "Documents/Farrow")) { access }
+    }
+
+    @Test fun copyCreatesInputAndCopies() {
+        val (dir, folder) = tempFolder()
+        try {
+            assertFalse(folder.input.exists())
+            val s = ChatAttachment.copyToInput(folder, "My Book.pdf", "primary:Download/My Book.pdf") { "hello".byteInputStream() }
+            assertEquals("Input/My Book.pdf", s.relativePath)
+            assertEquals("/storage/emulated/0/Documents/Farrow/Input/My Book.pdf", s.absolutePath)
+            assertEquals(5L, s.bytes)
+            assertEquals("hello", File(folder.input, "My Book.pdf").readText())
+            assertTrue(folder.output.isDirectory)
+            // Same name again → no overwrite.
+            val s2 = ChatAttachment.copyToInput(folder, "My Book.pdf", null) { "x".byteInputStream() }
+            assertEquals("Input/My Book-2.pdf", s2.relativePath)
+            assertEquals("hello", File(folder.input, "My Book.pdf").readText())
+            assertEquals(listOf("My Book-2.pdf", "My Book.pdf"), folder.input.list()!!.sorted())
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun failedCopyLeavesNoPartialFile() {
+        val (dir, folder) = tempFolder()
+        try {
+            val broken = object : java.io.InputStream() {
+                var n = 0
+                override fun read(): Int = if (n++ < 10) 65 else throw java.io.IOException("boom")
+            }
+            assertThrows(IllegalStateException::class.java) { ChatAttachment.copyToInput(folder, "a.txt", null) { broken } }
+            assertThrows(IllegalStateException::class.java) { ChatAttachment.copyToInput(folder, "a.txt", null) { null } }
+            assertEquals(emptyList<String>(), folder.input.list()!!.toList())
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun noAccessThrowsTypedError() {
+        val (dir, folder) = tempFolder(access = false)
+        try {
+            assertThrows(ChatAttachment.NoAccessException::class.java) {
+                ChatAttachment.copyToInput(folder, "a.txt", null) { "x".byteInputStream() }
+            }
+            assertFalse(folder.root.exists())
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun pickFromInputIsReusedNotDuplicated() {
+        val (dir, folder) = tempFolder()
+        try {
+            folder.ensure()
+            File(folder.input, "photo.jpg").writeText("img")
+            var opened = false
+            val s = ChatAttachment.copyToInput(folder, "photo.jpg", "primary:Documents/Farrow/Input/photo.jpg") { opened = true; null }
+            assertFalse(opened)
+            assertEquals("Input/photo.jpg", s.relativePath)
+            assertEquals(1, folder.input.list()!!.size)
+            // file:// path form too; nested / escaping paths are not reused.
+            assertNotNull(ChatAttachment.existingInInput(folder.input, "/storage/emulated/0/Documents/Farrow/Input/photo.jpg"))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Input/sub/photo.jpg"))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Input/.."))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Output/photo.jpg"))
+            assertNull(ChatAttachment.existingInInput(folder.input, "primary:Documents/Farrow/Input/missing.jpg"))
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun fallbackNames() {
+        assertEquals("a.pdf", ChatAttachment.fallbackName("primary:Download/a.pdf"))
+        assertEquals("a.pdf", ChatAttachment.fallbackName("primary:a.pdf"))
+        assertEquals("attachment", ChatAttachment.fallbackName(null))
+        assertEquals("attachment", ChatAttachment.fallbackName("primary:"))
+    }
 }

@@ -55,21 +55,33 @@ class ChatViewModel @Inject constructor(
     private val _attachError = MutableStateFlow<String?>(null)
     val attachError: StateFlow<String?> = _attachError.asStateFlow()
 
-    fun clearAttachError() { _attachError.value = null }
+    /** A pick that's waiting for All files access; retried by [retryAttachAfterAccess]. */
+    private val _attachNeedsAccess = MutableStateFlow<Uri?>(null)
+    val attachNeedsAccess: StateFlow<Uri?> = _attachNeedsAccess.asStateFlow()
+
+    fun clearAttachError() { _attachError.value = null; _attachNeedsAccess.value = null }
     fun clearPendingAttach() { _pendingAttach.value = null }
 
-    /** Copy a SAF-picked file into Documents/Farrow/Input and keep it until the next send. */
+    /** Every "+" pick is copied into Documents/Farrow/Input and kept until the next send. */
     fun attach(uri: Uri) {
         viewModelScope.launch {
             _attachError.value = null
+            _attachNeedsAccess.value = null
             val saved = runCatching {
                 withContext(Dispatchers.IO) { ChatAttachment.saveToInput(appContext, sharedFolder, uri) }
             }.getOrElse {
+                if (it is ChatAttachment.NoAccessException) _attachNeedsAccess.value = uri
                 _attachError.value = it.message ?: "Could not attach file"
                 return@launch
             }
             _pendingAttach.value = saved
         }
+    }
+
+    /** Back from the All files access screen: copy the waiting pick into Input/ now (keeps the prompt if still denied). */
+    fun retryAttachAfterAccess() {
+        val uri = _attachNeedsAccess.value ?: return
+        if (sharedFolder.hasAccess()) attach(uri)
     }
 
     fun send(text: String) {

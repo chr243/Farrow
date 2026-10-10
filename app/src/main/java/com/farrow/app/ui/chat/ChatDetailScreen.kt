@@ -227,6 +227,12 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                     androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
                     uri?.let(vm::attach)
                 }
+                val attachAccess by vm.attachNeedsAccess.collectAsStateWithLifecycle()
+                val attachCtx = androidx.compose.ui.platform.LocalContext.current
+                val accessLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { _ ->
+                    vm.retryAttachAfterAccess()
+                }
                 Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                     pending?.let { p ->
                         AssistChip(
@@ -244,7 +250,12 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
                     }
                     attachErr?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = vm::clearAttachError) { Text("Dismiss") }
+                        Row {
+                            if (attachAccess != null) TextButton(onClick = {
+                                runCatching { accessLauncher.launch(com.farrow.app.data.storage.SharedFolder.accessIntent(attachCtx)) }
+                            }) { Text("Grant access") }
+                            TextButton(onClick = vm::clearAttachError) { Text("Dismiss") }
+                        }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { attachPicker.launch(arrayOf("*/*")) }, enabled = !generating) {
