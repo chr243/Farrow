@@ -77,7 +77,7 @@ class ChatViewModel @Inject constructor(
         val t = text.trim()
         if (t.isEmpty() && pending == null) return
         if (task.value?.archived == true) return
-        val body = if (pending != null) ChatAttachment.messagePrefix(pending) + t.ifEmpty { "Please work with the attached file." } else t
+        val body = if (pending != null) ChatAttachment.messagePrefix(pending) + t.ifEmpty { ChatAttachment.DEFAULT_PROMPT } else t
         viewModelScope.launch {
             val id = taskId.value
             if (id == 0L) taskId.value = startConversation(body) else sendMessage(id, body)

@@ -266,10 +266,30 @@ fun ChatDetailScreen(onBack: () -> Unit, onChatMemory: (Long) -> Unit = {}, vm: 
 
 @Composable
 internal fun UserBubble(text: String) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+    // The stored message keeps the model-facing "Attached file: Input/… use workspace_*…" line; the UI shows a file chip.
+    val d = remember(text) { com.farrow.app.data.storage.ChatAttachment.forDisplay(text) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val b = com.farrow.app.ui.theme.LocalBubbleColors.current
-        Surface(color = b.user, shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp), modifier = Modifier.widthIn(max = 300.dp)) {
-            SelectionContainer { Text(text, color = b.onUser, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+        if (d.fileName != null) AttachmentChip(d.fileName, d.bytes)
+        if (d.text.isNotBlank() || d.fileName == null) {
+            Surface(color = b.user, shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp), modifier = Modifier.widthIn(max = 300.dp)) {
+                SelectionContainer { Text(d.text.trim(), color = b.onUser, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentChip(name: String, bytes: Long?) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = RoundedCornerShape(14.dp), modifier = Modifier.widthIn(max = 300.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("📎", fontSize = 14.sp); Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                bytes?.let { Text(com.farrow.app.data.storage.ChatAttachment.humanSize(it), style = MaterialTheme.typography.labelSmall) }
+            }
         }
     }
 }

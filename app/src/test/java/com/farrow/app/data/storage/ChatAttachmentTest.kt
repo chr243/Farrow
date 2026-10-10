@@ -22,4 +22,22 @@ class ChatAttachmentTest {
             ).contains("Output/"))
         } finally { dir.deleteRecursively() }
     }
+
+    @Test fun displayHidesPathAndToolHints() {
+        val saved = ChatAttachment.Saved("Input/Fulgrim - Graham McNeill.mobi", "/x", "Fulgrim - Graham McNeill.mobi", 1_468_006)
+        val full = ChatAttachment.messagePrefix(saved) + "Translate it to French"
+        val d = ChatAttachment.forDisplay(full)
+        assertEquals("Fulgrim - Graham McNeill.mobi", d.fileName)
+        assertEquals(1_468_006L, d.bytes)
+        assertEquals("Translate it to French", d.text)
+        assertFalse(d.text.contains("workspace_") || d.text.contains("Documents/Farrow"))
+        // Attachment-only: default prompt hidden, chat titled by the file name.
+        val only = ChatAttachment.messagePrefix(saved) + ChatAttachment.DEFAULT_PROMPT
+        assertEquals("", ChatAttachment.forDisplay(only).text)
+        assertEquals("Fulgrim - Graham McNeill", com.farrow.app.domain.usecase.StartConversationUseCase.titleFrom(only))
+        assertEquals("Translate it to French", com.farrow.app.domain.usecase.StartConversationUseCase.titleFrom(full))
+        // Plain messages untouched.
+        assertEquals(ChatAttachment.Display(null, null, "hello"), ChatAttachment.forDisplay("hello"))
+        assertEquals("1.4 MB", ChatAttachment.humanSize(1_468_006))
+    }
 }
