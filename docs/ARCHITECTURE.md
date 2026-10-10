@@ -457,3 +457,13 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   regional codes (`pt-BR`, `en-US`, `nb`), and the language check compared raw strings (`iw` vs `he`). Codes are now
   normalised per engine (`google_code`, `mymemory_code`), `auto` sources are detected per chunk for MyMemory, and the
   check compares language families.
+
+## v1.0.26
+
+- **Attachments in the UI:** a 📎 chip (thumbnail for images) plus your own text; the model-facing "Attached file:
+  Input/… use workspace_*…" line is hidden everywhere (bubble, header, chat list, stories, chat heads, notifications).
+  Titles saved by older versions are cleaned when read (`AttachmentText.cleanTitle` in the Task mapper).
+- **Image vision:** attached jpg/png/webp/gif go to the model as OpenAI image parts (JPEG data URL, long side ≤1280 px,
+  latest 2 image messages per request) when the model's metadata lists image input; otherwise a note explains that a
+  vision model is needed. The prompt tells the agent to look at the image itself.
+- Chat list avatars 64 dp; long-press menu without icons; Accessibility grant only in Permissions; README/AGENTS audit.
