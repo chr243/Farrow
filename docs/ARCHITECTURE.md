@@ -478,3 +478,13 @@ Chat head: Back and Home/Recents collapse the expanded panel back to the head at
   latest 2 image messages per request) when the model's metadata lists image input; otherwise a note explains that a
   vision model is needed. The prompt tells the agent to look at the image itself.
 - Chat list avatars 64 dp; long-press menu without icons; Accessibility grant only in Permissions; README/AGENTS audit.
+
+## v1.0.27
+
+- **PDF tools** (Termux Python): `pdf_info`, `pdf_extract_text` (page markers, chunking, `save_as` → `Output/`),
+  `pdf_extract_pages`, `pdf_merge`, `pdf_annotate`. PyMuPDF via Termux `python-pymupdf` (pip can't build it on Android),
+  falling back to `pypdf` + `pdftotext`. No OCR: scanned PDFs return no text. Extracted text can feed `ebook_translate`.
+- **Install consent gate** (`agent/tools/InstallConsent`): agent-initiated pip/apt/pkg/npm installs from `termux_run`,
+  `termux_python`, `pdf_*` and `ebook_translate` return `needs_install_confirmation` (packages + `install_id`) and install
+  nothing; the agent asks the user and re-calls with `confirm_install=true` + `install_id` only after a yes. Settings →
+  Tools add-ons stay one-tap (the tap is the consent).
