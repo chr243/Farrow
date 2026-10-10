@@ -196,8 +196,7 @@ private fun ArchivableRow(c: Conversation, onOpen: () -> Unit, onArchive: () -> 
             ConversationRow(c, onClick = onOpen, onLongClick = { menu = true })
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Open") }, onClick = { menu = false; onOpen() })
-                DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Icon(Icons.Filled.Delete, null) },
-                    onClick = { menu = false; onArchive() })
+                DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onArchive() })
             }
         }
     }
